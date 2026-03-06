@@ -10,7 +10,7 @@ const PrivateRoute = ({ children }) => {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/bd_sistema">
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={
