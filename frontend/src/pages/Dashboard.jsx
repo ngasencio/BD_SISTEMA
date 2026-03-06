@@ -81,7 +81,7 @@ export default function Dashboard() {
                         {activeTab === 'reportes' && <ReportesSect licitaciones={licitaciones} />}
                     </div>          </div>
 
-                <div className="gob-footer" style={{ marginLeft: '0px', position: 'fixed', bottom: 0, right: 0, left: '260px', zIndex: 10 }}>
+                <div className="gob-footer" style={{ marginLeft: '0px', position: 'fixed', bottom: 0, right: 0, left: '68px', zIndex: 10 }}>
                     <span className="gob-footer-logo">🏥 Servicio de Salud Osorno</span>
                     <span className="gob-footer-text" style={{ marginLeft: '10px' }}>Sistema de Gestión de Compras Públicas</span>
                 </div>
