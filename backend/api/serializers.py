@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Licitacion, DetalleLicitacion
+from .models import Licitacion, DetalleLicitacion, Devengo
 
 class DetalleLicitacionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -11,4 +11,10 @@ class LicitacionSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Licitacion
+        fields = '__all__'
+
+
+class DevengoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Devengo
         fields = '__all__'

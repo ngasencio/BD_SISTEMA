@@ -82,8 +82,8 @@ export default function Dashboard() {
                     </div>          </div>
 
                 <div className="gob-footer" style={{ marginLeft: '0px', position: 'fixed', bottom: 0, right: 0, left: '68px', zIndex: 10 }}>
-                    <span className="gob-footer-logo">🏥 Servicio de Salud Osorno</span>
-                    <span className="gob-footer-text" style={{ marginLeft: '10px' }}>Sistema de Gestión de Compras Públicas</span>
+                    <span className="gob-footer-logo">🏥 Sistema Gestión Interno</span>
+                    <span className="gob-footer-text" style={{ marginLeft: '10px' }}>Servicio de Salud Osorno · Abastecimiento</span>
                 </div>
             </main>
         </div>

@@ -9,7 +9,10 @@ export default function Topbar() {
                     <span className="gob-logo-text">Gobierno de Chile</span>
                 </div>
                 <span className="gob-org">Servicio de Salud Osorno</span>
-                <div className="gob-header-spacer"></div>
+                <div className="gob-header-spacer" />
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-title)' }}>
+                    Sistema Gestión Interno
+                </span>
             </div>
 
             <div className="topbar">
@@ -20,8 +23,8 @@ export default function Topbar() {
                     <span className="bc-sep">/</span>
                     <span className="bc-current">📄 Licitaciones</span>
                 </div>
-                <div className="topbar-spacer"></div>
-                <div className="topbar-status"><span className="dot"></span> Datos actualizados</div>
+                <div className="topbar-spacer" />
+                <div className="topbar-status"><span className="dot" /> Datos actualizados</div>
             </div>
         </>
     );
