@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import './Login.css';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -27,116 +28,105 @@ export default function Login() {
     };
 
     return (
-        <div className="login-wrapper">
-            {/* Panel izquierdo — branding */}
-            <div className="login-left">
-                <div className="login-left-inner">
-                    <div className="login-logo">🏥</div>
-                    <div className="login-brand-name">Sistema Gestión Interno</div>
-                    <div className="login-brand-org">Servicio de Salud Osorno</div>
-                    <div className="login-brand-code">SSO · Código 7296 · Región de Los Lagos</div>
-                    <div className="login-features">
-                        <div className="login-feature"><span>📦</span> Gestión de Abastecimiento</div>
-                        <div className="login-feature"><span>💵</span> Control Financiero y Deuda</div>
-                        <div className="login-feature"><span>📊</span> Reportes y Análisis</div>
-                        <div className="login-feature"><span>🔗</span> Integración Mercado Público</div>
-                    </div>
-                </div>
-                <div className="login-left-footer">
-                    Ministerio de Salud · Gobierno de Chile · {new Date().getFullYear()}
-                </div>
+        <div className="login-container">
+            {/* Background layers */}
+            <div className="bg">
+              <div className="bg-left">
+                <img src="/edificio.jpg" alt="" />
+              </div>
+              <div className="bg-right"></div>
             </div>
+            <div className="bg-diagonal"></div>
 
-            {/* Panel derecho — formulario */}
-            <div className="login-right">
-                <div className="login-card">
-                    {/* Encabezado del card */}
-                    <div className="login-card-header">
-                        <div className="login-card-icon">🔐</div>
-                        <h1 className="login-card-title">Iniciar Sesión</h1>
-                        <p className="login-card-subtitle">Ingrese sus credenciales institucionales</p>
+            {/* Login Card */}
+            <div className="card">
+
+              {/* Left panel */}
+              <div className="panel-left">
+                <img className="building-img" src="/edificio.jpg" alt="" />
+                <div className="panel-left-overlay"></div>
+                <div className="panel-left-content">
+                  <div className="sso-logo-wrap">
+                    <img src="/logo.jpg" alt="SSO Logo" />
+                  </div>
+                  <h1>Sistema de Gestión SSO</h1>
+                  <div className="subtitle">Plataforma integral para Servicios de Salud</div>
+                  <div className="panel-divider"></div>
+                  <div className="panel-left-badge">
+                    Acceso Seguro
+                  </div>
+                </div>
+              </div>
+
+              {/* Right panel */}
+              <div className="panel-right">
+                <div className="form-header">
+                  <div className="welcome">BIENVENIDO</div>
+                  <h2>Iniciar Sesión</h2>
+                  <p>Ingrese sus credenciales corporativas para continuar</p>
+                </div>
+
+                {error && (
+                    <div className="msg error">
+                        <span>⚠️</span> {error}
                     </div>
+                )}
 
-                    {/* Alerta de error */}
-                    {error && (
-                        <div className="login-error">
-                            <span>⚠️</span>
-                            <span>{error}</span>
-                        </div>
-                    )}
+                <form onSubmit={handleLogin}>
+                  <div className="field">
+                    <label>Usuario</label>
+                    <div className="input-wrap">
+                      <span className="icon">👤</span>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: tu.nombre" 
+                        value={username} 
+                        onChange={e => setUsername(e.target.value)} 
+                        autoComplete="username"
+                        required 
+                      />
+                    </div>
+                  </div>
 
-                    {/* Formulario */}
-                    <form onSubmit={handleLogin} className="login-form">
-                        <div className="login-field">
-                            <label className="login-label">Usuario</label>
-                            <div className="login-input-wrap">
-                                <span className="login-input-icon">👤</span>
-                                <input
-                                    className="login-input"
-                                    type="text"
-                                    placeholder="Nombre de usuario"
-                                    value={username}
-                                    onChange={e => setUsername(e.target.value)}
-                                    autoComplete="username"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div className="login-field">
-                            <label className="login-label">Contraseña</label>
-                            <div className="login-input-wrap">
-                                <span className="login-input-icon">🔒</span>
-                                <input
-                                    className="login-input"
-                                    type={showPass ? 'text' : 'password'}
-                                    placeholder="Contraseña"
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
-                                    autoComplete="current-password"
-                                    required
-                                />
-                                <button
-                                    type="button"
-                                    className="login-toggle-pass"
-                                    onClick={() => setShowPass(s => !s)}
-                                    tabIndex={-1}
-                                    aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                                >
-                                    {showPass ? '🙈' : '👁️'}
-                                </button>
-                            </div>
-                        </div>
-
+                  <div className="field">
+                    <label>Contraseña</label>
+                    <div className="input-wrap">
+                      <span className="icon">🔒</span>
+                      <input 
+                        type={showPass ? 'text' : 'password'} 
+                        placeholder="Tu contraseña" 
+                        value={password} 
+                        onChange={e => setPassword(e.target.value)} 
+                        autoComplete="current-password"
+                        required 
+                      />
                         <button
-                            className={`login-btn ${loading ? 'loading' : ''}`}
-                            type="submit"
-                            disabled={loading}
+                            type="button"
+                            className="eye-btn"
+                            onClick={() => setShowPass(s => !s)}
+                            tabIndex={-1}
                         >
-                            {loading ? (
-                                <>
-                                    <span className="login-spinner" />
-                                    Verificando…
-                                </>
-                            ) : (
-                                <>
-                                    <span>🔑</span> Ingresar al Sistema
-                                </>
-                            )}
+                            {showPass ? '🙈' : '👁️'}
                         </button>
-                    </form>
-
-                    {/* Pie del card */}
-                    <div className="login-card-footer">
-                        <span>🛡️</span>
-                        Acceso restringido — Solo personal autorizado
                     </div>
-                </div>
+                  </div>
 
-                {/* Footer inferior */}
-                <div className="login-right-footer">
-                    Sistema Gestión Interno v2.0 · © {new Date().getFullYear()} Servicio de Salud Osorno
+                  <div className="options-row">
+                     <label className="checkbox-wrap">
+                       <input type="checkbox" /> Recordarme
+                     </label>
+                     <a href="#" className="forgot">¿Olvidaste tu contraseña?</a>
+                  </div>
+
+                  <button className="btn-login" type="submit" disabled={loading}>
+                    {loading ? <div className="spinner"></div> : 'Ingresar'}
+                  </button>
+                </form>
+                
+                <div className="form-footer">
+                  ¿Necesitas ayuda? <a href="#">Contacta a Soporte TI</a>
                 </div>
+              </div>
             </div>
         </div>
     );

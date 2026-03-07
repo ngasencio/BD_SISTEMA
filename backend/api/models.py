@@ -118,6 +118,14 @@ class Devengo(models.Model):
         verbose_name = 'Devengo'
         verbose_name_plural = 'Devengos'
         ordering = ['-monto_disponible']
+        indexes = [
+            models.Index(fields=['-monto_disponible']),
+            models.Index(fields=['codigo_ue']),
+            models.Index(fields=['principal']),
+            models.Index(fields=['tipo_documento']),
+            models.Index(fields=['concepto_presupuestario']),
+            models.Index(fields=['codigo_ue', '-monto_disponible']),
+        ]
 
     def __str__(self):
         return f"{self.codigo_ue} - {self.principal} - ${self.monto_disponible}"

@@ -7,6 +7,7 @@ from .serializers import LicitacionSerializer, DetalleLicitacionSerializer, Deve
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from django.db.models import Sum, Count, Q, Avg, F
+from django.core.cache import cache
 
 class LicitacionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Licitacion.objects.prefetch_related('detalles').all()
@@ -25,19 +26,29 @@ class DetalleLicitacionViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
+    cache_key = "dashboard_stats_general"
+    cached_data = cache.get(cache_key)
+    
+    if cached_data:
+        return Response(cached_data)
+
     total = Licitacion.objects.count()
     cerradas = Licitacion.objects.filter(Estado='Cerrada').count()
     publicadas = Licitacion.objects.filter(Estado='Publicada').count()
-    monto_total = Licitacion.objects.aggregate(Sum('MontoEstimado'))['MontoEstimado__sum'] or 0
+    monto_total = Licitacion.objects.aggregate(t=Sum('MontoEstimado'))['t'] or 0
     compradores = Licitacion.objects.values('C_Usuario').distinct().count()
 
-    return Response({
+    response_data = {
         'total': total,
         'cerradas': cerradas,
         'publicadas': publicadas,
         'monto_total': monto_total,
         'compradores': compradores,
-    })
+    }
+    
+    # Caché por 5 minutos (300 segundos) para no abrumar la DB
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
 
 
 class DevengoViewSet(viewsets.ReadOnlyModelViewSet):
@@ -55,9 +66,15 @@ class DevengoViewSet(viewsets.ReadOnlyModelViewSet):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def devengo_stats(request):
-    """KPIs agregados para el dashboard de Control de Deuda"""
+    """KPIs agregados para el dashboard de Control de Deuda con optimización de caché"""
     ue = request.GET.get('ue', '')
     solo_deuda = request.GET.get('solo_deuda', '1') == '1'
+
+    cache_key = f"devengo_stats_ue_{ue}_sd_{solo_deuda}"
+    cached_data = cache.get(cache_key)
+    
+    if cached_data:
+        return Response(cached_data)
 
     qs = Devengo.objects.all()
     if ue:
@@ -107,7 +124,7 @@ def devengo_stats(request):
     top_prov = list(top_proveedores)
     top_ue_entry = list(por_ue[:1])
 
-    return Response({
+    response_data = {
         'kpis': {
             'deuda_total': total_pendiente,
             'deuda_pagada': float(agg['total_pagado'] or 0),
@@ -123,4 +140,8 @@ def devengo_stats(request):
         'top_proveedores': [{'prov': r['principal'], 'deuda': float(r['deuda'])} for r in top_proveedores],
         'por_tipo_doc': [{'td': r['tipo_documento'], 'deuda': float(r['deuda'])} for r in por_tipo_doc],
         'por_n1': [{'cp': r['concepto_presupuestario'], 'deuda': float(r['deuda'])} for r in por_n1],
-    })
+    }
+    
+    # Guardar en caché por 5 minutos para performance óptimo del dashboard
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
