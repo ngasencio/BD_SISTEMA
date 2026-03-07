@@ -2,8 +2,8 @@ from django.db import models
 
 class Licitacion(models.Model):
     # Códigos
-    CodigoLicitacion = models.CharField(max_length=255, primary_key=True)
-    Numero = models.CharField(max_length=255, null=True, blank=True)
+    codigo_licitacion = models.CharField(max_length=255, primary_key=True, db_column='CodigoLicitacion')
+    Numero = models.CharField(max_length=255, blank=True, default='', db_column='Numero')
     Nombre = models.TextField(null=True, blank=True)
     CodigoEstado = models.IntegerField(null=True, blank=True)
     Estado = models.CharField(max_length=255, null=True, blank=True)
@@ -63,11 +63,11 @@ class Licitacion(models.Model):
     Adj_UrlActa = models.URLField(max_length=2000, null=True, blank=True)
 
     def __str__(self):
-        return f"{self.CodigoLicitacion} - {self.Nombre}"
+        return f"{self.codigo_licitacion} - {self.Nombre}"
 
 
 class DetalleLicitacion(models.Model):
-    CodigoLicitacion = models.ForeignKey(Licitacion, on_delete=models.CASCADE, related_name="detalles")
+    licitacion = models.ForeignKey(Licitacion, on_delete=models.CASCADE, related_name="detalles", db_column="CodigoLicitacion")
     Correlativo = models.IntegerField(null=True, blank=True)
     CodigoProducto = models.CharField(max_length=255, null=True, blank=True)
     CodigoCategoria = models.CharField(max_length=255, null=True, blank=True)
@@ -82,7 +82,7 @@ class DetalleLicitacion(models.Model):
     CantidadAdjudicada = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
-        return f"{self.CodigoLicitacion.CodigoLicitacion} - {self.CodigoProducto}"
+        return f"{self.licitacion.codigo_licitacion} - {self.CodigoProducto}"
 
 
 class Devengo(models.Model):
