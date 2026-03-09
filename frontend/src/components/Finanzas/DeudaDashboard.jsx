@@ -5,7 +5,7 @@ import {
     CategoryScale, LinearScale, Tooltip, Legend, Filler
 } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
-import { useDevengoData } from './hooks/useDevengoData';
+import { useDevengoData } from './DeudaDashboard/hooks/useDevengoData';
 
 ChartJS.register(ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend, Filler);
 

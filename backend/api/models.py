@@ -67,7 +67,7 @@ class Licitacion(models.Model):
 
 
 class DetalleLicitacion(models.Model):
-    licitacion = models.ForeignKey(Licitacion, on_delete=models.CASCADE, related_name="detalles", db_column="CodigoLicitacion")
+    licitacion = models.ForeignKey(Licitacion, on_delete=models.CASCADE, related_name="detalles", db_column="CodigoLicitacion_id")
     Correlativo = models.IntegerField(null=True, blank=True)
     CodigoProducto = models.CharField(max_length=255, null=True, blank=True)
     CodigoCategoria = models.CharField(max_length=255, null=True, blank=True)
