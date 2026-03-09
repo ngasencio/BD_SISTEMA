@@ -8,12 +8,12 @@ export default function Sidebar() {
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
-        abast: path === '/' || path.startsWith('/licitaciones'),
+        abast: path.startsWith('/licitaciones'),
         finanzas: path.startsWith('/anexo'),
         admin: false,
     });
     const [openMods, setOpenMods] = useState({
-        mp: path === '/' || path.startsWith('/licitaciones'),
+        mp: path.startsWith('/licitaciones'),
         inventario: false,
         finReportes: path.startsWith('/anexo'),
     });
@@ -42,7 +42,7 @@ export default function Sidebar() {
     return (
         <aside className="sidebar">
             {/* CABECERA */}
-            <div className="sidebar-brand" onClick={() => goTo('/', 'abast', 'mp')} style={{ cursor: 'pointer' }}>
+            <div className="sidebar-brand" onClick={() => goTo('/')} style={{ cursor: 'pointer' }}>
                 <div className="sidebar-brand-icon">🏥</div>
                 <div className="sidebar-brand-info">
                     <div className="sidebar-brand-name">Sistema Gestión Interno</div>
@@ -69,8 +69,8 @@ export default function Sidebar() {
                             </div>
                             <div className="nav-mod-items" style={{ display: openMods.mp ? 'block' : 'none' }}>
                                 <div
-                                    className={`nav-item ${isActive('/') ? 'active' : ''}`}
-                                    onClick={() => goTo('/', 'abast', 'mp')}
+                                    className={`nav-item ${isActive('/licitaciones') ? 'active' : ''}`}
+                                    onClick={() => goTo('/licitaciones', 'abast', 'mp')}
                                 >
                                     <span>📄</span> Licitaciones
                                 </div>
