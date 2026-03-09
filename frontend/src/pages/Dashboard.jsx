@@ -46,9 +46,9 @@ export default function Dashboard() {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', flex: 1, width: '100%' }}>
             <Sidebar />
-            <main className="main" style={{ marginTop: '0px' }}>
+            <main className="main">
                 <Topbar />
 
                 <div className="content">

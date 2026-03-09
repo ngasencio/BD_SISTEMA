@@ -581,7 +581,11 @@ function TabConcepto({ filtered, kpis }) {
 
 function TopBar({ rawDataLength, onOpenModal }) {
     return (
-        <div className="topbar">
+        <div style={{
+            display: 'flex', alignItems: 'center', padding: '16px 28px',
+            background: '#fff', borderBottom: '1px solid var(--gob-gris2)',
+            gap: 16, marginBottom: 20
+        }}>
             <div className="topbar-breadcrumb">
                 <span>💰 Finanzas</span><span className="bc-sep">/</span>
                 <span>📊 Reportes</span><span className="bc-sep">/</span>

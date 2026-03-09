@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from django.db.models import Sum, Count, Q, Avg, F
 from django.core.cache import cache
+from django.http import JsonResponse
 
 class LicitacionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Licitacion.objects.prefetch_related('detalles').all()
@@ -83,3 +84,16 @@ def devengo_stats(request):
     # Guardar en caché por 5 minutos para performance óptimo del dashboard
     cache.set(cache_key, response_data, timeout=300)
     return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def devengo_raw_all(request):
+    """Endpoint ultra-rápido para devolver toda la data de devengo al dashboard sin paginación."""
+    # Solo solicitamos los campos que realmente usa el frontend para minimizar el JSON (de 14k registros)
+    qs = Devengo.objects.values(
+        'codigo_ue', 'principal', 'tipo_documento', 'fecha_conforme',
+        'id_chile_compra', 'catalogo_01', 'catalogo_02', 'catalogo_04',
+        'concepto_presupuestario', 'monto_vigente', 'monto_disponible', 'monto_consumido'
+    )
+    return JsonResponse(list(qs), safe=False)

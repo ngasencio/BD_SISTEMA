@@ -27,26 +27,10 @@ export function useDevengoData() {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                let allData = [];
-                let url = 'devengo/?page_size=1000';
+                // Llamamos directamente al endpoint optimizado sin paginación
+                const res = await api.get('devengo/raw_all/');
+                const allData = res.data || [];
 
-                while (url) {
-                    const res = await api.get(url);
-                    const body = res.data;
-
-                    if (Array.isArray(body)) {
-                        allData = allData.concat(body);
-                        url = null;
-                    } else {
-                        allData = allData.concat(body.results || []);
-                        if (body.next) {
-                            const match = body.next.match(/\/api\/(.*)/);
-                            url = match ? match[1] : null;
-                        } else {
-                            url = null;
-                        }
-                    }
-                }
 
                 setRawData(normalizeData(allData));
             } catch (err) {

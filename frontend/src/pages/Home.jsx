@@ -95,11 +95,11 @@ export default function Home() {
     }, []);
 
     return (
-        <div style={{ display: 'flex' }}>
+        <div style={{ display: 'flex', flex: 1, width: '100%' }}>
             <Sidebar />
             <main className="main">
                 <Topbar />
-                <div className="content" style={{ padding: '24px 28px', maxWidth: 1200 }}>
+                <div className="content" style={{ padding: '24px 28px' }}>
 
                     {/* ── Hero Banner ─────────────────────────────────────── */}
                     <div style={{

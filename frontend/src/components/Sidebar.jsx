@@ -43,10 +43,10 @@ export default function Sidebar() {
         <aside className="sidebar">
             {/* CABECERA */}
             <div className="sidebar-brand" onClick={() => goTo('/')} style={{ cursor: 'pointer' }}>
-                <div className="sidebar-brand-icon">🏥</div>
+
                 <div className="sidebar-brand-info">
                     <div className="sidebar-brand-name">Sistema Gestión Interno</div>
-                    <div className="sidebar-brand-sub">Servicio de Salud Osorno · SSO 7296</div>
+                    <div className="sidebar-brand-sub">Servicio de Salud Osorno </div>
                 </div>
             </div>
 
