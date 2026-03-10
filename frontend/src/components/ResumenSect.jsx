@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api';
+import api from '../lib/axios';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { daysBetween } from '../utils';
 

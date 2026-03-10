@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import api from '../api';
+import React, { useState, useEffect, useMemo } from 'react';
+import api from '../lib/axios';
 import Sidebar from '../components/Sidebar';
 import Topbar from '../components/Topbar';
 import ResumenSect from '../components/ResumenSect';

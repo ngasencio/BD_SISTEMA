@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import './Login.css';
-import logoImg from '../assets/logo.jpg';
-import edificioImg from '../assets/edificio.jpg';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -34,7 +32,7 @@ export default function Login() {
             {/* Background layers */}
             <div className="bg">
                 <div className="bg-left">
-                    <img src={edificioImg} alt="" />
+                    <img src="/edificio.jpg" alt="" />
                 </div>
                 <div className="bg-right"></div>
             </div>
@@ -45,11 +43,11 @@ export default function Login() {
 
                 {/* Left panel */}
                 <div className="panel-left">
-                    <img className="building-img" src={edificioImg} alt="Edificio SSO" />
+                    <img className="building-img" src="/edificio.jpg" alt="" />
                     <div className="panel-left-overlay"></div>
                     <div className="panel-left-content">
                         <div className="sso-logo-wrap">
-                            <img src={logoImg} alt="SSO Logo" />
+                            <img src="/logo.jpg" alt="SSO Logo" />
                         </div>
                         <h1>Sistema de Gestión SSO</h1>
                         <div className="subtitle">Plataforma integral para Servicios de Salud</div>
