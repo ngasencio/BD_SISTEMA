@@ -57,6 +57,9 @@ class Migration(migrations.Migration):
                 ('P_Cargo', models.CharField(blank=True, max_length=255, null=True)),
                 ('P_Email', models.CharField(blank=True, max_length=255, null=True)),
                 ('DescripcionOC', models.TextField(blank=True, null=True)),
+                ('LinkMP', models.URLField(max_length=255, null=True, blank=True)),
+                ('ID Proyecto', models.CharField(max_length=255, null=True, blank=True)),
+                ('EnlacePAC', models.CharField(max_length=255, null=True, blank=True))
             ],
             options={
                 'db_table': 'api_ordencompra',

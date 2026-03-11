@@ -187,6 +187,11 @@ class OrdenCompra(models.Model):
     
     DescripcionOC = models.TextField(null=True, blank=True)
     
+    # Nuevas Columnas Agregadas
+    LinkMP = models.URLField(max_length=500, null=True, blank=True)
+    EnlacePAC = models.CharField(max_length=255, null=True, blank=True)
+    ID_Proyecto = models.CharField(max_length=255, null=True, blank=True, db_column='ID Proyecto')
+    
     class Meta:
         db_table = 'api_ordencompra'
 
