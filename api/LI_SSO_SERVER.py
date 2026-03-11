@@ -393,6 +393,7 @@ def guardar_en_django(db_resumen, db_detalles):
         django.setup()
 
     from api.models import Licitacion, DetalleLicitacion
+    from django.utils.timezone import make_aware, is_naive
 
     # Parseo de fechas para que Django no reclame formatos inválidos (ej: vacíos)
     dt_fields = ['FechaCreacion', 'FechaCierre', 'FechaInicio', 'FechaFinal', 'FechaPublicacion', 
@@ -416,7 +417,10 @@ def guardar_en_django(db_resumen, db_detalles):
         for k, v in r_copy.items():
             if k in dt_fields:
                 try:
-                    defaults[k] = dateutil.parser.isoparse(v) if (v and str(v).strip()) else None
+                    val_dt = dateutil.parser.isoparse(v) if (v and str(v).strip()) else None
+                    if val_dt and is_naive(val_dt):
+                        val_dt = make_aware(val_dt)
+                    defaults[k] = val_dt
                 except:
                     defaults[k] = None
             elif k in ['Etapas', 'CodigoEstado', 'CodigoTipo']:
@@ -476,6 +480,8 @@ def guardar_en_django(db_resumen, db_detalles):
 
     print(f"    -> Insertando {len(detalles_a_crear)} Detalles en BD...")
     DetalleLicitacion.objects.bulk_create(detalles_a_crear, batch_size=2000)
+
+    return len(licitaciones_a_crear), len(detalles_a_crear)
 
 
 # =======================================================
@@ -656,8 +662,9 @@ def subir_maestros_a_django():
     datos_det = df_det.to_dict("records")
 
     print(f"   -> Subiendo {len(datos_res)} Licitaciones y {len(datos_det)} Detalles a Django...")
-    guardar_en_django(datos_res, datos_det)
+    count_lic, count_det = guardar_en_django(datos_res, datos_det)
     print("   ✅ Sincronización masiva finalizada exitosamente.")
+    print(f"   📊 TOTAL EN BD: {count_lic} Licitaciones (Resumen) y {count_det} Detalles.")
 
 
 # =========================

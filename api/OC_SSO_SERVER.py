@@ -303,21 +303,33 @@ def guardar_en_django(db_resumen, db_detalles):
         django.setup()
 
     from api.models import OrdenCompra, DetalleOrdenCompra
+    from django.utils.timezone import make_aware, is_naive
 
     # Parseo de fechas 
     dt_fields = ['FechaCreacion', 'FechaEnvio', 'FechaAceptacion', 'FechaCancelacion', 'FechaUltimaModificacion']
 
+    print("    -> Vaciando la base de datos (Órdenes de Compra) para reemplazo total...")
+    DetalleOrdenCompra.objects.all().delete()
+    OrdenCompra.objects.all().delete()
+
     # --- Guardar Resumen (Tabla: OrdenCompra) ---
+    print("    -> Preparando Órdenes de Compra para Inserción Masiva...")
     campos_modelo_oc = [f.name for f in OrdenCompra._meta.get_fields()]
+    ocs_a_crear = []
+    
     for r in db_resumen:
         r_copy = r.copy()
-        codigo = r_copy.pop("CodigoOC")
+        codigo = r_copy.pop("CodigoOC", None)
+        if not codigo: continue
         
         defaults = {}
         for k, v in r_copy.items():
             if k in dt_fields:
                 try:
-                    defaults[k] = dateutil.parser.isoparse(v) if (v and str(v).strip() and str(v).lower() != 'none') else None
+                    val_dt = dateutil.parser.isoparse(v) if (v and str(v).strip() and str(v).lower() != 'none') else None
+                    if val_dt and is_naive(val_dt):
+                        val_dt = make_aware(val_dt)
+                    defaults[k] = val_dt
                 except:
                     defaults[k] = None
             elif k in ['CodigoEstado', 'CantidadEvaluacion', 'PromedioCalificacion', 'TotalNeto', 'PorcentajeIva', 'Impuestos', 'TotalBruto']:
@@ -325,9 +337,7 @@ def guardar_en_django(db_resumen, db_detalles):
                     defaults[k] = None
                 else:
                     try:
-                        # Para manejar comas perdidas
-                        if isinstance(v, str):
-                            v = v.replace(',', '.')
+                        if isinstance(v, str): v = v.replace(',', '.')
                         defaults[k] = float(v)
                     except ValueError:
                         defaults[k] = None
@@ -343,23 +353,28 @@ def guardar_en_django(db_resumen, db_detalles):
             defaults["ID_Proyecto"] = defaults.pop("ID Proyecto")
 
         dict_limpio = {k: v for k, v in defaults.items() if k in campos_modelo_oc}
-        OrdenCompra.objects.update_or_create(codigo_oc=codigo, defaults=dict_limpio)
+        dict_limpio['codigo_oc'] = codigo
+        ocs_a_crear.append(OrdenCompra(**dict_limpio))
+
+    print(f"    -> Insertando {len(ocs_a_crear)} Órdenes de Compra en BD...")
+    OrdenCompra.objects.bulk_create(ocs_a_crear, batch_size=2000)
 
     # --- Guardar Detalles (Tabla: DetalleOrdenCompra) ---
+    print("    -> Preparando Detalles para Inserción Masiva...")
     campos_modelo_det = [f.name for f in DetalleOrdenCompra._meta.get_fields()]
+    detalles_a_crear = []
+    
+    codigos_validos = {oc.codigo_oc for oc in ocs_a_crear}
+    
     for d in db_detalles:
         d_copy = d.copy()
         codigo_oc = d_copy.pop("CodigoOC", None)
-        if not codigo_oc: continue
+        if not codigo_oc or codigo_oc not in codigos_validos:
+            continue
         
         correlativo = d_copy.pop("Correlativo", None)
         if correlativo is None or str(correlativo).lower() == 'none' or pd.isna(correlativo):
             correlativo = d_copy.get("CodigoProducto") or 0
-            
-        try:
-            oc = OrdenCompra.objects.get(codigo_oc=codigo_oc)
-        except OrdenCompra.DoesNotExist:
-            continue
             
         defaults_det = {}
         for k, v in d_copy.items():
@@ -376,12 +391,15 @@ def guardar_en_django(db_resumen, db_detalles):
                 defaults_det[k] = v if (v is not None and str(v).lower() != 'none' and not pd.isna(v)) else None
                 
         dict_limpio_det = {k: v for k, v in defaults_det.items() if k in campos_modelo_det}
+        dict_limpio_det['orden_compra_id'] = codigo_oc
+        dict_limpio_det['Correlativo'] = correlativo
         
-        DetalleOrdenCompra.objects.update_or_create(
-            orden_compra=oc,
-            Correlativo=correlativo,
-            defaults=dict_limpio_det
-        )
+        detalles_a_crear.append(DetalleOrdenCompra(**dict_limpio_det))
+
+    print(f"    -> Insertando {len(detalles_a_crear)} Detalles en BD...")
+    DetalleOrdenCompra.objects.bulk_create(detalles_a_crear, batch_size=2000)
+
+    return len(ocs_a_crear), len(detalles_a_crear)
 
 # =======================================================
 # NUEVAS FUNCIONES: UNIFICACIÓN Y REFRESH (PANDAS)
@@ -630,8 +648,9 @@ def subir_maestros_a_django():
 
     print(f"   -> Subiendo {len(datos_res)} Órdenes de Compra y {len(datos_det)} Detalles a la Base de Datos...")
     try:
-        guardar_en_django(datos_res, datos_det)
+        count_oc, count_det = guardar_en_django(datos_res, datos_det)
         print("   ✅ Sincronización masiva finalizada exitosamente.")
+        print(f"   📊 TOTAL EN BD: {count_oc} Órdenes de Compra (Resumen) y {count_det} Detalles.")
     except Exception as e:
         print(f"   ❌ Error en la sincronización masiva: {e}")
 
