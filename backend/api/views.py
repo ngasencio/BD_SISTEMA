@@ -2,8 +2,8 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters
-from .models import Licitacion, DetalleLicitacion, Devengo
-from .serializers import LicitacionSerializer, DetalleLicitacionSerializer, DevengoSerializer
+from .models import Licitacion, DetalleLicitacion, Devengo, OrdenCompra, DetalleOrdenCompra
+from .serializers import LicitacionSerializer, DetalleLicitacionSerializer, DevengoSerializer, OrdenCompraSerializer, DetalleOrdenCompraSerializer
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from django.db.models import Sum, Count, Q, Avg, F
@@ -23,6 +23,20 @@ class DetalleLicitacionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['licitacion', 'CodigoProducto', 'Categoria']
+
+class OrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = OrdenCompra.objects.prefetch_related('detalles').all()
+    serializer_class = OrdenCompraSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['EstadoOC', 'C_Unidad', 'TipoOC']
+
+class DetalleOrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = DetalleOrdenCompra.objects.all()
+    serializer_class = DetalleOrdenCompraSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['orden_compra', 'CodigoProducto', 'Categoria']
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

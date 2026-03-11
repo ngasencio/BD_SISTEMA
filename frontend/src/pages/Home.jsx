@@ -32,11 +32,11 @@ const MODULES = [
         icon: '🛍️',
         title: 'Órdenes de Compra',
         desc: 'Gestión de órdenes de compra, seguimiento y control de proveedores.',
-        route: null,
+        route: '/ordenes-compra',
         color: '#27ae60',
         gradient: 'linear-gradient(135deg, #27ae60 0%, #2ecc71 100%)',
-        badge: 'Próximamente',
-        available: false,
+        badge: null,
+        available: true,
     },
     {
         id: 'inventario',
@@ -76,6 +76,7 @@ const MODULES = [
 const QUICK_LINKS = [
     { icon: '📄', label: 'Licitaciones', route: '/licitaciones', color: '#1a3d71' },
     { icon: '📋', label: 'Control de Deuda', route: '/anexo3', color: '#c0392b' },
+    { icon: '🛍️', label: 'Órdenes de Compra', route: '/ordenes-compra', color: '#27ae60' },
 ];
 
 export default function Home() {

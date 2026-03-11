@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Licitacion, DetalleLicitacion, Devengo
+from .models import Licitacion, DetalleLicitacion, Devengo, OrdenCompra, DetalleOrdenCompra
 
 class DetalleLicitacionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -17,4 +17,17 @@ class LicitacionSerializer(serializers.ModelSerializer):
 class DevengoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Devengo
+        fields = '__all__'
+
+
+class DetalleOrdenCompraSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DetalleOrdenCompra
+        fields = '__all__'
+
+class OrdenCompraSerializer(serializers.ModelSerializer):
+    detalles = DetalleOrdenCompraSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = OrdenCompra
         fields = '__all__'

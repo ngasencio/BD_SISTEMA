@@ -268,8 +268,117 @@ def procesar_dia(
     _write_csv_dicts(ruta_resumen, db_resumen)
     _write_csv_dicts(ruta_detalles, db_detalles)
 
+    # NUEVO: GUARDADO DIRECTO EN BASE DE DATOS (Servidor)
+    try:
+        print("    -> Sincronizando datos con la base de datos del servidor...")
+        guardar_en_django(db_resumen, db_detalles)
+        print("    ✅ Guardado/Sincronizado con OrdenCompra y DetalleOrdenCompra.")
+    except Exception as e:
+        print(f"    ❌ Error al guardar en base de datos del servidor: {e}")
+        import traceback
+        traceback.print_exc()
+
     print(f"\n✅ Guardado en DIARIO: {f_str}")
     return True
+
+# =========================
+# INTEGRACIÓN CON DJANGO (BD SERVIDOR)
+# =========================
+
+def guardar_en_django(db_resumen, db_detalles):
+    """
+    Se conecta al entorno Django del proyecto BD_SISTEMA y realiza inserts/updates (Upsert)
+    en las tablas físicas de la base de datos (api_ordencompra y api_detalleordencompra).
+    """
+    import sys, os
+    import dateutil.parser
+
+    backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend'))
+    if backend_path not in sys.path:
+        sys.path.append(backend_path)
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+    
+    import django
+    from django.apps import apps
+    if not apps.ready:
+        django.setup()
+
+    from api.models import OrdenCompra, DetalleOrdenCompra
+
+    # Parseo de fechas 
+    dt_fields = ['FechaCreacion', 'FechaEnvio', 'FechaAceptacion', 'FechaCancelacion', 'FechaUltimaModificacion']
+
+    # --- Guardar Resumen (Tabla: OrdenCompra) ---
+    campos_modelo_oc = [f.name for f in OrdenCompra._meta.get_fields()]
+    for r in db_resumen:
+        r_copy = r.copy()
+        codigo = r_copy.pop("CodigoOC")
+        
+        defaults = {}
+        for k, v in r_copy.items():
+            if k in dt_fields:
+                try:
+                    defaults[k] = dateutil.parser.isoparse(v) if (v and str(v).strip()) else None
+                except:
+                    defaults[k] = None
+            elif k in ['CodigoEstado', 'CantidadEvaluacion', 'PromedioCalificacion', 'TotalNeto', 'PorcentajeIva', 'Impuestos', 'TotalBruto']:
+                if v == '' or v is None:
+                    defaults[k] = None
+                else:
+                    try:
+                        # Para manejar comas perdidas
+                        if isinstance(v, str):
+                            v = v.replace(',', '.')
+                        defaults[k] = float(v)
+                    except ValueError:
+                        defaults[k] = None
+            else:
+                defaults[k] = v
+                
+        # Para que haga macth la columna
+        if "TotalBruto" in defaults and "TotalBruto" not in campos_modelo_oc:
+             defaults["TotalBruto"] = defaults.pop("TotalBruto")
+
+        dict_limpio = {k: v for k, v in defaults.items() if k in campos_modelo_oc}
+        OrdenCompra.objects.update_or_create(codigo_oc=codigo, defaults=dict_limpio)
+
+    # --- Guardar Detalles (Tabla: DetalleOrdenCompra) ---
+    campos_modelo_det = [f.name for f in DetalleOrdenCompra._meta.get_fields()]
+    for d in db_detalles:
+        d_copy = d.copy()
+        codigo_oc = d_copy.pop("CodigoOC")
+        correlativo = d_copy.pop("Correlativo", None)
+        
+        if correlativo is None:
+            correlativo = d_copy.get("CodigoProducto") or 0
+            
+        try:
+            oc = OrdenCompra.objects.get(codigo_oc=codigo_oc)
+        except OrdenCompra.DoesNotExist:
+            continue
+            
+        defaults_det = {}
+        for k, v in d_copy.items():
+            if k in ['Cantidad', 'PrecioNeto', 'TotalImpuestos', 'TotalLinea']:
+                if v == '' or v is None:
+                    defaults_det[k] = None
+                else:
+                    try:
+                        if isinstance(v, str): v = v.replace(',', '.')
+                        defaults_det[k] = float(v)
+                    except ValueError:
+                        defaults_det[k] = None
+            else:
+                defaults_det[k] = v
+                
+        dict_limpio_det = {k: v for k, v in defaults_det.items() if k in campos_modelo_det}
+        
+        DetalleOrdenCompra.objects.update_or_create(
+            orden_compra=oc,
+            Correlativo=correlativo,
+            defaults=dict_limpio_det
+        )
+
 
 # =======================================================
 # NUEVAS FUNCIONES: UNIFICACIÓN Y REFRESH (PANDAS)
@@ -321,6 +430,40 @@ def unificar_base_datos():
 
     else:
         print("   ⚠️ No se encontraron archivos de Detalles en DIARIO.")
+
+    print("\n✨ UNIFICACIÓN TERMINADA. ENVIANDO A MARIADB/DJANGO...")
+    subir_maestros_a_django()
+
+
+def subir_maestros_a_django():
+    """
+    Lee los archivos CSV Maestro (Resumen y Detalles) completos y envía todo el volumen
+    a la Base de Datos MariaDB mediante el ORM de Django (Upsert).
+    """
+    import pandas as pd
+    import numpy as np
+    
+    ruta_m_res = CARPETA_MAESTROS / "OC_Maestro_Resumen.csv"
+    ruta_m_det = CARPETA_MAESTROS / "OC_Maestro_Detalles.csv"
+
+    if not ruta_m_res.exists() or not ruta_m_det.exists():
+        print("   ❌ No existen los archivos Maestro (Resumen/Detalles). Ejecute la Opción 5 primero.")
+        return
+
+    print("\n🚀 CARGANDO CSVs MAESTROS PARA SINCRONIZACIÓN MASIVA...")
+    df_res = pd.read_csv(ruta_m_res, sep=";", encoding="utf-8-sig", dtype=str)
+    df_det = pd.read_csv(ruta_m_det, sep=";", encoding="utf-8-sig", dtype=str)
+
+    # Limpiar nulos de pandas ("nan", float('nan')) para que no den problemas en JSON/Dicts
+    df_res = df_res.replace({np.nan: None})
+    df_det = df_det.replace({np.nan: None})
+
+    datos_res = df_res.to_dict("records")
+    datos_det = df_det.to_dict("records")
+
+    print(f"   -> Subiendo {len(datos_res)} Órdenes de Compra y {len(datos_det)} Detalles a Django...")
+    guardar_en_django(datos_res, datos_det)
+    print("   ✅ Sincronización masiva finalizada exitosamente.")
 
 def refresh_base_datos(
     f_ini,
@@ -419,7 +562,8 @@ def refresh_base_datos(
         df_final_det.to_csv(ruta_m_det, sep=";", index=False, encoding="utf-8-sig")
         print(f"   ✅ Maestro Detalles actualizado. Total registros: {len(df_final_det)}")
 
-    print("\n✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE.")
+    print("\n✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE. ENVIANDO A MARIADB/DJANGO...")
+    subir_maestros_a_django()
 
 # =========================
 # MENÚ PRINCIPAL
@@ -434,8 +578,9 @@ if __name__ == "__main__":
         print("2) Manual (Un día a DIARIO)")
         print("3) Rango de fechas (Solo descarga lo nuevo a DIARIO)")
         print("-" * 40)
-        print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO)")
-        print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros)")
+        print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO y sube a MariaDB)")
+        print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros y MariaDB)")
+        print("7) SINCRONIZAR MASIVAMENTE (Sube Maestros a MariaDB saltando descarga)")
         print("0) Salir")
         
         op = input("\nSeleccione opción: ")
@@ -469,6 +614,9 @@ if __name__ == "__main__":
                 d_ini = dt.datetime.strptime(ini, "%d-%m-%Y").date()
                 d_fin = dt.datetime.strptime(fin, "%d-%m-%Y").date()
                 refresh_base_datos(d_ini, d_fin)
+                
+            elif op == "7":
+                subir_maestros_a_django()
 
         except Exception as e: 
             print(f"\n❌ Error: {e}")

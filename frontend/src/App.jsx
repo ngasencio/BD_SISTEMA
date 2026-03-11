@@ -27,6 +27,7 @@ import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import { LoginPage } from './features/auth/pages/LoginPage';
 import AnexoDeudaPage from './pages/AnexoDeudaPage';
+import OrdenesCompraDashboard from './pages/OrdenesCompraDashboard';
 
 // Rutas de features
 import { abastecimientoRoutes } from './features/abastecimiento/routes';
@@ -64,6 +65,7 @@ function AppRoutes() {
           <Route path="/" element={<Home />} />
           <Route path="/licitaciones" element={<Dashboard />} />
           <Route path="/anexo3" element={<AnexoDeudaPage />} />
+          <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
 
           {/* Módulo Abastecimiento (admin + abastecimiento) */}
           <Route element={<RequireRole allowed={['admin', 'abastecimiento']} />}>

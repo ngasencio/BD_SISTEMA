@@ -317,13 +317,6 @@ button {
   cursor: pointer;
   user-select: none;
   transition: background 0.15s;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.sidebar:hover .nav-mod-title {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .nav-mod-title:hover {
@@ -336,12 +329,23 @@ button {
   font-weight: 400;
   flex: 1;
   white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.25s 0.1s;
+}
+
+.sidebar:hover .nav-mod-title-text {
+  opacity: 1;
 }
 
 .nav-mod-arrow {
   font-size: 9px;
   color: rgba(255, 255, 255, 0.3);
-  transition: transform 0.2s;
+  transition: transform 0.2s, opacity 0.25s;
+  opacity: 0;
+}
+
+.sidebar:hover .nav-mod-arrow {
+  opacity: 1;
 }
 
 .nav-mod.open .nav-mod-arrow {
@@ -369,13 +373,15 @@ button {
   border-left: 3px solid transparent;
   position: relative;
   white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
 }
 
-.sidebar:hover .nav-item {
+.nav-item-text {
+  opacity: 0;
+  transition: opacity 0.25s 0.1s;
+}
+
+.sidebar:hover .nav-item-text {
   opacity: 1;
-  pointer-events: auto;
 }
 
 .nav-item:hover {

@@ -13,6 +13,7 @@ export function useDevengoData() {
             td: r.tipo_documento || '',
             fc: r.fecha_conforme || '',
             cc: r.id_chile_compra ? 1 : 0,
+            id_mp: r.id_chile_compra || '',
             c01: r.catalogo_01 || '',
             c04: r.catalogo_04 || '',
             cp: r.concepto_presupuestario || '',

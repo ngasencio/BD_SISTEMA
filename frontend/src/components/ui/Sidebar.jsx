@@ -19,6 +19,7 @@ const NAV_ITEMS = {
         { label: 'Dashboard Abastecimiento', path: '/abastecimiento/dashboard', icon: '📋' },
         { label: 'Gestor FSC', path: '/abastecimiento/fsc', icon: '📑' },
         { label: 'Licitaciones', path: '/licitaciones', icon: '🔍' },
+        { label: 'Órdenes de Compra', path: '/ordenes-compra', icon: '🛍️' },
         { label: 'Dashboard Finanzas', path: '/finanzas/dashboard', icon: '💰' },
         { label: 'Control Deuda (Anexo 3)', path: '/anexo3', icon: '📊' },
     ],
@@ -27,6 +28,7 @@ const NAV_ITEMS = {
         { label: 'Dashboard', path: '/abastecimiento/dashboard', icon: '📋' },
         { label: 'Gestor FSC', path: '/abastecimiento/fsc', icon: '📑' },
         { label: 'Licitaciones', path: '/licitaciones', icon: '🔍' },
+        { label: 'Órdenes de Compra', path: '/ordenes-compra', icon: '🛍️' },
     ],
     finanzas: [
         { label: 'Inicio', path: '/', icon: '🏠' },
@@ -36,6 +38,7 @@ const NAV_ITEMS = {
     viewer: [
         { label: 'Inicio', path: '/', icon: '🏠' },
         { label: 'Licitaciones', path: '/licitaciones', icon: '🔍' },
+        { label: 'Órdenes de Compra', path: '/ordenes-compra', icon: '🛍️' },
     ],
 };
 

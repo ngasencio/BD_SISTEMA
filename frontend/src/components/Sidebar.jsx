@@ -72,14 +72,13 @@ export default function Sidebar() {
                                     className={`nav-item ${isActive('/licitaciones') ? 'active' : ''}`}
                                     onClick={() => goTo('/licitaciones', 'abast', 'mp')}
                                 >
-                                    <span>📄</span> Licitaciones
+                                    <span>📄</span> <span className="nav-item-text">Licitaciones</span>
                                 </div>
                                 <div
-                                    className={`nav-item ${isActive('/compras') ? 'active' : ''}`}
-                                    onClick={() => goTo('/compras', 'abast', 'mp')}
+                                    className={`nav-item ${isActive('/ordenes-compra') ? 'active' : ''}`}
+                                    onClick={() => goTo('/ordenes-compra', 'abast', 'mp')}
                                 >
-                                    <span>🛍️</span> Órdenes de Compra
-                                    <span className="nav-badge">Pronto</span>
+                                    <span>🛍️</span> <span className="nav-item-text">Órdenes de Compra</span>
                                 </div>
                             </div>
                         </div>
@@ -93,7 +92,7 @@ export default function Sidebar() {
                             </div>
                             <div className="nav-mod-items" style={{ display: openMods.inventario ? 'block' : 'none' }}>
                                 <div className="nav-item disabled">
-                                    <span>🏢</span> Bodegas Centrales
+                                    <span>🏢</span> <span className="nav-item-text">Bodegas Centrales</span>
                                     <span className="nav-badge">Pronto</span>
                                 </div>
                             </div>
@@ -105,7 +104,7 @@ export default function Sidebar() {
                 <div className={`nav-group ${openGroups.finanzas ? 'open' : ''}`}>
                     <div className="nav-group-title" onClick={() => toggleGroup('finanzas')}>
                         <span className="nav-group-title-icon">💵</span>
-                        <span className="nav-group-title-text">Finanzas y Pagos</span>
+                        <span className="nav-group-title-text">Finanzas</span>
                         <span className="nav-group-arrow" style={{ transform: openGroups.finanzas ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
                     </div>
                     <div className="nav-group-children" style={{ display: openGroups.finanzas ? 'block' : 'none' }}>
@@ -120,7 +119,7 @@ export default function Sidebar() {
                                     className={`nav-item ${isActive('/anexo3') ? 'active' : ''}`}
                                     onClick={() => goTo('/anexo3', 'finanzas', 'finReportes')}
                                 >
-                                    <span>📋</span> Anexo N°3 — Control Deuda
+                                    <span>📋</span> <span className="nav-item-text">Anexo N°3 — Control Deuda</span>
                                 </div>
                             </div>
                         </div>
@@ -136,7 +135,7 @@ export default function Sidebar() {
                     </div>
                     <div className="nav-group-children" style={{ display: openGroups.admin ? 'block' : 'none' }}>
                         <div className="nav-item disabled">
-                            <span>👤</span> Gestión de Usuarios
+                            <span>👤</span> <span className="nav-item-text">Gestión de Usuarios</span>
                             <span className="nav-badge">Pronto</span>
                         </div>
                     </div>

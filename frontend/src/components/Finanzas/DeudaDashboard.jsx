@@ -337,7 +337,7 @@ function TabDetalle({ filtered, tiposDocUnicos }) {
                 <table className="table-gob">
                     <thead><tr>
                         <th>Establecimiento</th><th>Proveedor</th><th>Concepto Presupuestario</th>
-                        <th>Tipo Documento</th><th>Fecha Conforme</th><th>M.P.</th>
+                        <th>Tipo Documento</th><th>Fecha Conforme</th><th>Cód. Licitación</th>
                         <th style={{ textAlign: 'right' }}>Monto Vigente</th>
                         <th style={{ textAlign: 'right' }}>Pagado</th>
                         <th style={{ textAlign: 'right' }}>Deuda Pendiente</th>
@@ -350,7 +350,7 @@ function TabDetalle({ filtered, tiposDocUnicos }) {
                                 <td style={{ fontSize: 11 }}>{r.cp}</td>
                                 <td><span className="tag tag-gris">{r.td.split(' ').slice(1).join(' ')}</span></td>
                                 <td className="td-mono">{r.fc || '—'}</td>
-                                <td style={{ textAlign: 'center' }}>{r.cc ? '✅' : ''}</td>
+                                <td className="td-mono" style={{ fontSize: 11, color: 'var(--color-primary)' }}>{r.id_mp || '—'}</td>
                                 <td className="td-monto">{fmt$(r.v)}</td>
                                 <td className="td-monto td-monto-pagado">{fmt$(r.c)}</td>
                                 <td className="td-monto td-monto-deuda" style={{ fontWeight: 700 }}>{r.d > 0 ? fmt$(r.d) : '—'}</td>
