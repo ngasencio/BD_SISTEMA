@@ -366,16 +366,6 @@ def procesar_dia(
     _write_csv_dicts(ruta_resumen, db_resumen)
     _write_csv_dicts(ruta_detalles, db_detalles)
 
-    # NUEVO: GUARDADO DIRECTO EN BASE DE DATOS (Servidor)
-    try:
-        print("    -> Sincronizando datos con la base de datos del servidor...")
-        guardar_en_django(db_resumen, db_detalles)
-        print("    ✅ Guardado/Sincronizado con Licitacion y DetalleLicitacion.")
-    except Exception as e:
-        print(f"    ❌ Error al guardar en base de datos del servidor: {e}")
-        import traceback
-        traceback.print_exc()
-
     print(f"\n✅ Guardado en DIARIO: {f_str}")
     return True
 
@@ -408,11 +398,19 @@ def guardar_en_django(db_resumen, db_detalles):
     dt_fields = ['FechaCreacion', 'FechaCierre', 'FechaInicio', 'FechaFinal', 'FechaPublicacion', 
                  'FechaAdjudicacion', 'FechaEstimadaAdjudicacion', 'Adj_Fecha']
 
+    print("    -> Vaciando la base de datos (Licitaciones) para reemplazo total...")
+    DetalleLicitacion.objects.all().delete()
+    Licitacion.objects.all().delete()
+
     # --- Guardar Resumen (Tabla: Licitacion) ---
+    print("    -> Preparando Licitaciones para Inserción Masiva...")
     campos_modelo_lic = [f.name for f in Licitacion._meta.get_fields()]
+    licitaciones_a_crear = []
+    
     for r in db_resumen:
         r_copy = r.copy()
-        codigo = r_copy.pop("CodigoLicitacion")
+        codigo = r_copy.pop("CodigoLicitacion", None)
+        if not codigo: continue
         
         defaults = {}
         for k, v in r_copy.items():
@@ -421,44 +419,63 @@ def guardar_en_django(db_resumen, db_detalles):
                     defaults[k] = dateutil.parser.isoparse(v) if (v and str(v).strip()) else None
                 except:
                     defaults[k] = None
-            elif k in ['MontoEstimado', 'CantidadReclamos', 'DiasCierreLicitacion', 'Etapas', 'CodigoEstado', 'CodigoTipo']:
-                defaults[k] = v if (v != '' and v is not None) else None
+            elif k in ['Etapas', 'CodigoEstado', 'CodigoTipo']:
+                try:
+                    defaults[k] = int(float(v)) if (v != '' and v is not None and str(v).lower() != 'none') else None
+                except ValueError:
+                    defaults[k] = None
+            elif k in ['MontoEstimado', 'CantidadReclamos', 'DiasCierreLicitacion']:
+                try:
+                    if isinstance(v, str): v = v.replace(',', '.')
+                    defaults[k] = float(v) if (v != '' and v is not None and str(v).lower() != 'none') else None
+                except ValueError:
+                    defaults[k] = None
             else:
-                defaults[k] = v
+                defaults[k] = v if (v is not None and str(v).lower() != 'none' and not pd.isna(v)) else None
                 
-        # Filtrar solo campos que existan en el modelo
         dict_limpio = {k: v for k, v in defaults.items() if k in campos_modelo_lic}
-        Licitacion.objects.update_or_create(codigo_licitacion=codigo, defaults=dict_limpio)
+        dict_limpio['codigo_licitacion'] = codigo
+        licitaciones_a_crear.append(Licitacion(**dict_limpio))
+        
+    print(f"    -> Insertando {len(licitaciones_a_crear)} Licitaciones en BD...")
+    Licitacion.objects.bulk_create(licitaciones_a_crear, batch_size=2000)
 
     # --- Guardar Detalles (Tabla: DetalleLicitacion) ---
+    print("    -> Preparando Detalles para Inserción Masiva...")
     campos_modelo_det = [f.name for f in DetalleLicitacion._meta.get_fields()]
+    detalles_a_crear = []
+    
+    codigos_validos = {lic.codigo_licitacion for lic in licitaciones_a_crear}
+    
     for d in db_detalles:
         d_copy = d.copy()
-        codigo_lic = d_copy.pop("CodigoLicitacion")
-        correlativo = d_copy.pop("Correlativo", None)
-        
-        if correlativo is None:
-            correlativo = d_copy.get("CodigoProducto") or 0
-            
-        try:
-            lic = Licitacion.objects.get(codigo_licitacion=codigo_lic)
-        except Licitacion.DoesNotExist:
+        codigo_lic = d_copy.pop("CodigoLicitacion", None)
+        if not codigo_lic or codigo_lic not in codigos_validos:
             continue
+            
+        correlativo = d_copy.pop("Correlativo", None)
+        if correlativo is None or str(correlativo).lower() == 'none' or pd.isna(correlativo):
+            correlativo = d_copy.get("CodigoProducto") or 0
             
         defaults_det = {}
         for k, v in d_copy.items():
             if k in ['Cantidad', 'MontoUnitarioGanador', 'CantidadAdjudicada']:
-                defaults_det[k] = v if (v != '' and v is not None) else None
+                try:
+                    if isinstance(v, str): v = v.replace(',', '.')
+                    defaults_det[k] = float(v) if (v != '' and v is not None and str(v).lower() != 'none') else None
+                except ValueError:
+                    defaults_det[k] = None
             else:
-                defaults_det[k] = v
+                defaults_det[k] = v if (v is not None and str(v).lower() != 'none' and not pd.isna(v)) else None
                 
         dict_limpio_det = {k: v for k, v in defaults_det.items() if k in campos_modelo_det}
+        dict_limpio_det['licitacion_id'] = codigo_lic
+        dict_limpio_det['Correlativo'] = correlativo
         
-        DetalleLicitacion.objects.update_or_create(
-            licitacion=lic,
-            Correlativo=correlativo,
-            defaults=dict_limpio_det
-        )
+        detalles_a_crear.append(DetalleLicitacion(**dict_limpio_det))
+
+    print(f"    -> Insertando {len(detalles_a_crear)} Detalles en BD...")
+    DetalleLicitacion.objects.bulk_create(detalles_a_crear, batch_size=2000)
 
 
 # =======================================================
@@ -505,8 +522,7 @@ def unificar_base_datos():
     else:
         print("   ⚠️ No se encontraron archivos de Detalles en DIARIO.")
 
-    print("\n✨ UNIFICACIÓN COMPLETADA. SINCRONIZANDO CON BASE DE DATOS...")
-    subir_maestros_a_django()
+    print("\n✨ UNIFICACIÓN COMPLETADA EXITOSAMENTE.")
 
 
 def refresh_base_datos(
@@ -610,8 +626,7 @@ def refresh_base_datos(
         df_final_det.to_csv(ruta_m_det, sep=";", index=False, encoding="utf-8-sig")
         print(f"   ✅ Maestro Detalle actualizado. Total registros: {len(df_final_det)}")
 
-    print("\n✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE. ENVIANDO A MARIADB/DJANGO...")
-    subir_maestros_a_django()
+    print("\n✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE.")
 
 
 def subir_maestros_a_django():
@@ -659,7 +674,7 @@ if __name__ == "__main__":
         print("2) Manual (Un día a DIARIO)")
         print("3) Rango de fechas (Solo descarga lo nuevo a DIARIO)")
         print("-" * 40)
-        print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO y Sincroniza)")
+        print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO)")
         print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros)")
         print("7) SINCRONIZAR MASIVAMENTE (Sube CSV Maestros a MariaDB/Django)")
         print("0) Salir")

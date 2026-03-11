@@ -10,8 +10,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
-import pandas as pd
-import numpy as np
+
+import pandas as pd  # Necesario para la unificación y refresco
 
 # =========================
 # CONFIGURACIÓN FIJA SSO
@@ -70,7 +70,6 @@ class MercadoPublicoClient:
                     return json.load(resp)
             except Exception as e:
                 last_err = e
-                print(f"    ⚠️ Intento {intento}/{self.cfg.max_reintentos} falló (timeout/error). Reintentando en {self.cfg.espera_base * intento}s...")
                 # Backoff lineal (simple y predecible). Si necesitas más agresividad: exponencial.
                 time.sleep(self.cfg.espera_base * intento)
 
@@ -280,109 +279,6 @@ def procesar_dia(
     print(f"\n✅ Guardado en DIARIO: {f_str}")
     return True
 
-# =========================
-# INTEGRACIÓN CON DJANGO (BD SERVIDOR)
-# =========================
-
-def guardar_en_django(db_resumen, db_detalles):
-    """
-    Se conecta al entorno Django del proyecto BD_SISTEMA y realiza inserts/updates (Upsert)
-    en las tablas físicas de la base de datos (api_ordencompra y api_detalleordencompra).
-    """
-    import sys, os
-    import dateutil.parser
-
-    backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend'))
-    if backend_path not in sys.path:
-        sys.path.append(backend_path)
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
-    
-    import django
-    from django.apps import apps
-    if not apps.ready:
-        django.setup()
-
-    from api.models import OrdenCompra, DetalleOrdenCompra
-
-    # Parseo de fechas 
-    dt_fields = ['FechaCreacion', 'FechaEnvio', 'FechaAceptacion', 'FechaCancelacion', 'FechaUltimaModificacion']
-
-    # --- Guardar Resumen (Tabla: OrdenCompra) ---
-    campos_modelo_oc = [f.name for f in OrdenCompra._meta.get_fields()]
-    for r in db_resumen:
-        r_copy = r.copy()
-        codigo = r_copy.pop("CodigoOC")
-        
-        defaults = {}
-        for k, v in r_copy.items():
-            if k in dt_fields:
-                try:
-                    defaults[k] = dateutil.parser.isoparse(v) if (v and str(v).strip() and str(v).lower() != 'none') else None
-                except:
-                    defaults[k] = None
-            elif k in ['CodigoEstado', 'CantidadEvaluacion', 'PromedioCalificacion', 'TotalNeto', 'PorcentajeIva', 'Impuestos', 'TotalBruto']:
-                if v == '' or v is None or str(v).lower() == 'none' or pd.isna(v):
-                    defaults[k] = None
-                else:
-                    try:
-                        # Para manejar comas perdidas
-                        if isinstance(v, str):
-                            v = v.replace(',', '.')
-                        defaults[k] = float(v)
-                    except ValueError:
-                        defaults[k] = None
-            else:
-                defaults[k] = v if (v is not None and str(v).lower() != 'none' and not pd.isna(v)) else None
-                
-        # Para que haga macth la columna
-        if "TotalBruto" in defaults and "TotalBruto" not in campos_modelo_oc:
-             defaults["TotalBruto"] = defaults.pop("TotalBruto")
-             
-        # Renombramos el ID proyecto si es necesario para el ORM de ser llamado ID_Proyecto
-        if "ID Proyecto" in defaults and "ID_Proyecto" in campos_modelo_oc:
-            defaults["ID_Proyecto"] = defaults.pop("ID Proyecto")
-
-        dict_limpio = {k: v for k, v in defaults.items() if k in campos_modelo_oc}
-        OrdenCompra.objects.update_or_create(codigo_oc=codigo, defaults=dict_limpio)
-
-    # --- Guardar Detalles (Tabla: DetalleOrdenCompra) ---
-    campos_modelo_det = [f.name for f in DetalleOrdenCompra._meta.get_fields()]
-    for d in db_detalles:
-        d_copy = d.copy()
-        codigo_oc = d_copy.pop("CodigoOC", None)
-        if not codigo_oc: continue
-        
-        correlativo = d_copy.pop("Correlativo", None)
-        if correlativo is None or str(correlativo).lower() == 'none' or pd.isna(correlativo):
-            correlativo = d_copy.get("CodigoProducto") or 0
-            
-        try:
-            oc = OrdenCompra.objects.get(codigo_oc=codigo_oc)
-        except OrdenCompra.DoesNotExist:
-            continue
-            
-        defaults_det = {}
-        for k, v in d_copy.items():
-            if k in ['Cantidad', 'PrecioNeto', 'TotalImpuestos', 'TotalLinea']:
-                if v == '' or v is None or str(v).lower() == 'none' or pd.isna(v):
-                    defaults_det[k] = None
-                else:
-                    try:
-                        if isinstance(v, str): v = v.replace(',', '.')
-                        defaults_det[k] = float(v)
-                    except ValueError:
-                        defaults_det[k] = None
-            else:
-                defaults_det[k] = v if (v is not None and str(v).lower() != 'none' and not pd.isna(v)) else None
-                
-        dict_limpio_det = {k: v for k, v in defaults_det.items() if k in campos_modelo_det}
-        
-        DetalleOrdenCompra.objects.update_or_create(
-            orden_compra=oc,
-            Correlativo=correlativo,
-            defaults=dict_limpio_det
-        )
-
 # =======================================================
 # NUEVAS FUNCIONES: UNIFICACIÓN Y REFRESH (PANDAS)
 # =======================================================
@@ -544,14 +440,14 @@ def enlazar_con_pac():
     """
     print("\n🔗 INICIANDO ENLACE CON PLAN ANUAL DE COMPRAS (PAC)...")
     ruta_m_res = CARPETA_MAESTROS / "OC_Maestro_Resumen.csv"
-    ruta_pac = RUTA_API / "data" / "data_pac" / "OCPAC_Maestro.csv"
+    ruta_pac = RUTA_API.parent / "data" / "data_pac" / "OCPAC_Maestro.csv"
 
     if not ruta_m_res.exists():
         print("   ⚠️ No se encontró OC_Maestro_Resumen.csv en MAESTROS.")
         return
     
     if not ruta_pac.exists():
-        print(f"   ⚠️ No se encontró OCPAC_Maestro.csv en {ruta_pac}.")
+        print("   ⚠️ No se encontró OCPAC_Maestro.csv en data/data_pac.")
         return
 
     print("   -> Cargando OC_Maestro_Resumen.csv...")
@@ -559,28 +455,27 @@ def enlazar_con_pac():
     
     print("   -> Cargando OCPAC_Maestro.csv...")
     try:
-        try:
-            df_pac = pd.read_csv(ruta_pac, sep=";", encoding="utf-8-sig", dtype=str)
-            if "OC Asociada PAC" not in df_pac.columns or "ID Proyecto" not in df_pac.columns:
-                raise ValueError("Falló delimitador ;")
-        except:
-            df_pac = pd.read_csv(ruta_pac, sep=",", encoding="utf-8-sig", dtype=str)
-            if "OC Asociada PAC" not in df_pac.columns or "ID Proyecto" not in df_pac.columns:
-                print("   ⚠️ OCPAC_Maestro.csv no tiene las columnas 'ID Proyecto' o 'OC Asociada PAC'.")
-                return
+        # Se asume delimitador coma, típico de CSV, con fallback por defecto en pandas en caso de errores en la forma
+        df_pac = pd.read_csv(ruta_pac, sep=",", encoding="utf-8-sig", dtype=str)
     except Exception as e:
         print(f"   ⚠️ Error al leer OCPAC_Maestro.csv: {e}")
         return
 
-    # Limpiar columnas previas si existían en el Maestro para que no haya duplicación
-    columnas_a_borrar = [col for col in ["EnlacePAC", "ID Proyecto"] if col in df_res.columns]
-    if columnas_a_borrar:
-        df_res.drop(columns=columnas_a_borrar, inplace=True)
+    # Verificar si el archivo pudiera estar separado por punto y coma si no encuentra las columnas
+    if "OC Asociada PAC" not in df_pac.columns or "ID Proyecto" not in df_pac.columns:
+        df_pac = pd.read_csv(ruta_pac, sep=";", encoding="utf-8-sig", dtype=str)
+        if "OC Asociada PAC" not in df_pac.columns or "ID Proyecto" not in df_pac.columns:
+            print(f"   ⚠️ OCPAC_Maestro.csv no tiene las columnas 'ID Proyecto' o 'OC Asociada PAC'.")
+            return
+
+    # Limpiar columnas previas si existían en el Maestro para que no haya duplicación (Ej: ID Proyecto_x, _y)
+    if "EnlacePAC" in df_res.columns:
+        df_res.drop(columns=["EnlacePAC"], inplace=True)
+    if "ID Proyecto" in df_res.columns:
+        df_res.drop(columns=["ID Proyecto"], inplace=True)
 
     # Dejamos solo valores únicos de OC en PAC para evitar multiplicar filas en Resumen
-    df_pac_reducido = df_pac[["OC Asociada PAC", "ID Proyecto"]].dropna(subset=["OC Asociada PAC"])
-    df_pac_reducido = df_pac_reducido[df_pac_reducido["OC Asociada PAC"].str.strip() != ""]
-    df_pac_reducido.drop_duplicates(subset=["OC Asociada PAC"], keep="first", inplace=True)
+    df_pac_reducido = df_pac[["OC Asociada PAC", "ID Proyecto"]].drop_duplicates(subset=["OC Asociada PAC"], keep="first")
     
     print("   -> Cruzando datos...")
     df_merged = df_res.merge(
@@ -590,50 +485,19 @@ def enlazar_con_pac():
         how="left"
     )
 
-    # Asignar Enlazada / No Enlazada
-    df_merged["EnlacePAC"] = df_merged["OC Asociada PAC"].apply(
-        lambda x: "Enlazada" if pd.notnull(x) and str(x).strip() != "" else "No Enlazada"
-    )
+    # Si hay coincidencias, el campo 'OC Asociada PAC' tendrá valor
+    df_merged["EnlacePAC"] = df_merged["OC Asociada PAC"].apply(lambda x: "Enlazada" if pd.notnull(x) and str(x).strip() != "" else "No Enlazada")
     
+    # Eliminamos la columna transitoria del join
     df_merged.drop(columns=["OC Asociada PAC"], inplace=True)
 
-    if "LinkMP" not in df_merged.columns:
-        df_merged["LinkMP"] = df_merged["CodigoOC"].apply(generar_link_mp)
+    df_merged["LinkMP"] = df_merged["CodigoOC"].apply(generar_link_mp)
 
     print("   -> Guardando OC_Maestro_Resumen.csv...")
     df_merged.to_csv(ruta_m_res, sep=";", index=False, encoding="utf-8-sig")
     print(f"   ✅ Archivo actualizado exitosamente con {len(df_merged)} registros.")
     print(f"   📊 Resumen Enlace PAC:\n{df_merged['EnlacePAC'].value_counts().to_string()}")
 
-def subir_maestros_a_django():
-    """
-    8) Lee los archivos CSV Maestro (Resumen y Detalles) completos y envía todo el volumen
-    a la Base de Datos MariaDB mediante el ORM de Django (Upsert).
-    """
-    ruta_m_res = CARPETA_MAESTROS / "OC_Maestro_Resumen.csv"
-    ruta_m_det = CARPETA_MAESTROS / "OC_Maestro_Detalles.csv"
-
-    if not ruta_m_res.exists() or not ruta_m_det.exists():
-        print("   ❌ No existen los archivos Maestro (Resumen/Detalles). Ejecute la Opción 5 primero.")
-        return
-
-    print("\n🚀 CARGANDO CSVs MAESTROS PARA SINCRONIZACIÓN MASIVA A DJANGO...")
-    df_res = pd.read_csv(ruta_m_res, sep=";", encoding="utf-8-sig", dtype=str)
-    df_det = pd.read_csv(ruta_m_det, sep=";", encoding="utf-8-sig", dtype=str)
-
-    # Limpiar nulos de pandas ("nan", float('nan')) para que no den problemas en JSON/Dicts
-    df_res = df_res.replace({np.nan: None})
-    df_det = df_det.replace({np.nan: None})
-
-    datos_res = df_res.to_dict("records")
-    datos_det = df_det.to_dict("records")
-
-    print(f"   -> Subiendo {len(datos_res)} Órdenes de Compra y {len(datos_det)} Detalles a la Base de Datos...")
-    try:
-        guardar_en_django(datos_res, datos_det)
-        print("   ✅ Sincronización masiva finalizada exitosamente.")
-    except Exception as e:
-        print(f"   ❌ Error en la sincronización masiva: {e}")
 
 # =========================
 # MENÚ PRINCIPAL
@@ -651,7 +515,6 @@ if __name__ == "__main__":
         print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO)")
         print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros)")
         print("7) ENLACE PAC (Añade ID Proyecto a OC_Maestro_Resumen)")
-        print("8) SINCRONIZAR MASIVAMENTE (Sube CSV Maestros a MariaDB/Django)")
         print("0) Salir")
         
         op = input("\nSeleccione opción: ")
@@ -665,21 +528,13 @@ if __name__ == "__main__":
             
             elif op == "2":
                 f_in = input("Fecha (dd-mm-aaaa): ")
-                try:
-                    fecha_valida = dt.datetime.strptime(f_in, "%d-%m-%Y").date()
-                    procesar_dia(fecha_valida)
-                except ValueError:
-                    print("⚠️ Formato de fecha inválido. Utilice dd-mm-aaaa")
+                procesar_dia(dt.datetime.strptime(f_in, "%d-%m-%Y").date())
             
             elif op == "3":
                 ini = input("Desde (dd-mm-aaaa): ")
                 fin = input("Hasta (dd-mm-aaaa): ")
-                try:
-                    d1 = dt.datetime.strptime(ini, "%d-%m-%Y").date()
-                    d2 = dt.datetime.strptime(fin, "%d-%m-%Y").date()
-                except ValueError:
-                    print("⚠️ Formato de fecha inválido. Utilice dd-mm-aaaa")
-                    continue
+                d1 = dt.datetime.strptime(ini, "%d-%m-%Y").date()
+                d2 = dt.datetime.strptime(fin, "%d-%m-%Y").date()
                 while d1 <= d2:
                     procesar_dia(d1, modo_actualizar=False)
                     d1 += dt.timedelta(days=1)
@@ -690,21 +545,12 @@ if __name__ == "__main__":
             elif op == "6":
                 ini = input("Desde (dd-mm-aaaa): ")
                 fin = input("Hasta (dd-mm-aaaa): ")
-                try:
-                    d_ini = dt.datetime.strptime(ini, "%d-%m-%Y").date()
-                    d_fin = dt.datetime.strptime(fin, "%d-%m-%Y").date()
-                except ValueError:
-                    print("⚠️ Formato de fecha inválido. Utilice dd-mm-aaaa")
-                    continue
+                d_ini = dt.datetime.strptime(ini, "%d-%m-%Y").date()
+                d_fin = dt.datetime.strptime(fin, "%d-%m-%Y").date()
                 refresh_base_datos(d_ini, d_fin)
 
             elif op == "7":
                 enlazar_con_pac()
 
-            elif op == "8":
-                subir_maestros_a_django()
-
-        except KeyboardInterrupt:
-            print("\n⚠️ Proceso cancelado por el usuario (Ctrl+C). Retornando al menú...")
         except Exception as e: 
             print(f"\n❌ Error: {e}")
