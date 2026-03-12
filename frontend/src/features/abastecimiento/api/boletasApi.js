@@ -21,25 +21,19 @@ export const getBoletaById = (id) =>
     apiClient.get(`boletas-garantia/${id}/`);
 
 export const createBoleta = (formData) =>
-    apiClient.post('boletas-garantia/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    apiClient.post('boletas-garantia/', formData);
 
 export const updateBoleta = (id, formData) =>
-    apiClient.patch(`boletas-garantia/${id}/`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    apiClient.patch(`boletas-garantia/${id}/`, formData);
 
 /**
  * Elimina una boleta registrando la razón de baja en auditoría.
+ * Se envía como JSON ya que no hay archivos involucrados.
  * @param {number} id
  * @param {string} razon
  */
-export const deleteBoleta = (id, razon = '') => {
-    const body = new FormData();
-    body.append('razon', razon);
-    return apiClient.delete(`boletas-garantia/${id}/`, { data: body });
-};
+export const deleteBoleta = (id, razon = '') =>
+    apiClient.delete(`boletas-garantia/${id}/`, { data: { razon } });
 
 // ─── Auditoría ─────────────────────────────────────────────────────────────────
 

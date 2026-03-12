@@ -28,9 +28,14 @@ const apiClient = axios.create({
 });
 
 // Helper: asegura que la URL tenga trailing slash (convención DRF)
+// y elimina Content-Type cuando el body es FormData para que
+// Axios pueda auto-setear multipart/form-data con el boundary correcto.
 apiClient.interceptors.request.use((config) => {
     if (config.url && !config.url.endsWith('/') && !config.url.includes('?')) {
         config.url += '/';
+    }
+    if (config.data instanceof FormData) {
+        delete config.headers['Content-Type'];
     }
     return config;
 });
