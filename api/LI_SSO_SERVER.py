@@ -442,7 +442,7 @@ def guardar_en_django(db_resumen, db_detalles):
         licitaciones_a_crear.append(Licitacion(**dict_limpio))
         
     print(f"    -> Insertando {len(licitaciones_a_crear)} Licitaciones en BD...")
-    Licitacion.objects.bulk_create(licitaciones_a_crear, batch_size=100)
+    Licitacion.objects.bulk_create(licitaciones_a_crear, batch_size=20)
 
     # --- Guardar Detalles (Tabla: DetalleLicitacion) ---
     print("    -> Preparando Detalles para Inserción Masiva...")
@@ -479,7 +479,7 @@ def guardar_en_django(db_resumen, db_detalles):
         detalles_a_crear.append(DetalleLicitacion(**dict_limpio_det))
 
     print(f"    -> Insertando {len(detalles_a_crear)} Detalles en BD...")
-    DetalleLicitacion.objects.bulk_create(detalles_a_crear, batch_size=100)
+    DetalleLicitacion.objects.bulk_create(detalles_a_crear, batch_size=20)
 
     return len(licitaciones_a_crear), len(detalles_a_crear)
 

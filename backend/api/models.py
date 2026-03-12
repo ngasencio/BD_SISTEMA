@@ -218,3 +218,26 @@ class DetalleOrdenCompra(models.Model):
 
     def __str__(self):
         return f"{self.orden_compra.codigo_oc} - {self.CodigoProducto}"
+
+
+class Anexo1(models.Model):
+    """Modelo para consolidado de Anexo 1"""
+    nivel = models.CharField(max_length=50, null=True, blank=True)
+    concepto_presupuestario = models.CharField(max_length=255, null=True, blank=True)
+    ley_presupuestos = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    requerimiento = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    col_4 = models.CharField(max_length=255, null=True, blank=True)
+    saldo_por_devengar = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    efectivo = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    deuda_flotante = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    ruta_jerarquica = models.TextField(null=True, blank=True)
+    establecimiento = models.CharField(max_length=255, null=True, blank=True)
+    fecha = models.DateField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'tabla_anexo1'
+        verbose_name = 'Anexo 1'
+        verbose_name_plural = 'Anexos 1'
+
+    def __str__(self):
+        return f"{self.establecimiento} - {self.concepto_presupuestario} ({self.fecha})"
