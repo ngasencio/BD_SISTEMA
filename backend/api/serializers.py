@@ -160,6 +160,7 @@ class BoletaGarantiaSerializer(serializers.ModelSerializer):
             'depto_finanzas',
             'numero_memo',
             'fecha_despacho_finanzas',
+            'estado_trazabilidad',
             'adjunto',
             'adjunto_url',
             'creado_por',
@@ -171,6 +172,26 @@ class BoletaGarantiaSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'adjunto': {'write_only': True, 'required': False},
         }
+
+    def to_internal_value(self, data):
+        """Convierte cadenas vacías en None solo para campos que aceptan NULL (fechas/archivos)."""
+        if hasattr(data, 'copy'):
+            data = data.copy()
+        
+        # Solo estos campos deben ser None si están vacíos. 
+        # Los CharFields (como numero_memo) prefieren "" en lugar de None.
+        to_none_fields = [
+            'fecha_derivacion_abastecimiento', 
+            'depto_finanzas', 
+            'fecha_despacho_finanzas', 
+            'adjunto'
+        ]
+        
+        for field in to_none_fields:
+            if field in data and data[field] == '':
+                data[field] = None
+                
+        return super().to_internal_value(data)
 
     def get_adjunto_url(self, obj):
         if obj.adjunto:

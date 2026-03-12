@@ -337,6 +337,7 @@ class BoletaGarantia(models.Model):
     depto_finanzas = models.DateField('Depto. Finanzas', null=True, blank=True)
     numero_memo = models.CharField('N° Memo Depto. Abast. Y Op.', max_length=100, blank=True, default='')
     fecha_despacho_finanzas = models.DateField('Fecha Despacho a Finanzas', null=True, blank=True)
+    estado_trazabilidad = models.CharField('Estado Trazabilidad', max_length=50, blank=True, default='')
 
     # Archivo adjunto (Excel, Word o RAR)
     adjunto = models.FileField('Archivo Adjunto', upload_to='boletas/adjuntos/', null=True, blank=True)

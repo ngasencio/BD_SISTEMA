@@ -1,26 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../store/authStore';
 
 export default function Sidebar() {
+    const { user, role, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const path = location.pathname; // ruta actual para marcar el ítem activo
+    const path = location.pathname;
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
-        abast: path.startsWith('/licitaciones'),
-        finanzas: path.startsWith('/anexo'),
+        abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra'),
+        finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas'),
         admin: false,
     });
     const [openMods, setOpenMods] = useState({
-        mp: path.startsWith('/licitaciones'),
+        mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra'),
         inventario: false,
-        finReportes: path.startsWith('/anexo'),
+        garantias: path.startsWith('/abastecimiento/boletas'),
+        finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas'),
     });
 
     const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh');
+        logout();
         navigate('/login');
     };
 
@@ -42,11 +44,11 @@ export default function Sidebar() {
     return (
         <aside className="sidebar">
             {/* CABECERA */}
-            <div className="sidebar-brand" onClick={() => goTo('/')} style={{ cursor: 'pointer' }}>
-
-                <div className="sidebar-brand-info">
-                    <div className="sidebar-brand-name">Sistema Gestión Interno</div>
-                    <div className="sidebar-brand-sub">Servicio de Salud Osorno </div>
+            <div className="sidebar-unit" onClick={() => goTo('/')} style={{ cursor: 'pointer' }}>
+                <div className="sidebar-unit-icon">🏢</div>
+                <div className="sidebar-unit-info">
+                    <div className="sidebar-unit-name">Sistema Gestión Interno</div>
+                    <div className="sidebar-unit-sub">Servicio de Salud Osorno </div>
                 </div>
             </div>
 
@@ -97,6 +99,23 @@ export default function Sidebar() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Garantías */}
+                        <div className={`nav-mod ${openMods.garantias ? 'open' : ''}`}>
+                            <div className="nav-mod-title" onClick={() => toggleMod('garantias')}>
+                                <span style={{ fontSize: 14 }}>🛡️</span>
+                                <span className="nav-mod-title-text">Garantías</span>
+                                <span className="nav-mod-arrow" style={{ transform: openMods.garantias ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+                            </div>
+                            <div className="nav-mod-items" style={{ display: openMods.garantias ? 'block' : 'none' }}>
+                                <div
+                                    className={`nav-item ${isActive('/abastecimiento/boletas') ? 'active' : ''}`}
+                                    onClick={() => goTo('/abastecimiento/boletas', 'abast', 'garantias')}
+                                >
+                                    <span>📄</span> <span className="nav-item-text">Boletas de Garantía</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -144,10 +163,15 @@ export default function Sidebar() {
 
             <div className="sidebar-footer">
                 <div className="sidebar-user">
-                    <span className="sidebar-user-avatar">👤</span>
-                    <span className="sidebar-user-name">Administrador</span>
+                    <div className="sidebar-user-avatar">
+                        {user?.username?.[0]?.toUpperCase() || '👤'}
+                    </div>
+                    <div className="sidebar-user-info">
+                        <div className="sidebar-user-name">{user?.username || 'Usuario'}</div>
+                        <div className="sidebar-user-role">{role}</div>
+                    </div>
                 </div>
-                <button className="sidebar-logout-btn" onClick={handleLogout}>
+                <button className="sidebar-logout-btn" onClick={handleLogout} title="Cerrar Sesión">
                     <span>🚪</span>
                     <span className="sidebar-logout-label">Salir</span>
                 </button>

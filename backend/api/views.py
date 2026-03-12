@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters, serializers as drf_serializers, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -185,12 +185,26 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
     queryset = BoletaGarantia.objects.select_related('proveedor', 'comprador', 'creado_por').all()
     serializer_class = BoletaGarantiaSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['tipo_documento', 'formato_documento', 'banco', 'proveedor', 'comprador']
     search_fields = ['numero_documento', 'nombre_licitacion', 'id_licitacion', 'proveedor__nombre']
     ordering_fields = ['vigencia_garantia', 'fecha_emision', 'mes_anio', 'monto', 'created_at']
     ordering = ['-vigencia_garantia']
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            print(f"=== VALIDATION ERRORS (CREATE) ===\n{serializer.errors}\n==================================")
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if not serializer.is_valid():
+            print(f"=== VALIDATION ERRORS (UPDATE) ===\n{serializer.errors}\n==================================")
+        return super().update(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         serializer.save(creado_por=self.request.user)

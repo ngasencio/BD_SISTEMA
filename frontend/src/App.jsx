@@ -45,7 +45,7 @@ const RequireAuth = () => {
 const RequireRole = ({ allowed = [], children }) => {
   const { role } = useAuth();
   if (!allowed.includes(role)) return <Navigate to="/" replace />;
-  return children;
+  return children || <Outlet />;
 };
 
 // ─── App ─────────────────────────────────────────────────────────────────────
@@ -67,8 +67,8 @@ function AppRoutes() {
           <Route path="/anexo3" element={<AnexoDeudaPage />} />
           <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
 
-          {/* Módulo Abastecimiento (admin + abastecimiento) */}
-          <Route element={<RequireRole allowed={['admin', 'abastecimiento']} />}>
+          {/* Módulo Abastecimiento (admin + abastecimiento + viewer) */}
+          <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'viewer']} />}>
             {abastecimientoRoutes}
           </Route>
 
