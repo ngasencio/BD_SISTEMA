@@ -357,7 +357,7 @@ def guardar_en_django(db_resumen, db_detalles):
         ocs_a_crear.append(OrdenCompra(**dict_limpio))
 
     print(f"    -> Insertando {len(ocs_a_crear)} Órdenes de Compra en BD...")
-    OrdenCompra.objects.bulk_create(ocs_a_crear, batch_size=2000)
+    OrdenCompra.objects.bulk_create(ocs_a_crear, batch_size=100)
 
     # --- Guardar Detalles (Tabla: DetalleOrdenCompra) ---
     print("    -> Preparando Detalles para Inserción Masiva...")
@@ -397,7 +397,7 @@ def guardar_en_django(db_resumen, db_detalles):
         detalles_a_crear.append(DetalleOrdenCompra(**dict_limpio_det))
 
     print(f"    -> Insertando {len(detalles_a_crear)} Detalles en BD...")
-    DetalleOrdenCompra.objects.bulk_create(detalles_a_crear, batch_size=2000)
+    DetalleOrdenCompra.objects.bulk_create(detalles_a_crear, batch_size=100)
 
     return len(ocs_a_crear), len(detalles_a_crear)
 
