@@ -1,6 +1,8 @@
 import csv
 import datetime as dt
 import json
+import logging
+import os
 import pathlib
 import ssl
 import time
@@ -10,13 +12,26 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import certifi
 import pandas as pd
 
+logger = logging.getLogger(__name__)
+
 # =========================
-# CONFIGURACIÓN FIJA SSO (LICITACIONES)
+# CONFIGURACIÓN SSO (LICITACIONES)
+# Lee las credenciales desde variables de entorno.
+# Crear un archivo .env en la carpeta /api/ o exportar antes de ejecutar:
+#   export CODIGO_ORGANISMO=7296
+#   export TICKET=tu-ticket-aqui
 # =========================
-CODIGO_ORGANISMO = "7296"
-TICKET = "2798F2D3-0AC5-4323-9BB9-5E90618194BA"
+CODIGO_ORGANISMO = os.environ.get("CODIGO_ORGANISMO", "")
+TICKET = os.environ.get("TICKET", "")
+
+if not CODIGO_ORGANISMO or not TICKET:
+    logger.warning(
+        "CODIGO_ORGANISMO y/o TICKET no están definidos como variables de entorno. "
+        "Agréguelos en un archivo .env o expórtelos antes de ejecutar."
+    )
 
 # RUTAS
 RUTA_API = pathlib.Path(__file__).parent.absolute()
@@ -56,7 +71,9 @@ class MercadoPublicoLicitacionesClient:
 
     def __init__(self, cfg: ApiConfig):
         self.cfg = cfg
-        self._ctx = ssl._create_unverified_context()
+        # Usar los certificados CA actualizados de certifi.
+        # Si la API usa un certificado no reconocido, ajustar según corresponda.
+        self._ctx = ssl.create_default_context(cafile=certifi.where())
 
     def get_json(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Realiza petición GET con reintentos y backoff."""
@@ -69,10 +86,12 @@ class MercadoPublicoLicitacionesClient:
                     return json.load(resp)
             except Exception as e:
                 last_err = e
-                # Backoff lineal
-                time.sleep(self.cfg.espera_base * intento)
+                espera = self.cfg.espera_base * intento
+                logger.warning("Intento %d/%d fallido: %s — reintentando en %.1fs",
+                               intento, self.cfg.max_reintentos, e, espera)
+                time.sleep(espera)
 
-        print(f"⚠️  API sin respuesta tras {self.cfg.max_reintentos} intentos: {last_err}")
+        logger.error("API sin respuesta tras %d intentos: %s", self.cfg.max_reintentos, last_err)
         return None
 
     def obtener_listado_dia(self, fecha_dt: dt.date) -> List[Dict[str, Any]]:
@@ -299,7 +318,7 @@ def procesar_dia(
 
     # Cache en disco: si ya existen ambos archivos y no se fuerza actualización
     if (not modo_actualizar) and ruta_resumen.exists() and ruta_detalles.exists():
-        print("    ✅ Ya existe en DIARIO (cache).")
+        logger.info("Día %s ya existe en DIARIO (cache). Se omite descarga.", f_str)
         return True
 
     # Lógica de Actualización: Borrar previo a la descarga si existe
@@ -309,13 +328,13 @@ def procesar_dia(
         if ruta_detalles.exists():
             ruta_detalles.unlink()
 
-    print(f"\n>>> LICITACIONES SSO: {fecha_consulta}")
-    
+    logger.info(">>> LICITACIONES SSO: %s", fecha_consulta)
+
     client = MercadoPublicoLicitacionesClient(ApiConfig(codigo_organismo=codigo_organismo, ticket=ticket))
     licitaciones_basicas = client.obtener_listado_dia(fecha_dt)
-    
+
     if not licitaciones_basicas:
-        print("    ⚠ Sin licitaciones publicadas/modificadas este día.")
+        logger.warning("Sin licitaciones publicadas/modificadas el %s.", fecha_consulta)
         return False
 
     db_resumen: List[Dict[str, Any]] = []
@@ -324,7 +343,7 @@ def procesar_dia(
     codigos: List[str] = [str(item.get("CodigoExterno")) for item in licitaciones_basicas if item.get("CodigoExterno")]
     total = len(codigos)
 
-    print(f"    Se encontraron {total} licitaciones. Descargando detalles...")
+    logger.info("Se encontraron %d licitaciones. Descargando detalles...", total)
 
     def _fetch_one(idx_codigo: Tuple[int, str]) -> Optional[Tuple[Dict[str, Any], List[Dict[str, Any]]]]:
         """Descarga el detalle de una licitación (ejecutado en thread)."""
@@ -350,7 +369,7 @@ def procesar_dia(
                     pass
 
             if done_count % 10 == 0 or done_count == total:
-                print(f"    Procesadas {done_count}/{total} licitaciones", end="\r")
+                logger.info("Procesadas %d/%d licitaciones", done_count, total)
 
             res = fut.result()
             if not res:
@@ -366,7 +385,7 @@ def procesar_dia(
     _write_csv_dicts(ruta_resumen, db_resumen)
     _write_csv_dicts(ruta_detalles, db_detalles)
 
-    print(f"\n✅ Guardado en DIARIO: {f_str}")
+    logger.info("Guardado en DIARIO: %s", f_str)
     return True
 
 # =========================
@@ -399,12 +418,12 @@ def guardar_en_django(db_resumen, db_detalles):
     dt_fields = ['FechaCreacion', 'FechaCierre', 'FechaInicio', 'FechaFinal', 'FechaPublicacion', 
                  'FechaAdjudicacion', 'FechaEstimadaAdjudicacion', 'Adj_Fecha']
 
-    print("    -> Vaciando la base de datos (Licitaciones) para reemplazo total...")
+    logger.info("Vaciando la base de datos (Licitaciones) para reemplazo total...")
     DetalleLicitacion.objects.all().delete()
     Licitacion.objects.all().delete()
 
     # --- Guardar Resumen (Tabla: Licitacion) ---
-    print("    -> Preparando Licitaciones para Inserción Masiva...")
+    logger.info("Preparando Licitaciones para inserción masiva...")
     campos_modelo_lic = [f.name for f in Licitacion._meta.get_fields()]
     licitaciones_a_crear = []
     
@@ -441,11 +460,11 @@ def guardar_en_django(db_resumen, db_detalles):
         dict_limpio['codigo_licitacion'] = codigo
         licitaciones_a_crear.append(Licitacion(**dict_limpio))
         
-    print(f"    -> Insertando {len(licitaciones_a_crear)} Licitaciones en BD...")
+    logger.info("Insertando %d Licitaciones en BD...", len(licitaciones_a_crear))
     Licitacion.objects.bulk_create(licitaciones_a_crear, batch_size=100)
 
     # --- Guardar Detalles (Tabla: DetalleLicitacion) ---
-    print("    -> Preparando Detalles para Inserción Masiva...")
+    logger.info("Preparando Detalles para inserción masiva...")
     campos_modelo_det = [f.name for f in DetalleLicitacion._meta.get_fields()]
     detalles_a_crear = []
     
@@ -478,7 +497,7 @@ def guardar_en_django(db_resumen, db_detalles):
         
         detalles_a_crear.append(DetalleLicitacion(**dict_limpio_det))
 
-    print(f"    -> Insertando {len(detalles_a_crear)} Detalles en BD...")
+    logger.info("Insertando %d Detalles en BD...", len(detalles_a_crear))
     DetalleLicitacion.objects.bulk_create(detalles_a_crear, batch_size=100)
 
     return len(licitaciones_a_crear), len(detalles_a_crear)
@@ -492,10 +511,10 @@ def unificar_base_datos():
     """
     Lee TODOS los CSVs de la carpeta DIARIO y reconstruye los Maestros desde cero.
     """
-    print("\n🔄 INICIANDO UNIFICACIÓN DE BASE DE DATOS...")
-    
+    logger.info("INICIANDO UNIFICACIÓN DE BASE DE DATOS...")
+
     # --- PROCESAR RESUMEN ---
-    print("   -> Buscando archivos de Resumen en DIARIO...")
+    logger.info("Buscando archivos de Resumen en DIARIO...")
     archivos_res = list(CARPETA_DIARIO.glob("*_RESUMEN.csv"))
     
     if archivos_res:
@@ -507,12 +526,12 @@ def unificar_base_datos():
         
         ruta_m_res = CARPETA_MAESTROS / "Maestro_Resumen.csv"
         df_res.to_csv(ruta_m_res, sep=";", index=False, encoding="utf-8-sig")
-        print(f"   ✅ Maestro Resumen creado: {len(df_res)} registros.")
+        logger.info("Maestro Resumen creado: %d registros.", len(df_res))
     else:
-        print("   ⚠️ No se encontraron archivos de Resumen en DIARIO.")
+        logger.warning("No se encontraron archivos de Resumen en DIARIO.")
 
     # --- PROCESAR DETALLES ---
-    print("   -> Buscando archivos de Detalles en DIARIO...")
+    logger.info("Buscando archivos de Detalles en DIARIO...")
     archivos_det = list(CARPETA_DIARIO.glob("*_DETALLES.csv"))
     
     if archivos_det:
@@ -524,11 +543,11 @@ def unificar_base_datos():
         
         ruta_m_det = CARPETA_MAESTROS / "Maestro_Detalle.csv"
         df_det.to_csv(ruta_m_det, sep=";", index=False, encoding="utf-8-sig")
-        print(f"   ✅ Maestro Detalle creado: {len(df_det)} registros.")
+        logger.info("Maestro Detalle creado: %d registros.", len(df_det))
     else:
-        print("   ⚠️ No se encontraron archivos de Detalles en DIARIO.")
+        logger.warning("No se encontraron archivos de Detalles en DIARIO.")
 
-    print("\n✨ UNIFICACIÓN COMPLETADA EXITOSAMENTE.")
+    logger.info("UNIFICACIÓN COMPLETADA EXITOSAMENTE.")
 
 
 def refresh_base_datos(
@@ -552,7 +571,7 @@ def refresh_base_datos(
         espera_entre_detalles: Tiempo de espera entre peticiones
         progress_callback: Función callback(dia, codigo, done, total) para reportar progreso
     """
-    print(f"\n🚀 INICIANDO REFRESH DE BASE DE DATOS ({f_ini} al {f_fin})")
+    logger.info("INICIANDO REFRESH DE BASE DE DATOS (%s al %s)", f_ini, f_fin)
     
     # 1. DESCARGA MASIVA A DIARIO
     d_actual = f_ini
@@ -578,10 +597,10 @@ def refresh_base_datos(
         d_actual += dt.timedelta(days=1)
     
     if not dias_descargados:
-        print("\n⚠️ No se encontraron nuevos datos en el rango seleccionado. Los Maestros no se tocarán.")
+        logger.warning("No se encontraron nuevos datos en el rango seleccionado. Los Maestros no se tocarán.")
         return
 
-    print("\n🔄 INTEGRANDO NUEVOS DATOS A LOS MAESTROS (UPSERT)...")
+    logger.info("INTEGRANDO NUEVOS DATOS A LOS MAESTROS (UPSERT)...")
 
     # Rutas Maestros
     ruta_m_res = CARPETA_MAESTROS / "Maestro_Resumen.csv"
@@ -606,7 +625,7 @@ def refresh_base_datos(
         df_final_res.drop_duplicates(subset=["CodigoLicitacion"], keep="last", inplace=True)
         
         df_final_res.to_csv(ruta_m_res, sep=";", index=False, encoding="utf-8-sig")
-        print(f"   ✅ Maestro Resumen actualizado. Total registros: {len(df_final_res)}")
+        logger.info("Maestro Resumen actualizado: %d registros.", len(df_final_res))
 
     # --- ACTUALIZAR DETALLES ---
     if ruta_m_det.exists():
@@ -630,9 +649,9 @@ def refresh_base_datos(
         df_final_det = pd.concat([df_master_det, df_nuevos_det])
         
         df_final_det.to_csv(ruta_m_det, sep=";", index=False, encoding="utf-8-sig")
-        print(f"   ✅ Maestro Detalle actualizado. Total registros: {len(df_final_det)}")
+        logger.info("Maestro Detalle actualizado: %d registros.", len(df_final_det))
 
-    print("\n✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE.")
+    logger.info("PROCESO DE REFRESH COMPLETADO EXITOSAMENTE.")
 
 
 def subir_maestros_a_django():
@@ -647,10 +666,10 @@ def subir_maestros_a_django():
     ruta_m_det = CARPETA_MAESTROS / "Maestro_Detalle.csv"
 
     if not ruta_m_res.exists() or not ruta_m_det.exists():
-        print("   ❌ No existen los archivos Maestro (Resumen/Detalles). Ejecute la Opción 5 primero.")
+        logger.error("No existen los archivos Maestro (Resumen/Detalles). Ejecute la Opción 5 primero.")
         return
 
-    print("\n🚀 CARGANDO CSVs MAESTROS PARA SINCRONIZACIÓN MASIVA...")
+    logger.info("CARGANDO CSVs MAESTROS PARA SINCRONIZACIÓN MASIVA...")
     df_res = pd.read_csv(ruta_m_res, sep=";", encoding="utf-8-sig", dtype=str)
     df_det = pd.read_csv(ruta_m_det, sep=";", encoding="utf-8-sig", dtype=str)
 
@@ -661,10 +680,9 @@ def subir_maestros_a_django():
     datos_res = df_res.to_dict("records")
     datos_det = df_det.to_dict("records")
 
-    print(f"   -> Subiendo {len(datos_res)} Licitaciones y {len(datos_det)} Detalles a Django...")
+    logger.info("Subiendo %d Licitaciones y %d Detalles a Django...", len(datos_res), len(datos_det))
     count_lic, count_det = guardar_en_django(datos_res, datos_det)
-    print("   ✅ Sincronización masiva finalizada exitosamente.")
-    print(f"   📊 TOTAL EN BD: {count_lic} Licitaciones (Resumen) y {count_det} Detalles.")
+    logger.info("Sincronización masiva finalizada: %d Licitaciones, %d Detalles.", count_lic, count_det)
 
 
 # =========================

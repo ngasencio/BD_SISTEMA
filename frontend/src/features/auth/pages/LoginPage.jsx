@@ -1,7 +1,7 @@
 /**
  * @file features/auth/pages/LoginPage.jsx
- * @description Página de login con el diseño visual solicitado por el usuario,
- * pero conectada a la nueva arquitectura Feature-Driven (uso de useAuth y apiClient).
+ * @description Página de login con soporte de "Recordarme" y manejo de errores
+ * diferenciado por tipo (red, credenciales, servidor).
  */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -9,35 +9,49 @@ import apiClient from '../../../lib/axios';
 import { useAuth } from '../../../store/authStore';
 import './LoginPage.css';
 
-// Imágenes desde la carpeta assets
 import edificioImg from '../../../assets/edificio.jpg';
 import logoImg from '../../../assets/logo.jpg';
 
+const REMEMBER_KEY = 'remember_username';
+
 export const LoginPage = () => {
-    const [username, setUsername] = useState('');
+    const [username, setUsername] = useState(
+        () => localStorage.getItem(REMEMBER_KEY) || ''
+    );
     const [password, setPassword] = useState('');
     const [showPass, setShowPass] = useState(false);
+    const [remember, setRemember] = useState(
+        () => !!localStorage.getItem(REMEMBER_KEY)
+    );
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const navigate = useNavigate();
-    const { login } = useAuth(); // Autenticación centralizada
+    const { login } = useAuth();
 
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError('');
         try {
-            // Usamos apiClient que está configurado globalmente
             const res = await apiClient.post('auth/login/', { username, password });
-
-            // Pasamos la respuesta al store en lugar de hacerlo a mano
             login(res.data);
 
-            // Redirigir al inicio después de loguear exitosamente
+            if (remember) {
+                localStorage.setItem(REMEMBER_KEY, username);
+            } else {
+                localStorage.removeItem(REMEMBER_KEY);
+            }
+
             navigate('/');
-        } catch {
-            setError('Usuario o contraseña incorrectos. Intente nuevamente.');
+        } catch (err) {
+            if (!err.response) {
+                setError('No se pudo conectar al servidor. Verifique su conexión.');
+            } else if (err.response.status === 401) {
+                setError('Usuario o contraseña incorrectos. Intente nuevamente.');
+            } else {
+                setError('Error interno del servidor. Contacte a Soporte TI.');
+            }
         } finally {
             setLoading(false);
         }
@@ -129,7 +143,12 @@ export const LoginPage = () => {
 
                         <div className="options-row">
                             <label className="checkbox-wrap">
-                                <input type="checkbox" /> Recordarme
+                                <input
+                                    type="checkbox"
+                                    checked={remember}
+                                    onChange={e => setRemember(e.target.checked)}
+                                />
+                                {' '}Recordarme
                             </label>
                             <a href="#" className="forgot">¿Olvidaste tu contraseña?</a>
                         </div>
