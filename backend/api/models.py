@@ -241,3 +241,146 @@ class Anexo1(models.Model):
 
     def __str__(self):
         return f"{self.establecimiento} - {self.concepto_presupuestario} ({self.fecha})"
+
+
+# =============================================================================
+# Módulo de Garantías — Registro de Boletas
+# =============================================================================
+
+BANCO_CHOICES = [
+    ('Banco de Chile', 'Banco de Chile'),
+    ('Santander-Chile', 'Santander-Chile'),
+    ('BCI', 'BCI'),
+    ('Scotiabank', 'Scotiabank'),
+    ('Itau', 'Itau'),
+    ('BICE', 'BICE'),
+    ('Falabella', 'Falabella'),
+    ('Ripley', 'Ripley'),
+    ('Consorcio', 'Consorcio'),
+    ('BTG Pactual', 'BTG Pactual'),
+]
+
+TIPO_DOC_CHOICES = [
+    ('Boleta De Garantia', 'Boleta De Garantía'),
+    ('Certificado De Fianza', 'Certificado De Fianza'),
+    ('Poliza De Seguro', 'Póliza De Seguro'),
+]
+
+FORMATO_DOC_CHOICES = [
+    ('Fisica', 'Física'),
+    ('Electronica', 'Electrónica'),
+]
+
+
+class Proveedor(models.Model):
+    """Tabla de proveedores del módulo de garantías (T_Proveedores)."""
+    rut = models.CharField('RUT', max_length=20, primary_key=True)
+    nombre = models.CharField('Nombre / Razón Social', max_length=255)
+
+    class Meta:
+        db_table = 'T_Proveedores'
+        verbose_name = 'Proveedor'
+        verbose_name_plural = 'Proveedores'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return f"{self.rut} — {self.nombre}"
+
+
+class Comprador(models.Model):
+    """Tabla de compradores del módulo de garantías (T_Comprador)."""
+    nombre = models.CharField('Nombre', max_length=255)
+
+    class Meta:
+        db_table = 'T_Comprador'
+        verbose_name = 'Comprador'
+        verbose_name_plural = 'Compradores'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+
+class BoletaGarantia(models.Model):
+    """Registro de Boletas / Garantías — tabla principal T_BoletaGarantia."""
+
+    # Período (primer día del mes; se muestra como YYYY-MM en el frontend)
+    mes_anio = models.DateField('Mes/Año')
+
+    # Identificación del documento
+    tipo_documento = models.CharField('Tipo de Documento', max_length=50, choices=TIPO_DOC_CHOICES)
+    formato_documento = models.CharField('Formato Documento', max_length=20, choices=FORMATO_DOC_CHOICES)
+    numero_documento = models.CharField('N° Documento', max_length=100)
+
+    # Datos principales
+    fecha_emision = models.DateField('Fecha Emisión de Documento')
+    monto = models.DecimalField('Monto', max_digits=18, decimal_places=2)
+    proveedor = models.ForeignKey(
+        Proveedor, on_delete=models.PROTECT, related_name='boletas', verbose_name='Proveedor'
+    )
+    banco = models.CharField('Banco', max_length=50, choices=BANCO_CHOICES)
+
+    # Licitación relacionada
+    id_licitacion = models.CharField('ID Licitación', max_length=100, blank=True, default='')
+    nombre_licitacion = models.TextField('Nombre Licitación', blank=True, default='')
+
+    # Comprador responsable
+    comprador = models.ForeignKey(
+        Comprador, on_delete=models.PROTECT, related_name='boletas', verbose_name='Comprador'
+    )
+
+    # Fechas de proceso interno
+    vigencia_garantia = models.DateField('Vigencia de Garantía')
+    fecha_derivacion_abastecimiento = models.DateField(
+        'Fecha Derivación a Abastecimiento', null=True, blank=True
+    )
+    depto_finanzas = models.DateField('Depto. Finanzas', null=True, blank=True)
+    numero_memo = models.CharField('N° Memo Depto. Abast. Y Op.', max_length=100, blank=True, default='')
+    fecha_despacho_finanzas = models.DateField('Fecha Despacho a Finanzas', null=True, blank=True)
+
+    # Archivo adjunto (Excel, Word o RAR)
+    adjunto = models.FileField('Archivo Adjunto', upload_to='boletas/adjuntos/', null=True, blank=True)
+
+    # Auditoría de registro
+    creado_por = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='boletas_creadas', verbose_name='Creado por'
+    )
+    created_at = models.DateTimeField('Creado en', auto_now_add=True)
+    updated_at = models.DateTimeField('Actualizado en', auto_now=True)
+
+    class Meta:
+        db_table = 'T_BoletaGarantia'
+        verbose_name = 'Boleta de Garantía'
+        verbose_name_plural = 'Boletas de Garantía'
+        ordering = ['-vigencia_garantia', '-fecha_emision']
+        indexes = [
+            models.Index(fields=['-vigencia_garantia']),
+            models.Index(fields=['-fecha_emision']),
+            models.Index(fields=['tipo_documento']),
+        ]
+
+    def __str__(self):
+        return f"{self.numero_documento} — {self.proveedor}"
+
+
+class BoletaGarantiaAudit(models.Model):
+    """Historial de auditoría: registros eliminados de BoletaGarantia."""
+    boleta_id = models.IntegerField('ID Boleta eliminada')
+    numero_documento = models.CharField('N° Documento', max_length=100)
+    snapshot = models.JSONField('Datos al momento de eliminar')
+    eliminado_por = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True,
+        related_name='boletas_eliminadas', verbose_name='Eliminado por'
+    )
+    eliminado_en = models.DateTimeField('Eliminado en', auto_now_add=True)
+    razon = models.TextField('Razón de eliminación', blank=True, default='')
+
+    class Meta:
+        db_table = 'T_BoletaGarantia_Audit'
+        verbose_name = 'Auditoría Boleta'
+        verbose_name_plural = 'Auditoría Boletas'
+        ordering = ['-eliminado_en']
+
+    def __str__(self):
+        return f"Boleta #{self.boleta_id} eliminada el {self.eliminado_en}"

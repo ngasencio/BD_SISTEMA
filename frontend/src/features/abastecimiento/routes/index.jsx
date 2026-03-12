@@ -11,6 +11,9 @@ const AbastecimientoDashboard = lazy(() =>
 const FSCManager = lazy(() =>
     import('../components/FSCManager').then(m => ({ default: m.FSCManager }))
 );
+const BoletasPage = lazy(() =>
+    import('../components/BoletasPage').then(m => ({ default: m.BoletasPage }))
+);
 
 const Loading = () => <div className="loading-spinner">Cargando módulo...</div>;
 
@@ -23,6 +26,10 @@ export const abastecimientoRoutes = (
         <Route
             path="/abastecimiento/fsc"
             element={<Suspense fallback={<Loading />}><FSCManager /></Suspense>}
+        />
+        <Route
+            path="/abastecimiento/boletas"
+            element={<Suspense fallback={<Loading />}><BoletasPage /></Suspense>}
         />
     </>
 );
