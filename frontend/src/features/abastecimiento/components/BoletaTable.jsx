@@ -29,6 +29,7 @@ function fmtMoney(val) {
 export function BoletaTable({
     boletas, loading, error,
     page, setPage, totalCount, pageSize,
+    filters, onFilterChange, // Nuevos props para filtros y orden
     onEdit, onDelete, onView,
 }) {
     const [confirmDelete, setConfirmDelete] = useState(null);
@@ -36,7 +37,35 @@ export function BoletaTable({
     const [deleting, setDeleting] = useState(false);
     const [deleteError, setDeleteError] = useState('');
 
+    const [searchTerm, setSearchTerm] = useState(filters.search || '');
+
     const totalPages = Math.ceil(totalCount / pageSize) || 1;
+
+    // Debounce buscador
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            if (searchTerm !== (filters.search || '')) {
+                onFilterChange({ ...filters, search: searchTerm });
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchTerm, filters, onFilterChange]);
+
+    const handleSort = (field) => {
+        let newOrder = field;
+        if (filters.ordering === field) {
+            newOrder = `-${field}`;
+        } else if (filters.ordering === `-${field}`) {
+            newOrder = ''; // Desactivar orden
+        }
+        onFilterChange({ ...filters, ordering: newOrder });
+    };
+
+    const getSortIcon = (field) => {
+        if (filters.ordering === field) return ' 🔼';
+        if (filters.ordering === `-${field}`) return ' 🔽';
+        return ' ↕️';
+    };
 
     const handleDeleteClick = (boleta) => {
         setConfirmDelete({ id: boleta.id, numero: boleta.numero_documento });
@@ -55,13 +84,6 @@ export function BoletaTable({
             setDeleting(false);
         }
     };
-
-    if (loading) return (
-        <div style={{ padding: '40px', textAlign: 'center' }}>
-            <div className="spinner-small" style={{ margin: '0 auto 10px' }}></div>
-            <p style={{ color: '#64748b' }}>Cargando registros...</p>
-        </div>
-    );
 
     if (error) return <div className="boleta-alert boleta-alert-error">{error}</div>;
 
@@ -96,28 +118,48 @@ export function BoletaTable({
                 </div>
             )}
 
-            <div className="table-stats">
-                <span>Total: <strong className="table-stats-count">{totalCount}</strong> registros</span>
-                <span>Página {page} de {totalPages}</span>
+            <div className="table-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '20px' }}>
+                <div className="search-box" style={{ flex: 1, position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
+                    <input
+                        type="text"
+                        className="boleta-input"
+                        placeholder="Buscar por número, proveedor, licitación..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={{ width: '100%', paddingLeft: '35px', height: '45px', borderRadius: '10px', border: '1px solid #cbd5e1' }}
+                    />
+                </div>
+                <div className="table-stats" style={{ margin: 0, whiteSpace: 'nowrap' }}>
+                    <span>Total: <strong className="table-stats-count">{totalCount}</strong> registros</span>
+                </div>
             </div>
 
-            <div className="table-wrapper" style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+            <div className="table-wrapper" style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+                {loading && (
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10
+                    }}>
+                        <div className="spinner-small"></div>
+                    </div>
+                )}
                 <table className="boleta-data-table">
                     <thead>
                         <tr>
-                            <th>Mes/Año</th>
-                            <th>N° Documento</th>
-                            <th>Tipo</th>
-                            <th>Proveedor</th>
-                            <th>Monto</th>
-                            <th>Vigencia</th>
-                            <th>Estado Documento</th>
+                            <th onClick={() => handleSort('mes_anio')} style={{ cursor: 'pointer' }}>Mes/Año {getSortIcon('mes_anio')}</th>
+                            <th onClick={() => handleSort('numero_documento')} style={{ cursor: 'pointer' }}>N° Documento {getSortIcon('numero_documento')}</th>
+                            <th onClick={() => handleSort('tipo_documento')} style={{ cursor: 'pointer' }}>Tipo {getSortIcon('tipo_documento')}</th>
+                            <th onClick={() => handleSort('proveedor__nombre')} style={{ cursor: 'pointer' }}>Proveedor {getSortIcon('proveedor__nombre')}</th>
+                            <th onClick={() => handleSort('monto')} style={{ cursor: 'pointer' }}>Monto {getSortIcon('monto')}</th>
+                            <th onClick={() => handleSort('vigencia_garantia')} style={{ cursor: 'pointer' }}>Vigencia {getSortIcon('vigencia_garantia')}</th>
+                            <th onClick={() => handleSort('estado_trazabilidad')} style={{ cursor: 'pointer' }}>Estado Documento {getSortIcon('estado_trazabilidad')}</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {boletas.length === 0 ? (
-                            <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No hay registros.</td></tr>
+                            <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>{loading ? 'Cargando...' : 'No hay registros que coincidan con la búsqueda.'}</td></tr>
                         ) : boletas.map((b) => (
                             <tr key={b.id}>
                                 <td className="col-mes-anio">{b.mes_anio}</td>
@@ -153,17 +195,21 @@ export function BoletaTable({
                 </table>
             </div>
 
-            {totalPages > 1 && (
-                <div className="pagination-container">
-                    <button className="pagination-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-                        ← Anterior
-                    </button>
-                    <span style={{ fontSize: '0.875rem', color: '#64748b' }}>Página <strong>{page}</strong> de {totalPages}</span>
-                    <button className="pagination-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-                        Siguiente →
-                    </button>
+            <div className="pagination-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+                <div style={{ fontSize: '0.875rem', color: '#64748b' }}>
+                    Página <strong>{page}</strong> de {totalPages}
                 </div>
-            )}
+                {totalPages > 1 && (
+                    <div className="pagination-container" style={{ margin: 0 }}>
+                        <button className="pagination-btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+                            ← Anterior
+                        </button>
+                        <button className="pagination-btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+                            Siguiente →
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

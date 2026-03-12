@@ -8,7 +8,7 @@ from .models import (
     Proveedor, Comprador, BoletaGarantia, BoletaGarantiaAudit,
 )
 
-ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar']
+ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
 
 
 # =============================================================================

@@ -5,8 +5,11 @@
 .boleta-form-container {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 30px;
+    padding: 10px 15px;
     animation: fadeIn 0.4s ease-out;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 @keyframes fadeIn {
@@ -23,12 +26,13 @@
 
 /* ── SECCIONES (FIELDSETS) ── */
 .boleta-section {
-    border: 1px solid var(--gob-gris2);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    background: var(--gob-blanco);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 32px;
+    background: #ffffff;
     position: relative;
-    transition: box-shadow 0.3s, border-color 0.3s;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .boleta-section:hover {
@@ -65,7 +69,7 @@
 .boleta-grid-4 {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 15px;
+    gap: 25px;
 }
 
 @media (max-width: 900px) {

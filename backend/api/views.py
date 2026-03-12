@@ -189,7 +189,7 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['tipo_documento', 'formato_documento', 'banco', 'proveedor', 'comprador']
     search_fields = ['numero_documento', 'nombre_licitacion', 'id_licitacion', 'proveedor__nombre']
-    ordering_fields = ['vigencia_garantia', 'fecha_emision', 'mes_anio', 'monto', 'created_at']
+    ordering_fields = ['vigencia_garantia', 'fecha_emision', 'mes_anio', 'monto', 'created_at', 'numero_documento', 'tipo_documento', 'proveedor__nombre', 'estado_trazabilidad']
     ordering = ['-vigencia_garantia']
 
     def create(self, request, *args, **kwargs):

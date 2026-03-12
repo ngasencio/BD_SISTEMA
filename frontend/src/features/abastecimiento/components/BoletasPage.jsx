@@ -29,7 +29,7 @@ export function BoletasPage() {
     const {
         boletas, loading, error,
         page, setPage, totalCount, PAGE_SIZE,
-        refresh,
+        filters, applyFilters, refresh,
     } = useBoletas();
     const { registros, loading: loadingAudit, error: errorAudit, refresh: refreshAudit } = useAuditoria();
 
@@ -81,9 +81,6 @@ export function BoletasPage() {
                         Gestión de boletas, certificados de fianza y pólizas de seguro.
                     </p>
                 </div>
-                <button className="btn btn--primary" onClick={handleNewClick}>
-                    + Nueva Boleta
-                </button>
             </div>
 
             {/* Tabs */}
@@ -135,6 +132,8 @@ export function BoletasPage() {
                         setPage={setPage}
                         totalCount={totalCount}
                         pageSize={PAGE_SIZE}
+                        filters={filters}
+                        onFilterChange={applyFilters}
                         onEdit={handleEdit}
                         onDelete={handleDelete}
                         onView={handleView}
