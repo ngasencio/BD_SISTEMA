@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(findstr /n \"btn--danger\\\\|btn--xs\\\\|table-pagination\\\\|badge--\" index.css)"
+    ]
+  }
+}
