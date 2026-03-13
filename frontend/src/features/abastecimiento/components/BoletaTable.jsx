@@ -3,6 +3,7 @@
  * @description Tabla de registros de Boletas de Garantía con diseño estructurado.
  */
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import './BoletaTable.css';
 
 const today = () => new Date();
@@ -65,6 +66,30 @@ export function BoletaTable({
         if (filters.ordering === field) return ' 🔼';
         if (filters.ordering === `-${field}`) return ' 🔽';
         return ' ↕️';
+    };
+
+    const handleExportExcel = () => {
+        if (boletas.length === 0) return;
+
+        const dataToExport = boletas.map(b => ({
+            'Mes/Año': b.mes_anio,
+            'N° Documento': b.numero_documento,
+            'Tipo': b.tipo_documento,
+            'Proveedor': b.proveedor_nombre,
+            'Monto': b.monto,
+            'Vigencia': b.vigencia_garantia,
+            'Estado Documento': b.estado_trazabilidad || '—',
+            'Banco': b.banco,
+            'ID Licitación': b.id_licitacion || '—',
+            'Nombre Licitación': b.nombre_licitacion || '—',
+            'Comprador': b.comprador_nombre,
+            'Fecha Registro': b.created_at ? new Date(b.created_at).toLocaleDateString('es-CL') : '—'
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Boletas');
+        XLSX.writeFile(wb, `Reporte_Boletas_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
     const handleDeleteClick = (boleta) => {
@@ -130,8 +155,18 @@ export function BoletaTable({
                         style={{ width: '100%', paddingLeft: '35px', height: '45px', borderRadius: '10px', border: '1px solid #cbd5e1' }}
                     />
                 </div>
-                <div className="table-stats" style={{ margin: 0, whiteSpace: 'nowrap' }}>
-                    <span>Total: <strong className="table-stats-count">{totalCount}</strong> registros</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <button
+                        className="btn btn--secondary"
+                        onClick={handleExportExcel}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '45px', padding: '0 20px', backgroundColor: '#107c41', color: 'white', border: 'none' }}
+                        title="Descargar esta página como Excel"
+                    >
+                        <span style={{ fontSize: '18px' }}>📊</span> Exportar Excel
+                    </button>
+                    <div className="table-stats" style={{ margin: 0, whiteSpace: 'nowrap' }}>
+                        <span>Total: <strong className="table-stats-count">{totalCount}</strong> registros</span>
+                    </div>
                 </div>
             </div>
 
