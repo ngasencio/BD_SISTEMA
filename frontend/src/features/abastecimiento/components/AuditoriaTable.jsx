@@ -4,7 +4,6 @@
  *              Para modificaciones muestra snapshot antes/después comparados.
  */
 import React, { useState } from 'react';
-import './BoletaTable.css';
 
 function fmt(dateStr) {
     if (!dateStr) return '—';

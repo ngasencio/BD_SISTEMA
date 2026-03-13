@@ -3,7 +3,6 @@
  * @description Formulario de registro y edición de Boletas de Garantía.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import './BoletaForm.css';
 
 const BANCO_OPTIONS = [
     'Banco de Chile', 'Santander-Chile', 'BCI', 'Scotiabank',

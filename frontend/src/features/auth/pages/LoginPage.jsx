@@ -7,7 +7,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../../lib/axios';
 import { useAuth } from '../../../store/authStore';
-import './LoginPage.css';
 
 // Imágenes desde la carpeta assets
 import edificioImg from '../../../assets/edificio.jpg';

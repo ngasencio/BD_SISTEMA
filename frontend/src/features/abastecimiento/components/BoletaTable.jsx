@@ -4,7 +4,6 @@
  */
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import './BoletaTable.css';
 
 const today = () => new Date();
 
