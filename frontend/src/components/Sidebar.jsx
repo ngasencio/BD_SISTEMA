@@ -43,14 +43,7 @@ export default function Sidebar() {
 
     return (
         <aside className="sidebar">
-            {/* CABECERA */}
-            <div className="sidebar-unit" onClick={() => goTo('/')} style={{ cursor: 'pointer' }}>
-                <div className="sidebar-unit-icon">🏢</div>
-                <div className="sidebar-unit-info">
-                    <div className="sidebar-unit-name">Sistema Gestión Interno</div>
-                    <div className="sidebar-unit-sub">Servicio de Salud Osorno </div>
-                </div>
-            </div>
+
 
             <nav className="sidebar-nav">
                 {/* ── ABASTECIMIENTO ────────────────── */}
