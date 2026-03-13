@@ -181,7 +181,7 @@ class CompradorViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class BoletaGarantiaViewSet(viewsets.ModelViewSet):
-    """CRUD completo de Boletas de Garantía con auditoría en eliminación."""
+    """CRUD completo de Boletas de Garantía con auditoría en modificación y eliminación."""
     queryset = BoletaGarantia.objects.select_related('proveedor', 'comprador', 'creado_por').all()
     serializer_class = BoletaGarantiaSerializer
     permission_classes = [IsAuthenticated]
@@ -192,30 +192,50 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
     ordering_fields = ['vigencia_garantia', 'fecha_emision', 'mes_anio', 'monto', 'created_at', 'numero_documento', 'tipo_documento', 'proveedor__nombre', 'estado_trazabilidad']
     ordering = ['-vigencia_garantia']
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        if not serializer.is_valid():
-            print(f"=== VALIDATION ERRORS (CREATE) ===\n{serializer.errors}\n==================================")
-        return super().create(request, *args, **kwargs)
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        if not serializer.is_valid():
-            print(f"=== VALIDATION ERRORS (UPDATE) ===\n{serializer.errors}\n==================================")
-        return super().update(request, *args, **kwargs)
+    def _snapshot(self, instance):
+        """Serializa una instancia a dict para guardar en auditoría."""
+        return BoletaGarantiaSerializer(instance, context={'request': self.request}).data
 
     def perform_create(self, serializer):
         serializer.save(creado_por=self.request.user)
 
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        # Capturar estado ANTES de guardar cambios
+        snapshot_antes = self._snapshot(instance)
+
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if not serializer.is_valid():
+            logger.warning('Errores de validación en UPDATE boleta %s: %s', instance.pk, serializer.errors)
+            return Response(serializer.errors, status=400)
+
+        self.perform_update(serializer)
+
+        # Registrar en auditoría
+        snapshot_despues = self._snapshot(serializer.instance)
+        BoletaGarantiaAudit.objects.create(
+            accion='MODIFICAR',
+            boleta_id=instance.pk,
+            numero_documento=instance.numero_documento,
+            snapshot_antes=snapshot_antes,
+            snapshot=snapshot_despues,
+            eliminado_por=request.user,
+            razon='',
+        )
+        logger.info('Boleta %s modificada por %s.', instance.pk, request.user.username)
+
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+
+        return Response(serializer.data)
+
     def perform_destroy(self, instance):
         razon = self.request.data.get('razon', '')
-        # Crear snapshot antes de eliminar
-        snapshot_serializer = BoletaGarantiaSerializer(instance, context={'request': self.request})
-        snapshot = snapshot_serializer.data
-
+        snapshot = self._snapshot(instance)
         BoletaGarantiaAudit.objects.create(
+            accion='ELIMINAR',
             boleta_id=instance.pk,
             numero_documento=instance.numero_documento,
             snapshot=snapshot,

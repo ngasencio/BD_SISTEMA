@@ -215,13 +215,14 @@ class BoletaGarantiaSerializer(serializers.ModelSerializer):
 
 
 class BoletaGarantiaAuditSerializer(serializers.ModelSerializer):
-    eliminado_por_username = serializers.CharField(
+    usuario_username = serializers.CharField(
         source='eliminado_por.username', read_only=True
     )
 
     class Meta:
         model = BoletaGarantiaAudit
         fields = [
-            'id', 'boleta_id', 'numero_documento', 'snapshot',
-            'eliminado_por_username', 'eliminado_en', 'razon',
+            'id', 'accion', 'boleta_id', 'numero_documento',
+            'snapshot_antes', 'snapshot',
+            'usuario_username', 'eliminado_en', 'razon',
         ]

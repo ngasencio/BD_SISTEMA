@@ -365,17 +365,30 @@ class BoletaGarantia(models.Model):
         return f"{self.numero_documento} — {self.proveedor}"
 
 
+ACCION_AUDIT_CHOICES = [
+    ('ELIMINAR', 'Eliminación'),
+    ('MODIFICAR', 'Modificación'),
+]
+
+
 class BoletaGarantiaAudit(models.Model):
-    """Historial de auditoría: registros eliminados de BoletaGarantia."""
-    boleta_id = models.IntegerField('ID Boleta eliminada')
+    """Historial de auditoría: registros modificados o eliminados de BoletaGarantia."""
+    accion = models.CharField(
+        'Acción', max_length=10,
+        choices=ACCION_AUDIT_CHOICES, default='ELIMINAR',
+    )
+    boleta_id = models.IntegerField('ID Boleta')
     numero_documento = models.CharField('N° Documento', max_length=100)
-    snapshot = models.JSONField('Datos al momento de eliminar')
+    # Para ELIMINAR: snapshot contiene los datos al momento de borrar.
+    # Para MODIFICAR: snapshot_antes = estado ANTES, snapshot = estado DESPUÉS.
+    snapshot_antes = models.JSONField('Datos antes del cambio', null=True, blank=True)
+    snapshot = models.JSONField('Datos después del cambio (o al eliminar)')
     eliminado_por = models.ForeignKey(
         'auth.User', on_delete=models.SET_NULL, null=True,
-        related_name='boletas_eliminadas', verbose_name='Eliminado por'
+        related_name='boletas_eliminadas', verbose_name='Usuario',
     )
-    eliminado_en = models.DateTimeField('Eliminado en', auto_now_add=True)
-    razon = models.TextField('Razón de eliminación', blank=True, default='')
+    eliminado_en = models.DateTimeField('Fecha acción', auto_now_add=True)
+    razon = models.TextField('Razón / Observación', blank=True, default='')
 
     class Meta:
         db_table = 'T_BoletaGarantia_Audit'
@@ -384,4 +397,4 @@ class BoletaGarantiaAudit(models.Model):
         ordering = ['-eliminado_en']
 
     def __str__(self):
-        return f"Boleta #{self.boleta_id} eliminada el {self.eliminado_en}"
+        return f"Boleta #{self.boleta_id} — {self.accion} el {self.eliminado_en}"
