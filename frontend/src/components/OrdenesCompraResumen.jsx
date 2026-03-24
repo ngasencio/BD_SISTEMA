@@ -439,8 +439,8 @@ export function OrdenesCompraResumen() {
     const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
-        api.get('ordenes-compra/')
-            .then(res => setOrdenes(res.data.results || res.data))
+        api.get('ordenes-compra/raw_all/')
+            .then(res => setOrdenes(res.data))
             .catch(err => setError(err.message))
             .finally(() => setLoading(false));
     }, []);

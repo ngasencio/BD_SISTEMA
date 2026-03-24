@@ -6,7 +6,7 @@ from .views import (
     BoletaGarantiaAuditViewSet, BoletaGarantiaViewSet,
     CompradorViewSet, DetalleLicitacionViewSet, DetalleOrdenCompraViewSet,
     DevengoViewSet, LicitacionViewSet, OrdenCompraViewSet, ProveedorViewSet,
-    dashboard_stats, devengo_raw_all, devengo_stats,
+    dashboard_stats, devengo_raw_all, devengo_stats, ordenes_compra_raw_all,
 )
 
 router = DefaultRouter()
@@ -31,6 +31,7 @@ urlpatterns = [
     path('dashboard/stats/', dashboard_stats, name='dashboard_stats'),
     path('devengo/stats/', devengo_stats, name='devengo_stats'),
     path('devengo/raw_all/', devengo_raw_all, name='devengo_raw_all'),
+    path('ordenes-compra/raw_all/', ordenes_compra_raw_all, name='ordenes_compra_raw_all'),
 
     # Router ViewSets
     path('', include(router.urls)),

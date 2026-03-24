@@ -131,6 +131,32 @@ def devengo_stats(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def ordenes_compra_raw_all(request):
+    """Devuelve todas las OC sin paginación para el dashboard (solo campos necesarios)."""
+    limit = min(int(request.GET.get('limit', 15000)), 20000)
+
+    qs = OrdenCompra.objects.values(
+        'codigo_oc', 'NombreOC', 'EstadoOC', 'TipoOC', 'TipoMoneda',
+        'FechaCreacion', 'FechaEnvio', 'FechaAceptacion',
+        'TotalNeto', 'TotalBruto',
+        'C_Unidad', 'C_CodigoUnidad',
+        'P_Nombre', 'P_Rut',
+        'LinkMP', 'EnlacePAC',
+    )
+
+    estado = request.GET.get('estado', '')
+    anio = request.GET.get('anio', '')
+
+    if estado:
+        qs = qs.filter(EstadoOC__iexact=estado)
+    if anio:
+        qs = qs.filter(FechaEnvio__year=anio)
+
+    return JsonResponse(list(qs[:limit]), safe=False)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def devengo_raw_all(request):
     """Devuelve toda la data de devengo sin paginación para el dashboard."""
     ue = request.GET.get('ue', '')
