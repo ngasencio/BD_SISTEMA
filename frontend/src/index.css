@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Crimson+Pro:wght@400;600&display=swap');
+
 /* ════════════════════════════════════════════════════
    VARIABLES — Identidad Visual Gobierno de Chile
    Paleta basada en framework.digital.gob.cl
@@ -3050,8 +3052,6 @@ canvas {
 /* ══════════════════════════════════════════════════════
    LOGIN PAGE — Diseño de dos paneles (LoginPage.jsx)
    ══════════════════════════════════════════════════════ */
-
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Crimson+Pro:wght@400;600&display=swap');
 
 .login-container {
     --azul: #1a3d71;
