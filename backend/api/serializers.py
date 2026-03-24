@@ -90,7 +90,7 @@ class OrdenCompraSerializer(serializers.ModelSerializer):
             'TotalNeto', 'PorcentajeIva', 'Impuestos', 'TotalBruto',
             'C_CodigoUnidad', 'C_Unidad', 'C_RutUnidad', 'C_Region',
             'P_Codigo', 'P_Nombre', 'P_Rut', 'P_Region',
-            'DescripcionOC', 'LinkMP',
+            'DescripcionOC', 'LinkMP', 'EnlacePAC',
             'detalles',
         ]
 
