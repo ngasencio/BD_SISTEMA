@@ -12,9 +12,10 @@ const fmt = (num) =>
 const pct = (v, total) => ((v / total) * 100).toFixed(1);
 
 export const FinanzasDashboard = () => {
-    const { stats, loading, isMock } = useDevengoStats();
+    const { stats, loading, error } = useDevengoStats();
 
     if (loading) return <div className="loading-spinner">Cargando finanzas...</div>;
+    if (error) return <div className="error-message">Error: {error}</div>;
     if (!stats) return null;
 
     const { presupuesto_total, presupuesto_ejecutado, porcentaje_ejecucion,
@@ -24,7 +25,6 @@ export const FinanzasDashboard = () => {
         <div className="feature-page">
             <div className="page-header">
                 <h1>Dashboard Financiero</h1>
-                {isMock && <span className="badge badge-warning">Datos de demostración</span>}
             </div>
 
             {/* KPIs */}
@@ -76,19 +76,17 @@ export const FinanzasDashboard = () => {
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th>Estado</th>
-                            <th>Cantidad</th>
-                            <th>Monto</th>
+                            <th>Tipo Documento</th>
+                            <th>Monto Deuda</th>
                             <th>% del Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         {estados_pago.map((row) => (
                             <tr key={row.estado}>
-                                <td><span className={`badge badge-${row.estado.toLowerCase().replace(' ', '-')}`}>{row.estado}</span></td>
-                                <td>{row.cantidad}</td>
+                                <td>{row.estado ?? '—'}</td>
                                 <td>{fmt(row.monto)}</td>
-                                <td>{pct(row.monto, presupuesto_total)}%</td>
+                                <td>{presupuesto_total > 0 ? pct(row.monto, presupuesto_total) : 0}%</td>
                             </tr>
                         ))}
                     </tbody>

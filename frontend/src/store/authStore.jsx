@@ -27,9 +27,10 @@ const getUserFromStorage = () => {
 };
 
 // Reducer
+const _initialUser = getUserFromStorage();
 const initialState = {
-    user: getUserFromStorage(),
-    isAuthenticated: !!getUserFromStorage(),
+    user: _initialUser,
+    isAuthenticated: !!_initialUser,
 };
 
 const authReducer = (state, action) => {

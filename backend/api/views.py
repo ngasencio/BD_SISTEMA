@@ -133,7 +133,10 @@ def devengo_stats(request):
 @permission_classes([IsAuthenticated])
 def ordenes_compra_raw_all(request):
     """Devuelve todas las OC sin paginación para el dashboard (solo campos necesarios)."""
-    limit = min(int(request.GET.get('limit', 15000)), 20000)
+    try:
+        limit = min(int(request.GET.get('limit', 15000)), 20000)
+    except (ValueError, TypeError):
+        limit = 15000
 
     qs = OrdenCompra.objects.values(
         'codigo_oc', 'NombreOC', 'EstadoOC', 'TipoOC', 'TipoMoneda',
@@ -162,7 +165,10 @@ def devengo_raw_all(request):
     ue = request.GET.get('ue', '')
     desde = request.GET.get('desde', '')
     hasta = request.GET.get('hasta', '')
-    limit = min(int(request.GET.get('limit', 5000)), 10000)
+    try:
+        limit = min(int(request.GET.get('limit', 5000)), 10000)
+    except (ValueError, TypeError):
+        limit = 5000
 
     qs = Devengo.objects.values(
         'codigo_ue', 'principal', 'tipo_documento', 'fecha_conforme',
@@ -277,7 +283,7 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         self.perform_destroy(instance)
-        return Response({'detail': 'Boleta eliminada y registrada en auditoría.'}, status=200)
+        return Response(status=204)
 
 
 class BoletaGarantiaAuditViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
