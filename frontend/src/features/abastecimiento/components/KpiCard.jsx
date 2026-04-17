@@ -4,9 +4,18 @@
  */
 import React from 'react';
 
+const COLOR_CLASS = {
+    '--color-primary':  'kpi-azul',
+    '--color-success':  'kpi-verde',
+    '--color-warning':  'kpi-amarillo',
+    '--color-danger':   'kpi-rojo',
+    '--color-accent':   'kpi-celeste',
+};
+
 export const KpiCard = ({ title, value, subtitle, icon, colorVar = '--color-primary', trend }) => {
+    const colorClass = COLOR_CLASS[colorVar] ?? 'kpi-azul';
     return (
-        <div className="kpi-card" style={{ '--accent': `var(${colorVar})` }}>
+        <div className={`kpi-card ${colorClass}`}>
             {icon && <span className="kpi-icon">{icon}</span>}
             <div className="kpi-body">
                 <p className="kpi-title">{title}</p>
