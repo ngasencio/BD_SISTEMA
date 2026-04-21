@@ -12,13 +12,13 @@ from rest_framework.response import Response
 from .models import (
     BoletaGarantia, BoletaGarantiaAudit, Comprador,
     DetalleLicitacion, DetalleOrdenCompra, Devengo,
-    Licitacion, OrdenCompra, Proveedor,
+    Factura, Licitacion, OrdenCompra, Proveedor,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
     CompradorSerializer, DetalleLicitacionSerializer,
     DetalleOrdenCompraSerializer, DevengoSerializer,
-    LicitacionSerializer, OrdenCompraSerializer, ProveedorSerializer,
+    FacturaSerializer, LicitacionSerializer, OrdenCompraSerializer, ProveedorSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -183,6 +183,26 @@ def devengo_raw_all(request):
         qs = qs.filter(fecha_conforme__lte=hasta)
 
     return JsonResponse(list(qs[:limit]), safe=False)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def facturas_raw_all(request):
+    """Devuelve todas las facturas sin paginación para el dashboard OC."""
+    anio = request.GET.get('anio', '')
+    qs = Factura.objects.values(
+        'id', 'tipo_documento', 'folio', 'emisor', 'razon_social_emisor',
+        'emision', 'monto_neto', 'monto_exento', 'monto_iva', 'monto_total',
+        'estado_acepta', 'uri', 'estado_reclamo', 'fecha_reclamo',
+        'estado_devengo', 'folio_oc', 'fecha_ingreso_oc',
+        'folio_rc', 'fecha_ingreso_rc', 'ticket_devengo', 'folio_sigfe',
+        'tarea_actual', 'fecha_ingreso', 'fecha_aceptacion', 'fecha_devengo',
+    )
+    if anio:
+        # emision tiene formato DD-MM-YYYY — filtramos el año en posición 6..9
+        qs = [r for r in qs if (r['emision'] or '')[-4:] == anio]
+        return JsonResponse(list(qs), safe=False)
+    return JsonResponse(list(qs), safe=False)
 
 
 # =============================================================================

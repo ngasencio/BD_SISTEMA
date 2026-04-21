@@ -20,6 +20,7 @@ export default function Sidebar() {
         garantias: path.startsWith('/abastecimiento/boletas'),
         finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas'),
     });
+    const isOCv2 = path.startsWith('/ordenes-compra-v2');
 
     const handleLogout = () => {
         logout();
@@ -74,6 +75,13 @@ export default function Sidebar() {
                                     onClick={() => goTo('/ordenes-compra', 'abast', 'mp')}
                                 >
                                     <span>🛍️</span> <span className="nav-item-text">Órdenes de Compra</span>
+                                </div>
+                                <div
+                                    className={`nav-item ${isOCv2 ? 'active' : ''}`}
+                                    onClick={() => goTo('/ordenes-compra-v2', 'abast', 'mp')}
+                                >
+                                    <span>📊</span> <span className="nav-item-text">Dashboard OC + Facturas</span>
+                                    <span className="nav-badge" style={{ background: 'rgba(77,163,199,0.2)', color: 'var(--gob-celeste)' }}>Nuevo</span>
                                 </div>
                             </div>
                         </div>

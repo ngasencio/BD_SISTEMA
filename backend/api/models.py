@@ -398,3 +398,68 @@ class BoletaGarantiaAudit(models.Model):
 
     def __str__(self):
         return f"Boleta #{self.boleta_id} — {self.accion} el {self.eliminado_en}"
+
+
+class Factura(models.Model):
+    tipo = models.SmallIntegerField(null=True, blank=True)
+    tipo_documento = models.CharField(max_length=60, null=True, blank=True)
+    folio = models.BigIntegerField(null=True, blank=True)
+    emisor = models.CharField(max_length=30, null=True, blank=True)
+    razon_social_emisor = models.CharField(max_length=200, null=True, blank=True)
+    receptor = models.CharField(max_length=30, null=True, blank=True)
+    publicacion = models.CharField(max_length=30, null=True, blank=True)
+    emision = models.CharField(max_length=30, null=True, blank=True)
+    monto_neto = models.BigIntegerField(null=True, blank=True)
+    monto_exento = models.BigIntegerField(null=True, blank=True)
+    monto_iva = models.BigIntegerField(null=True, blank=True)
+    monto_total = models.BigIntegerField(null=True, blank=True)
+    impuestos = models.TextField(null=True, blank=True)
+    estado_acepta = models.CharField(max_length=100, null=True, blank=True)
+    estado_sii = models.CharField(max_length=100, null=True, blank=True)
+    estado_intercambio = models.CharField(max_length=100, null=True, blank=True)
+    informacion_intercambio = models.TextField(null=True, blank=True)
+    uri = models.TextField(null=True, blank=True)
+    referencias = models.TextField(null=True, blank=True)
+    fecha_nar = models.CharField(max_length=30, null=True, blank=True)
+    estado_nar = models.CharField(max_length=100, null=True, blank=True)
+    uri_nar = models.TextField(null=True, blank=True)
+    mensaje_nar = models.TextField(null=True, blank=True)
+    uri_arm = models.TextField(null=True, blank=True)
+    fecha_arm = models.CharField(max_length=30, null=True, blank=True)
+    fmapago = models.CharField(max_length=30, null=True, blank=True)
+    dirrecep = models.CharField(max_length=200, null=True, blank=True)
+    cmnarecep = models.CharField(max_length=200, null=True, blank=True)
+    ciudadrecep = models.CharField(max_length=200, null=True, blank=True)
+    controller = models.TextField(null=True, blank=True)
+    fecha_vencimiento = models.CharField(max_length=30, null=True, blank=True)
+    estado_cesion = models.CharField(max_length=100, null=True, blank=True)
+    url_correo_cesion = models.TextField(null=True, blank=True)
+    fecha_recepcion_sii = models.CharField(max_length=50, null=True, blank=True)
+    estado_reclamo = models.CharField(max_length=100, null=True, blank=True)
+    fecha_reclamo = models.CharField(max_length=30, null=True, blank=True)
+    mensaje_reclamo = models.TextField(null=True, blank=True)
+    estado_devengo = models.CharField(max_length=100, null=True, blank=True)
+    codigo_devengo = models.CharField(max_length=30, null=True, blank=True)
+    folio_oc = models.CharField(max_length=60, null=True, blank=True)
+    fecha_ingreso_oc = models.CharField(max_length=30, null=True, blank=True)
+    folio_rc = models.CharField(max_length=80, null=True, blank=True)
+    fecha_ingreso_rc = models.CharField(max_length=30, null=True, blank=True)
+    ticket_devengo = models.CharField(max_length=30, null=True, blank=True)
+    folio_sigfe = models.CharField(max_length=30, null=True, blank=True)
+    tarea_actual = models.CharField(max_length=100, null=True, blank=True)
+    area_transaccional = models.CharField(max_length=30, null=True, blank=True)
+    fecha_ingreso = models.CharField(max_length=30, null=True, blank=True)
+    fecha_aceptacion = models.CharField(max_length=30, null=True, blank=True)
+    fecha_devengo = models.CharField(max_length=30, null=True, blank=True)
+    devengoaut = models.CharField(max_length=100, null=True, blank=True)
+    tipo_flujo = models.CharField(max_length=100, null=True, blank=True)
+    estado_revisado = models.CharField(max_length=100, null=True, blank=True)
+    rut_usuario_resp = models.CharField(max_length=30, null=True, blank=True)
+    nombre_usuario_resp = models.CharField(max_length=200, null=True, blank=True)
+
+    class Meta:
+        db_table = 'data_facturas'
+        managed = False
+
+    def __str__(self):
+        return f"Factura {self.folio} — {self.razon_social_emisor}"

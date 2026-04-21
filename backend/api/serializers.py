@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from .models import (
     Licitacion, DetalleLicitacion, Devengo, OrdenCompra, DetalleOrdenCompra,
-    Proveedor, Comprador, BoletaGarantia, BoletaGarantiaAudit,
+    Proveedor, Comprador, BoletaGarantia, BoletaGarantiaAudit, Factura,
 )
 
 ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
@@ -212,6 +212,23 @@ class BoletaGarantiaSerializer(serializers.ModelSerializer):
             if value.size > 10 * 1024 * 1024:
                 raise serializers.ValidationError('El archivo no puede superar los 10 MB.')
         return value
+
+
+class FacturaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Factura
+        fields = [
+            'id', 'tipo_documento', 'folio', 'emisor', 'razon_social_emisor',
+            'emision', 'monto_neto', 'monto_exento', 'monto_iva', 'monto_total',
+            'estado_acepta', 'estado_sii', 'uri',
+            'estado_reclamo', 'fecha_reclamo', 'mensaje_reclamo',
+            'estado_devengo', 'codigo_devengo',
+            'folio_oc', 'fecha_ingreso_oc',
+            'folio_rc', 'fecha_ingreso_rc',
+            'ticket_devengo', 'folio_sigfe',
+            'tarea_actual', 'fecha_ingreso', 'fecha_aceptacion', 'fecha_devengo',
+            'tipo_flujo',
+        ]
 
 
 class BoletaGarantiaAuditSerializer(serializers.ModelSerializer):
