@@ -18,6 +18,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 
 // Store
 import { AuthProvider, useAuth } from './store/authStore';
+import { AlertProvider } from './store/alertStore';
 
 // Layout compartido
 import { AppLayout } from './components/ui/AppLayout';
@@ -59,26 +60,29 @@ function AppRoutes() {
 
       {/* Rutas protegidas: requieren autenticación */}
       <Route element={<RequireAuth />}>
-        {/* Layout principal con Sidebar */}
-        <Route element={<AppLayout />}>
+        {/* AlertProvider envuelve todo lo autenticado para compartir el badge */}
+        <Route element={<AlertProvider><Outlet /></AlertProvider>}>
+          {/* Layout principal con Sidebar */}
+          <Route element={<AppLayout />}>
 
-          {/* Rutas generales */}
-          <Route path="/" element={<Home />} />
-          <Route path="/licitaciones" element={<Dashboard />} />
-          <Route path="/anexo3" element={<AnexoDeudaPage />} />
-          <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
-          {ocRoutes}
+            {/* Rutas generales */}
+            <Route path="/" element={<Home />} />
+            <Route path="/licitaciones" element={<Dashboard />} />
+            <Route path="/anexo3" element={<AnexoDeudaPage />} />
+            <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
+            {ocRoutes}
 
-          {/* Módulo Abastecimiento (admin + abastecimiento + viewer) */}
-          <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'viewer']} />}>
-            {abastecimientoRoutes}
+            {/* Módulo Abastecimiento (admin + abastecimiento + viewer) */}
+            <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'viewer']} />}>
+              {abastecimientoRoutes}
+            </Route>
+
+            {/* Módulo Finanzas (admin + finanzas) */}
+            <Route element={<RequireRole allowed={['admin', 'finanzas']} />}>
+              {finanzasRoutes}
+            </Route>
+
           </Route>
-
-          {/* Módulo Finanzas (admin + finanzas) */}
-          <Route element={<RequireRole allowed={['admin', 'finanzas']} />}>
-            {finanzasRoutes}
-          </Route>
-
         </Route>
       </Route>
 

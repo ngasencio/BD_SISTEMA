@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Doughnut, Bar, Line } from 'react-chartjs-2';
 import * as XLSX from 'xlsx';
 import { useOCDashboard } from '../hooks/useOCDashboard';
+import { useAlertCount } from '../../../store/alertStore';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -876,38 +877,66 @@ function TimelineResult({ result }) {
 
 const TABS = [
     { key: 'estrategico', label: 'Estratégico', icon: '📊' },
-    { key: 'tactico', label: 'Táctico', icon: '📈' },
-    { key: 'operativo', label: 'Operativo', icon: '📋' },
-    { key: 'analitico', label: 'Analítico', icon: '🔍' },
-    { key: 'facturas', label: 'Facturas', icon: '🧾' },
+    { key: 'tactico',     label: 'Táctico',     icon: '📈' },
+    { key: 'operativo',  label: 'Operativo',   icon: '📋' },
+    { key: 'analitico',  label: 'Analítico',   icon: '🔍' },
+    { key: 'facturas',   label: 'Facturas',    icon: '🧾' },
 ];
 
 export default function OCDashboardPage() {
     const [activeTab, setActiveTab] = useState('estrategico');
-    const { ocData, rawFacturas, loadingOC, loadingFact, errorOC, errorFact, anio, setAnio, unidad, setUnidad, years, unidades } = useOCDashboard();
+    const {
+        ocData, rawFacturas,
+        loadingOC, loadingFact,
+        errorOC, errorFact,
+        anio, setAnio,
+        unidad, setUnidad,
+        years, unidades,
+    } = useOCDashboard();
 
-    const alertCount = useMemo(() => rawFacturas.filter(r => r.folio_oc && !r.folio_rc).length, [rawFacturas]);
-
+    const { sinRC } = useAlertCount();
     const isLoading = loadingOC || loadingFact;
 
     return (
-        <div className="oc-page">
-            {/* Topbar filters */}
-            <div className="oc-page-topbar">
-                <div className="oc-page-brand">
-                    <div className="oc-brand-icon">📋</div>
-                    <span>Dashboard OC — <strong>SSO</strong></span>
+        <div className="feature-page">
+
+            {/* ── Barra de tabs + filtros inline (Opción B) ── */}
+            <div className="oc-tabbar">
+                <div className="oc-tabbar-tabs">
+                    {TABS.map(t => (
+                        <button
+                            key={t.key}
+                            className={`oc-tab-btn${activeTab === t.key ? ' active' : ''}`}
+                            onClick={() => setActiveTab(t.key)}
+                        >
+                            <span className="oc-tab-icon">{t.icon}</span>
+                            <span>{t.label}</span>
+                            {t.key === 'facturas' && sinRC > 0 && (
+                                <span className="oc-tab-alert-dot">{sinRC}</span>
+                            )}
+                        </button>
+                    ))}
                 </div>
-                <div className="oc-page-filters">
+
+                <div className="oc-tabbar-filters">
                     <div className="oc-filter-group">
-                        <span className="oc-filter-label">Año</span>
-                        <select className="oc-filter-select" value={anio} onChange={e => setAnio(e.target.value)}>
+                        <span className="oc-filter-label-dark">Año</span>
+                        <select
+                            className="oc-filter-select-light"
+                            value={anio}
+                            onChange={e => setAnio(e.target.value)}
+                        >
                             {years.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
                     <div className="oc-filter-group">
-                        <span className="oc-filter-label">Unidad</span>
-                        <select className="oc-filter-select" style={{ maxWidth: 240 }} value={unidad} onChange={e => setUnidad(e.target.value)}>
+                        <span className="oc-filter-label-dark">Unidad</span>
+                        <select
+                            className="oc-filter-select-light"
+                            style={{ maxWidth: 220 }}
+                            value={unidad}
+                            onChange={e => setUnidad(e.target.value)}
+                        >
                             <option value="Todas">Todas las unidades</option>
                             {unidades.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
@@ -915,26 +944,10 @@ export default function OCDashboardPage() {
                 </div>
             </div>
 
-            {/* Sidebar tabs */}
-            <div className="oc-page-sidebar">
-                <div className="oc-side-label">Vistas</div>
-                {TABS.map(t => (
-                    <div key={t.key} className={`oc-nav-item${activeTab === t.key ? ' active' : ''}`} onClick={() => setActiveTab(t.key)}>
-                        <span className="oc-nav-icon">{t.icon}</span>
-                        <span className="oc-nav-label">{t.label}</span>
-                        {t.key === 'facturas' && alertCount > 0 && <span className="oc-badge-num">{alertCount}</span>}
-                    </div>
-                ))}
-                <div style={{ marginTop: 'auto', padding: '16px', color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>
-                    Servicio de Salud Osorno<br />
-                    <span style={{ fontFamily: 'monospace' }}>v2.0 · 2024</span>
-                </div>
-            </div>
-
-            {/* Main content */}
-            <div className="oc-page-main">
+            {/* ── Contenido del tab activo ── */}
+            <div className="oc-tab-body">
                 {isLoading && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40vh', flexDirection: 'column', gap: 12 }}>
                         <div className="loading-spinner" />
                         <div style={{ color: '#6b7c93', fontSize: 13 }}>Cargando datos…</div>
                     </div>

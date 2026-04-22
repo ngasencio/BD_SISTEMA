@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../store/authStore';
+import { useAlertCount } from '../store/alertStore';
 
 export default function Sidebar() {
     const { user, role, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const path = location.pathname;
+    const { sinRC } = useAlertCount();
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
@@ -74,14 +76,19 @@ export default function Sidebar() {
                                     className={`nav-item ${isActive('/ordenes-compra') ? 'active' : ''}`}
                                     onClick={() => goTo('/ordenes-compra', 'abast', 'mp')}
                                 >
-                                    <span>🛍️</span> <span className="nav-item-text">Órdenes de Compra</span>
+                                    <span>🛍️</span>
+                                    <span className="nav-item-text">Órdenes de Compra</span>
                                 </div>
                                 <div
                                     className={`nav-item ${isOCv2 ? 'active' : ''}`}
                                     onClick={() => goTo('/ordenes-compra-v2', 'abast', 'mp')}
                                 >
-                                    <span>📊</span> <span className="nav-item-text">Dashboard OC + Facturas</span>
-                                    <span className="nav-badge" style={{ background: 'rgba(77,163,199,0.2)', color: 'var(--gob-celeste)' }}>Nuevo</span>
+                                    <span>📊</span>
+                                    <span className="nav-item-text">OC + Facturas</span>
+                                    {sinRC > 0
+                                        ? <span className="nav-badge nav-badge-alert">{sinRC}</span>
+                                        : <span className="nav-badge">Nuevo</span>
+                                    }
                                 </div>
                             </div>
                         </div>

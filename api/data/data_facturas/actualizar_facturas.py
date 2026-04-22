@@ -1,182 +1,395 @@
 """
-=============================================================
-  SSO Abastecimiento — Actualizador de data_facturas
-  Uso: python actualizar_facturas.py ruta/al/archivo.xlsx
-  
-  Requisitos:
-    pip install pandas openpyxl sqlalchemy pymysql
-=============================================================
+=============================================================================
+  SSO Abastecimiento — Unificador y cargador de data_facturas
+  Uso:  python actualizar_facturas.py
+
+  Opciones:
+    1) Solo unificar Excel  → guarda unified_facturas.csv (sin subir)
+    2) Unificar + subir al servidor  (SQLAlchemy — desde cualquier PC en LAN)
+    3) Unificar + subir vía Django ORM  (solo desde el servidor)
+
+  Qué hace (opción 2/3):
+    1. Lee TODOS los .xls/.xlsx de esta misma carpeta (auto-descubre)
+    2. Unifica los DataFrames en uno solo
+    3. Limpia y normaliza los datos
+    4. REEMPLAZA completamente la tabla data_facturas
+       (DELETE + INSERT — siempre queda sincronizada con los Excel)
+
+  Requisitos (opción 2):
+    pip install pandas openpyxl xlrd sqlalchemy pymysql
+  Requisitos (opción 3):
+    Ejecutar desde el servidor con el virtualenv del proyecto Django
+=============================================================================
 """
 
+import os
 import sys
-import pandas as pd
-from sqlalchemy import create_engine, text
+import glob
+import pathlib
 from datetime import datetime
 
-# ── CONFIGURACIÓN ─────────────────────────────────────────
-DB_USER     = "root"          # tu usuario MySQL
-DB_PASSWORD = ""              # tu contraseña MySQL
-DB_HOST     = "localhost"
+import pandas as pd
+
+# ════════════════════════════════════════════════════════════════════════
+#  CONFIGURACIÓN — ajusta solo si cambian las credenciales del servidor
+# ════════════════════════════════════════════════════════════════════════
+
+DB_HOST     = "10.8.153.227"
 DB_PORT     = "3306"
 DB_NAME     = "bd_sistema"
-TABLE_NAME  = "data_facturas"
+DB_USER     = "root"
+DB_PASSWORD = "Nicolas2017#"
+TABLE       = "data_facturas"
 
-# Columna que identifica unívocamente una factura
-# folio + emisor juntos = clave única (un proveedor no repite folio)
-UNIQUE_COLS = ["folio", "emisor"]
-# ──────────────────────────────────────────────────────────
+CARPETA     = pathlib.Path(__file__).parent
+CSV_SALIDA  = CARPETA / "unified_facturas.csv"
+
+# ════════════════════════════════════════════════════════════════════════
+#  COLUMNAS
+# ════════════════════════════════════════════════════════════════════════
+
+COLS_EXTRA_DB = ["dirrecep", "cmnarecep", "ciudadrecep",
+                 "rut_usuario_resp", "nombre_usuario_resp"]
+
+DATE_COLS = ["publicacion", "emision", "fecha_vencimiento",
+             "fecha_nar", "fecha_arm", "fecha_reclamo",
+             "fecha_ingreso_oc", "fecha_ingreso_rc",
+             "fecha_ingreso", "fecha_aceptacion", "fecha_devengo",
+             "fecha_recepcion_sii"]
+
+COLS_NUMERIC_AS_STR = ["codigo_devengo", "ticket_devengo", "folio_sigfe",
+                       "area_transaccional", "rut_usuario_resp",
+                       "folio", "emisor"]
+
+# ════════════════════════════════════════════════════════════════════════
+#  HELPERS
+# ════════════════════════════════════════════════════════════════════════
+
+def _num_a_str(x):
+    """12345.0 → '12345', mantiene strings, None → None."""
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    s = str(x)
+    if s.endswith(".0") and s[:-2].lstrip("-").isdigit():
+        return s[:-2]
+    return s
 
 
-def conectar():
-    url = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
-    engine = create_engine(url)
-    return engine
+def _safe(v):
+    """Convierte NaN/NaT a None para SQL (patrón de OC_SSO_SERVER)."""
+    if v is None:
+        return None
+    if isinstance(v, float) and pd.isna(v):
+        return None
+    try:
+        import pandas as _pd
+        if _pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return v
 
 
-def limpiar_dataframe(df):
-    """Limpia y normaliza el DataFrame antes de insertar."""
+# ════════════════════════════════════════════════════════════════════════
+#  ETL — Descubrir, leer, limpiar
+# ════════════════════════════════════════════════════════════════════════
 
-    # Convertir fechas a string para evitar problemas de formato
-    date_cols = ["publicacion", "emision", "fecha_vencimiento"]
-    for col in date_cols:
+def descubrir_archivos():
+    xls  = sorted(glob.glob(str(CARPETA / "*.xls")))
+    xlsx = sorted(glob.glob(str(CARPETA / "*.xlsx")))
+    return [f for f in xls + xlsx
+            if not pathlib.Path(f).name.startswith("~")]
+
+
+def leer_y_unificar(archivos):
+    frames = []
+    total_leido = 0
+
+    for ruta in archivos:
+        nombre = pathlib.Path(ruta).name
+        try:
+            df = pd.read_excel(ruta, dtype=str)
+            df_typed = pd.read_excel(ruta)
+
+            for col in DATE_COLS:
+                if col in df_typed.columns:
+                    df[col] = df_typed[col]
+
+            df["_origen"] = nombre
+            frames.append(df)
+            total_leido += len(df)
+            print(f"   ✓ {nombre:<30} → {len(df):>6} registros")
+
+        except Exception as e:
+            print(f"   ⚠ Error leyendo {nombre}: {e}")
+
+    if not frames:
+        raise RuntimeError("No se pudo leer ningún archivo Excel.")
+
+    unified = pd.concat(frames, ignore_index=True)
+    unified.drop(columns=["_origen"], inplace=True)
+    return unified, total_leido
+
+
+def limpiar(df):
+    # 1. Fechas → string DD-MM-YYYY
+    for col in DATE_COLS:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce").dt.strftime("%d-%m-%Y %H:%M").where(
-                df[col].notna(), other=None
-            )
+            dt = pd.to_datetime(df[col], errors="coerce")
+            df[col] = dt.dt.strftime("%d-%m-%Y").where(dt.notna(), other=None)
 
-    # Convertir columnas numéricas problemáticas a string
-    str_cols = ["codigo_devengo", "ticket_devengo", "folio_sigfe",
-                "area_transaccional", "rut_usuario_resp"]
-    for col in str_cols:
+    # 2. Numéricos como texto (eliminar ".0" flotante)
+    for col in COLS_NUMERIC_AS_STR:
         if col in df.columns:
-            df[col] = df[col].apply(
-                lambda x: str(int(x)) if pd.notna(x) and str(x).replace(".0","").isdigit() else (str(x) if pd.notna(x) else None)
-            )
+            df[col] = df[col].apply(_num_a_str)
 
-    # Reemplazar NaN con None (NULL en SQL)
+    # 3. Agregar columnas extra de DB como NULL
+    for col in COLS_EXTRA_DB:
+        if col not in df.columns:
+            df[col] = None
+
+    # 4. NaN → None (→ NULL en SQL)
     df = df.where(pd.notna(df), other=None)
 
-    # Limpiar espacios en RUTs
-    for col in ["emisor", "receptor"]:
+    # 5. Strip en campos clave
+    for col in ["emisor", "receptor", "razon_social_emisor"]:
         if col in df.columns:
-            df[col] = df[col].str.strip()
+            df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+
+    # 6. Eliminar duplicados folio+emisor
+    antes = len(df)
+    df = df.drop_duplicates(subset=["folio", "emisor"], keep="last")
+    duplicados = antes - len(df)
+    if duplicados:
+        print(f"   ℹ  {duplicados} duplicados eliminados (mismo folio+emisor)")
 
     return df
 
 
-def obtener_existentes(engine):
-    """Retorna un set de (folio, emisor) ya existentes en la BD."""
-    query = f"SELECT folio, emisor FROM `{TABLE_NAME}`"
-    with engine.connect() as conn:
-        result = conn.execute(text(query))
-        return set((str(row[0]), str(row[1]).strip()) for row in result)
+# ════════════════════════════════════════════════════════════════════════
+#  OPCIÓN 1 — Solo exportar CSV
+# ════════════════════════════════════════════════════════════════════════
+
+def exportar_csv(df):
+    df.to_csv(CSV_SALIDA, index=False, encoding="utf-8-sig")
+    print(f"   ✓ Guardado en: {CSV_SALIDA}")
+    print(f"   → {len(df)} registros exportados")
 
 
-def actualizar(archivo_excel):
-    print(f"\n{'='*55}")
-    print(f"  Actualizador data_facturas — SSO Abastecimiento")
-    print(f"  Archivo: {archivo_excel}")
-    print(f"  Fecha:   {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-    print(f"{'='*55}\n")
+# ════════════════════════════════════════════════════════════════════════
+#  OPCIÓN 2 — SQLAlchemy (conexión remota desde cualquier PC en LAN)
+# ════════════════════════════════════════════════════════════════════════
 
-    # 1. Leer Excel
-    print("📂 Leyendo Excel...")
+def conectar_sqlalchemy():
+    from sqlalchemy import create_engine
+    url = (f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}"
+           f"@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4")
+    return create_engine(url, pool_pre_ping=True)
+
+
+def cargar_sqlalchemy(df, engine):
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        conn.execute(text("SET FOREIGN_KEY_CHECKS = 0"))
+        conn.execute(text(f"TRUNCATE TABLE `{TABLE}`"))
+        conn.execute(text("SET FOREIGN_KEY_CHECKS = 1"))
+    print(f"   ✓ Tabla {TABLE} limpiada (TRUNCATE)")
+
+    total = len(df)
+    lote  = 500
+    insertados = 0
+
+    for i in range(0, total, lote):
+        chunk = df.iloc[i:i + lote]
+        chunk.to_sql(TABLE, con=engine, if_exists="append",
+                     index=False, chunksize=lote, method="multi")
+        insertados += len(chunk)
+        pct  = insertados / total * 100
+        barra = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
+        print(f"\r   [{barra}] {pct:5.1f}%  ({insertados}/{total})",
+              end="", flush=True)
+
+    print()
+    return insertados
+
+
+def subir_sqlalchemy(df, total_leido, archivos):
+    print(f"🔌 Conectando a {DB_HOST}:{DB_PORT}/{DB_NAME} (SQLAlchemy)...")
     try:
-        df = pd.read_excel(archivo_excel, dtype=str)  # todo como string primero
-        df_original = pd.read_excel(archivo_excel)    # tipado real para fechas
-        # Aplicar fechas del tipado real
-        for col in ["publicacion", "emision", "fecha_vencimiento"]:
-            if col in df_original.columns:
-                df[col] = df_original[col]
-    except Exception as e:
-        print(f"❌ Error leyendo el archivo: {e}")
-        sys.exit(1)
-
-    print(f"   → {len(df)} registros encontrados en el Excel")
-
-    # 2. Limpiar
-    print("🧹 Limpiando datos...")
-    df = limpiar_dataframe(df)
-
-    # 3. Conectar a BD
-    print("🔌 Conectando a la base de datos...")
-    try:
-        engine = conectar()
+        engine = conectar_sqlalchemy()
+        from sqlalchemy import text
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        print(f"   → Conectado a {DB_NAME} en {DB_HOST}")
+        print("   ✓ Conexión exitosa\n")
     except Exception as e:
-        print(f"❌ Error de conexión: {e}")
-        print("   Verifica DB_USER, DB_PASSWORD y que MySQL esté corriendo")
+        print(f"\n   ❌ Error de conexión: {e}")
+        print("   → Verifica acceso remoto: GRANT ALL ON bd_sistema.* TO 'root'@'%' IDENTIFIED BY 'pass'; FLUSH PRIVILEGES;")
         sys.exit(1)
 
-    # 4. Obtener registros existentes
-    print("🔍 Verificando registros existentes...")
-    existentes = obtener_existentes(engine)
-    print(f"   → {len(existentes)} registros en la BD actualmente")
-
-    # 5. Filtrar solo los nuevos
-    df["_key"] = df["folio"].astype(str) + "||" + df["emisor"].astype(str).str.strip()
-    existentes_key = set(f"{f}||{e}" for f, e in existentes)
-    
-    df_nuevos    = df[~df["_key"].isin(existentes_key)].copy()
-    df_existentes = df[df["_key"].isin(existentes_key)].copy()
-    
-    df_nuevos.drop(columns=["_key"], inplace=True)
-    df_existentes.drop(columns=["_key"], inplace=True)
-
-    print(f"   → {len(df_nuevos)} registros NUEVOS para insertar")
-    print(f"   → {len(df_existentes)} registros ya existentes (se actualizarán)")
-
-    # 6. Insertar nuevos
-    if len(df_nuevos) > 0:
-        print(f"\n➕ Insertando {len(df_nuevos)} registros nuevos...")
-        try:
-            df_nuevos.to_sql(
-                TABLE_NAME,
-                con=engine,
-                if_exists="append",
-                index=False,
-                chunksize=200,
-                method="multi"
-            )
-            print(f"   ✅ {len(df_nuevos)} registros insertados")
-        except Exception as e:
-            print(f"   ❌ Error insertando: {e}")
-
-    # 7. Actualizar existentes (UPDATE fila por fila en lotes)
-    if len(df_existentes) > 0:
-        print(f"\n🔄 Actualizando {len(df_existentes)} registros existentes...")
-        cols = [c for c in df_existentes.columns if c not in ["id"]]
-        actualizados = 0
-
-        with engine.begin() as conn:
-            for _, row in df_existentes.iterrows():
-                set_clause = ", ".join([f"`{c}` = :{c}" for c in cols if c not in UNIQUE_COLS])
-                where_clause = " AND ".join([f"`{c}` = :{c}" for c in UNIQUE_COLS])
-                sql = f"UPDATE `{TABLE_NAME}` SET {set_clause} WHERE {where_clause}"
-                params = {c: (None if pd.isna(row[c]) else row[c]) for c in cols}
-                conn.execute(text(sql), params)
-                actualizados += 1
-
-        print(f"   ✅ {actualizados} registros actualizados")
-
-    # 8. Resumen final
+    from sqlalchemy import text
     with engine.connect() as conn:
-        total = conn.execute(text(f"SELECT COUNT(*) FROM `{TABLE_NAME}`")).scalar()
+        total_bd = conn.execute(text(f"SELECT COUNT(*) FROM `{TABLE}`")).scalar()
 
-    print(f"\n{'='*55}")
-    print(f"  ✅ Proceso completado")
-    print(f"  📊 Total registros en BD: {total}")
-    print(f"  ➕ Insertados:  {len(df_nuevos)}")
-    print(f"  🔄 Actualizados: {len(df_existentes)}")
-    print(f"{'='*55}\n")
+    print(f"⚠  La tabla '{TABLE}' contiene actualmente {total_bd} registros.")
+    print(f"   Se reemplazarán por los {len(df)} registros de los Excel.\n")
+    respuesta = input("   ¿Continuar? [s/N]: ").strip().lower()
+    if respuesta != "s":
+        print("\n   Operación cancelada.\n")
+        sys.exit(0)
+    print()
+
+    print(f"🚀 Cargando {len(df)} registros en '{TABLE}'...")
+    try:
+        insertados = cargar_sqlalchemy(df, engine)
+    except Exception as e:
+        print(f"\n   ❌ Error durante la carga: {e}")
+        sys.exit(1)
+
+    with engine.connect() as conn:
+        total_final = conn.execute(text(f"SELECT COUNT(*) FROM `{TABLE}`")).scalar()
+
+    _resumen(archivos, total_leido, len(df), insertados, total_final)
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  OPCIÓN 3 — Django ORM (igual que OC_SSO_SERVER.py)
+# ════════════════════════════════════════════════════════════════════════
+
+def setup_django():
+    ruta_api = pathlib.Path(__file__).parent.parent.parent  # api/data/data_facturas → raíz
+    backend  = ruta_api / "backend"
+    if str(backend) not in sys.path:
+        sys.path.insert(0, str(backend))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+    import django
+    django.setup()
+
+
+def cargar_django(df, total_leido, archivos):
+    print("⚙️  Configurando Django ORM...")
+    try:
+        setup_django()
+        from api.models import Factura
+    except Exception as e:
+        print(f"\n   ❌ No se pudo inicializar Django: {e}")
+        print("   → Esta opción solo funciona desde el servidor con el venv del proyecto.")
+        sys.exit(1)
+
+    print(f"   ✓ Django listo. Modelos cargados.\n")
+
+    cols = [f.name for f in Factura._meta.get_fields()
+            if hasattr(f, 'column') and f.name != 'id']
+
+    registros = []
+    for _, row in df.iterrows():
+        kwargs = {}
+        for col in cols:
+            if col in df.columns:
+                kwargs[col] = _safe(row[col])
+        registros.append(Factura(**kwargs))
+
+    total = len(registros)
+    print(f"⚠  Se eliminarán los registros actuales y se insertarán {total} nuevos.")
+    respuesta = input("   ¿Continuar? [s/N]: ").strip().lower()
+    if respuesta != "s":
+        print("\n   Operación cancelada.\n")
+        sys.exit(0)
+    print()
+
+    print(f"🗑  Eliminando registros anteriores...")
+    Factura.objects.all().delete()
+    print(f"   ✓ Tabla limpiada\n")
+
+    print(f"🚀 Insertando {total} registros (lotes de 500)...")
+    lote = 500
+    insertados = 0
+    for i in range(0, total, lote):
+        chunk = registros[i:i + lote]
+        Factura.objects.bulk_create(chunk, batch_size=lote)
+        insertados += len(chunk)
+        pct  = insertados / total * 100
+        barra = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
+        print(f"\r   [{barra}] {pct:5.1f}%  ({insertados}/{total})",
+              end="", flush=True)
+    print()
+
+    total_final = Factura.objects.count()
+    _resumen(archivos, total_leido, len(df), insertados, total_final)
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  RESUMEN FINAL
+# ════════════════════════════════════════════════════════════════════════
+
+def _resumen(archivos, total_leido, df_len, insertados, total_final):
+    print()
+    print("╔══════════════════════════════════════════════════════════╗")
+    print("║   ✅ Proceso completado exitosamente                     ║")
+    print("╠══════════════════════════════════════════════════════════╣")
+    print(f"║   Archivos procesados : {len(archivos):<34}║")
+    print(f"║   Filas en Excel      : {total_leido:<34}║")
+    print(f"║   Duplicados removidos: {total_leido - df_len:<34}║")
+    print(f"║   Insertados en BD    : {insertados:<34}║")
+    print(f"║   Total final en BD   : {total_final:<34}║")
+    print("╚══════════════════════════════════════════════════════════╝")
+    print()
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  MAIN — Menú CLI
+# ════════════════════════════════════════════════════════════════════════
+
+def main():
+    print()
+    print("╔══════════════════════════════════════════════════════════╗")
+    print("║   SSO Abastecimiento — Actualizador data_facturas        ║")
+    print(f"║   Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}                              ║")
+    print("╠══════════════════════════════════════════════════════════╣")
+    print("║   1) Solo unificar Excel  →  exportar CSV local          ║")
+    print("║   2) Unificar + subir al servidor  (SQLAlchemy / LAN)    ║")
+    print("║   3) Unificar + subir vía Django ORM  (desde servidor)   ║")
+    print("║   0) Salir                                               ║")
+    print("╚══════════════════════════════════════════════════════════╝")
+    print()
+
+    opcion = input("   Selecciona una opción [0-3]: ").strip()
+    if opcion == "0":
+        print("\n   Hasta luego.\n")
+        sys.exit(0)
+    if opcion not in ("1", "2", "3"):
+        print("\n   Opción no válida.\n")
+        sys.exit(1)
+
+    print()
+
+    # ── Descubrir archivos ───────────────────────────────────────────
+    print("📂 Buscando archivos Excel en la carpeta...")
+    archivos = descubrir_archivos()
+    if not archivos:
+        print("   ❌ No se encontraron archivos .xls/.xlsx en esta carpeta.")
+        sys.exit(1)
+    print(f"   → {len(archivos)} archivo(s) encontrado(s):\n")
+
+    # ── Leer y unificar ──────────────────────────────────────────────
+    print("📖 Leyendo y unificando Excel...")
+    df, total_leido = leer_y_unificar(archivos)
+    print(f"\n   → Total unificado: {len(df)} registros\n")
+
+    # ── Limpiar ──────────────────────────────────────────────────────
+    print("🧹 Normalizando datos...")
+    df = limpiar(df)
+    print(f"   → Registros finales: {len(df)}\n")
+
+    # ── Ejecutar opción seleccionada ─────────────────────────────────
+    if opcion == "1":
+        print("💾 Exportando CSV...")
+        exportar_csv(df)
+    elif opcion == "2":
+        subir_sqlalchemy(df, total_leido, archivos)
+    elif opcion == "3":
+        cargar_django(df, total_leido, archivos)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("\nUso: python actualizar_facturas.py ruta/al/archivo.xlsx")
-        print("Ejemplo: python actualizar_facturas.py Facturas2026.xlsx\n")
-        sys.exit(1)
-
-    actualizar(sys.argv[1])
+    main()
