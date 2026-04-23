@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import os
 import pathlib
+import re
 import ssl
 import time
 import urllib.parse
@@ -41,6 +42,9 @@ MAX_WORKERS_DETALLE = 6
 ESPERA_ENTRE_DETALLES = 0.05
 
 URL_OC = "https://api.mercadopublico.cl/servicios/v1/publico/ordenesdecompra.json"
+
+# Patrón código Compra Ágil: {CodigoUnidad}-{N}-COT{año}  ej: "1057532-18-COT22"
+_RE_COT = re.compile(r'\b(\d{4,8}-\d{1,4}-COT\d{2,4})\b', re.IGNORECASE)
 
 @dataclass(frozen=True)
 class ApiConfig:
@@ -103,6 +107,56 @@ def generar_link_mp(codigo_oc):
         return ""
     base_url = "http://www.mercadopublico.cl/PurchaseOrder/Modules/PO/DetailsPurchaseOrder.aspx?codigoOC="
     return f"{base_url}{codigo_oc}"
+
+def _extraer_codigo_ca(nombre: str, descripcion: str) -> str:
+    """Busca el código de Compra Ágil (XXXXXXX-NN-COTyy) en texto libre."""
+    for texto in (nombre, descripcion):
+        if not texto or str(texto).strip().lower() in ("nan", "none", ""):
+            continue
+        m = _RE_COT.search(str(texto))
+        if m:
+            return m.group(1).upper()
+    return ""
+
+
+def _enriquecer_df_oc(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Añade/recalcula las columnas CodigoCompraAgil y TipoCompraInterna.
+    Se aplica sobre el DataFrame maestro de resumen.
+    """
+    for col in ["CodigoCompraAgil", "TipoCompraInterna"]:
+        if col in df.columns:
+            df.drop(columns=[col], inplace=True)
+
+    # CodigoCompraAgil: solo para TipoOC == "AG"
+    def _get_ca(row):
+        if str(row.get("TipoOC", "") or "").strip().upper() != "AG":
+            return None
+        codigo = _extraer_codigo_ca(
+            str(row.get("NombreOC", "") or ""),
+            str(row.get("DescripcionOC", "") or ""),
+        )
+        return codigo if codigo else None
+
+    df["CodigoCompraAgil"] = df.apply(_get_ca, axis=1)
+
+    # TipoCompraInterna: clasificación por TipoOC y CodigoLicitacion
+    def _clasificar(row):
+        tipo_oc = str(row.get("TipoOC", "") or "").strip().upper()
+        cod_lic = str(row.get("CodigoLicitacion", "") or "").strip()
+        if tipo_oc == "AG":
+            return "Compra Ágil"
+        if tipo_oc == "CM":
+            return "Convenio Marco"
+        if tipo_oc == "TD":
+            return "Trato Directo"
+        if cod_lic and cod_lic.lower() not in ("nan", "none"):
+            return "Licitación"
+        return tipo_oc if tipo_oc else "Otro"
+
+    df["TipoCompraInterna"] = df.apply(_clasificar, axis=1)
+    return df
+
 
 def _write_csv_dicts(path: pathlib.Path, rows: List[Dict[str, Any]], delimiter: str = ";") -> None:
     """Escritura CSV consistente y relativamente rápida para lista de dicts."""
@@ -425,8 +479,9 @@ def unificar_base_datos():
         )
 
         df_res.drop_duplicates(subset=["CodigoOC"], keep="last", inplace=True)
-        
+
         df_res["LinkMP"] = df_res["CodigoOC"].apply(generar_link_mp)
+        df_res = _enriquecer_df_oc(df_res)
 
         ruta_m_res = CARPETA_MAESTROS / "OC_Maestro_Resumen.csv"
         df_res.to_csv(ruta_m_res, sep=";", index=False, encoding="utf-8-sig")
@@ -519,9 +574,10 @@ def refresh_base_datos(
         # Concatenar y deduplicar (Keep Last asegura que la versión nueva de la OC reemplace a la vieja)
         df_final_res = pd.concat([df_master_res, df_nuevos_res])
         df_final_res.drop_duplicates(subset=["CodigoOC"], keep="last", inplace=True)
-        
+
         df_final_res["LinkMP"] = df_final_res["CodigoOC"].apply(generar_link_mp)
-        
+        df_final_res = _enriquecer_df_oc(df_final_res)
+
         df_final_res.to_csv(ruta_m_res, sep=";", index=False, encoding="utf-8-sig")
         print(f"   ✅ Maestro Resumen actualizado. Total registros: {len(df_final_res)}")
 
@@ -623,6 +679,30 @@ def enlazar_con_pac():
     print(f"   ✅ Archivo actualizado exitosamente con {len(df_merged)} registros.")
     print(f"   📊 Resumen Enlace PAC:\n{df_merged['EnlacePAC'].value_counts().to_string()}")
 
+def buscar_compra_agil():
+    """
+    9) Extrae CodigoCompraAgil y calcula TipoCompraInterna sobre el Maestro Resumen existente.
+    Útil para enriquecer datos sin necesidad de re-descargar.
+    """
+    ruta_m_res = CARPETA_MAESTROS / "OC_Maestro_Resumen.csv"
+
+    if not ruta_m_res.exists():
+        print("   ❌ No existe OC_Maestro_Resumen.csv. Ejecute Unificar (5) o Refresh (6) primero.")
+        return
+
+    print("\n🔍 EXTRAYENDO CÓDIGOS COMPRA ÁGIL Y CLASIFICANDO TIPOS DE COMPRA...")
+    df = pd.read_csv(ruta_m_res, sep=";", encoding="utf-8-sig", dtype=str)
+    df = _enriquecer_df_oc(df)
+    df.to_csv(ruta_m_res, sep=";", index=False, encoding="utf-8-sig")
+
+    total_ag = int((df.get("TipoOC", pd.Series(dtype=str)).str.upper() == "AG").sum())
+    con_codigo = int(df["CodigoCompraAgil"].notna().sum()) if "CodigoCompraAgil" in df.columns else 0
+    print(f"   ✅ Proceso completado sobre {len(df)} registros.")
+    print(f"   📊 OCs Compra Ágil (AG): {total_ag} | Con código extraído: {con_codigo}")
+    if "TipoCompraInterna" in df.columns:
+        print(f"   📊 TipoCompraInterna:\n{df['TipoCompraInterna'].value_counts().to_string()}")
+
+
 def subir_maestros_a_django():
     """
     8) Lee los archivos CSV Maestro (Resumen y Detalles) completos y envía todo el volumen
@@ -671,6 +751,7 @@ if __name__ == "__main__":
         print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros)")
         print("7) ENLACE PAC (Añade ID Proyecto a OC_Maestro_Resumen)")
         print("8) SINCRONIZAR MASIVAMENTE (Sube CSV Maestros a MariaDB/Django)")
+        print("9) BÚSQUEDA COMPRA ÁGIL (Extrae CodigoCompraAgil y TipoCompraInterna)")
         print("0) Salir")
         
         op = input("\nSeleccione opción: ")
@@ -722,6 +803,9 @@ if __name__ == "__main__":
 
             elif op == "8":
                 subir_maestros_a_django()
+
+            elif op == "9":
+                buscar_compra_agil()
 
         except KeyboardInterrupt:
             print("\n⚠️ Proceso cancelado por el usuario (Ctrl+C). Retornando al menú...")

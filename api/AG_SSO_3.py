@@ -226,64 +226,37 @@ def to_float(val):
         return 0.0
 
 
-def buscar_codigo_oc(id_oc: int, rut_proveedor: str, monto_total: float, fecha_cierre: dt.date) -> Optional[str]:
+def _buscar_codigo_oc_api(rut_proveedor: str, monto_total: float, fecha_cierre: dt.date) -> Optional[str]:
     """
-    Busca el código alfanumérico de una OC (ej: 1057532-537-AG26) a partir del ID numérico.
-    
-    La API de Compra Ágil v2 solo retorna id_orden_compra (numérico), pero no codigo_orden_compra.
-    Esta función usa la API v1 de Órdenes de Compra para encontrar el código cruzando:
-    - Fecha de emisión (rango de 7 días después del cierre de CA)
-    - RUT del proveedor
-    - Monto total
-    
-    Args:
-        id_oc: ID numérico de la OC (ej: 54628510)
-        rut_proveedor: RUT del proveedor ganador (ej: "15.422.299-5")
-        monto_total: Monto total de la cotización (ej: 211168)
-        fecha_cierre: Fecha de cierre de la Compra Ágil
-    
-    Returns:
-        Código de la OC (ej: "1057532-537-AG26") o None si no se encuentra
+    Busca el código alfanumérico de una OC en la API v1 de Mercado Público.
+    Cruza por fecha (rango 12 días post-cierre), RUT proveedor, monto y TipoOC == AG.
     """
-    import urllib.request
-    import urllib.parse
-    import json
-    
-    # Normalizar RUT (eliminar puntos, guiones)
+    ctx = ssl._create_unverified_context()
     rut_normalizado = normalizar_rut(rut_proveedor)
-    
-    # Buscar en un rango de 10 días después del cierre
-    for dias in range(10):
+    url_base = "https://api.mercadopublico.cl/servicios/v1/publico/ordenesdecompra.json"
+
+    for dias in range(12):
         fecha_busqueda = fecha_cierre + dt.timedelta(days=dias)
-        fecha_str = fecha_busqueda.strftime("%d/%m/%Y")
-        
-        # Construir URL para API v1 de OC
         params = {
-            "fecha": fecha_str,
-            "codigo_organismo": CODIGO_ORGANISMO  # 7296 (SSO)
+            "fecha": fecha_busqueda.strftime("%d%m%Y"),
+            "CodigoOrganismo": CODIGO_ORGANISMO,
+            "ticket": TICKET,
         }
-        
-        url = "https://api.mercadopublico.cl/servicios/v1/publico/ordenesdecompra.json?" + urllib.parse.urlencode(params)
-        
+        url = url_base + "?" + urllib.parse.urlencode(params)
         try:
             req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
                 data = json.load(resp)
-                
-                # Iterar sobre las OCs encontradas
-                for oc in data.get("Listado", []):
-                    rut_oc = normalizar_rut(oc.get("RutProveedor", ""))
-                    monto_oc = to_float(oc.get("Total", 0))
-                    
-                    # Verificar coincidencia por RUT y monto (tolerancia de $1000)
-                    if rut_oc == rut_normalizado and abs(monto_oc - monto_total) < 1000:
-                        return oc.get("Codigo")
-                        
+            for oc in data.get("Listado", []):
+                rut_oc = normalizar_rut(oc.get("RutProveedor", ""))
+                monto_oc = to_float(oc.get("Total", 0))
+                tipo_oc = str(oc.get("Tipo", "")).strip().upper()
+                if rut_oc == rut_normalizado and abs(monto_oc - monto_total) < 1000 and tipo_oc == "AG":
+                    return oc.get("Codigo")
         except Exception:
-            # Si falla la búsqueda en esta fecha, continuar con la siguiente
             continue
-    
-    # No se encontró el código
+        time.sleep(0.3)
+
     return None
 
 
@@ -972,6 +945,150 @@ def refresh_base_datos(f_ini: dt.date, f_fin: dt.date):
     print("\n✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE.")
 
 
+def enlazar_codigos_oc():
+    """
+    7) Llena la columna OC_Codigo en Maestro_Resumen de Compras Ágiles.
+
+    Solo procesa filas con EstadoCodigo == "proveedor_seleccionado".
+
+    Método 1 (rápido, sin API):
+        Cruza CodigoCompraAgil con OC_DSSO/MAESTROS/OC_Maestro_Resumen.csv.
+        Requiere haber ejecutado Opción 9 en OC_SSO_SERVER.py primero.
+
+    Método 2 (API fallback):
+        Para las que quedan sin código, busca en la API v1 de OC por fecha,
+        RUT del proveedor ganador (de Maestro_Proveedores.csv) y monto total.
+    """
+    ruta_ca_res  = CARPETA_MAESTROS / "Maestro_Resumen.csv"
+    ruta_ca_prov = CARPETA_MAESTROS / "Maestro_Proveedores.csv"
+    ruta_oc_res  = RUTA_API / "OC_DSSO" / "MAESTROS" / "OC_Maestro_Resumen.csv"
+
+    if not ruta_ca_res.exists():
+        print("   ❌ No existe Maestro_Resumen.csv. Ejecute Unificar (5) o Refresh (6) primero.")
+        return
+
+    print("\n🔗 ENLAZANDO CÓDIGOS DE ÓRDENES DE COMPRA A COMPRAS ÁGILES...")
+    df_ca = pd.read_csv(ruta_ca_res, sep=";", encoding="utf-8-sig", dtype=str)
+
+    if "OC_Codigo" not in df_ca.columns:
+        df_ca["OC_Codigo"] = None
+
+    # Solo aplica a CAs con proveedor seleccionado
+    mask_ps = df_ca["EstadoCodigo"].str.strip().str.lower() == "proveedor_seleccionado"
+    total_ps = int(mask_ps.sum())
+    print(f"   📊 CAs con 'proveedor_seleccionado': {total_ps}")
+
+    def _ya_tiene_codigo(val) -> bool:
+        return bool(val and str(val).strip() and str(val).lower() not in ("nan", "none"))
+
+    # ─── MÉTODO 1: Cross-referencia con OC_Maestro_Resumen.csv ───────────────
+    encontrados_m1 = 0
+    if ruta_oc_res.exists():
+        print("\n   🔄 Método 1: Cruzando con OC_Maestro_Resumen.csv...")
+        df_oc = pd.read_csv(ruta_oc_res, sep=";", encoding="utf-8-sig", dtype=str)
+
+        if "CodigoCompraAgil" not in df_oc.columns:
+            print("   ⚠️  OC_Maestro_Resumen.csv no tiene columna 'CodigoCompraAgil'.")
+            print("       → Ejecute Opción 9 en OC_SSO_SERVER.py para generarla.")
+        else:
+            # CodigoCompraAgil → CodigoOC (ignorar nulos)
+            df_mapa = df_oc[
+                df_oc["CodigoCompraAgil"].notna()
+                & (df_oc["CodigoCompraAgil"].str.strip() != "")
+                & (df_oc["CodigoCompraAgil"].str.lower() != "nan")
+            ].copy()
+            mapa = dict(zip(df_mapa["CodigoCompraAgil"].str.strip(), df_mapa["CodigoOC"].str.strip()))
+            print(f"   📋 Entradas en mapa CA→OC: {len(mapa)}")
+
+            for idx in df_ca[mask_ps].index:
+                if _ya_tiene_codigo(df_ca.at[idx, "OC_Codigo"]):
+                    continue
+                ca_code = str(df_ca.at[idx, "CodigoCompraAgil"]).strip()
+                if ca_code in mapa:
+                    df_ca.at[idx, "OC_Codigo"] = mapa[ca_code]
+                    encontrados_m1 += 1
+
+            print(f"   ✅ Método 1: {encontrados_m1} códigos enlazados")
+    else:
+        print("   ⚠️  No se encontró OC_Maestro_Resumen.csv. Saltando Método 1.")
+        print(f"       Ruta esperada: {ruta_oc_res}")
+
+    # ─── MÉTODO 2: API fallback ───────────────────────────────────────────────
+    # CAs con proveedor_seleccionado, OC_ID disponible, aún sin OC_Codigo
+    def _valor_vacio(val) -> bool:
+        return not _ya_tiene_codigo(val)
+
+    sin_codigo_idx = [
+        idx for idx in df_ca[mask_ps].index
+        if _valor_vacio(df_ca.at[idx, "OC_Codigo"])
+        and _ya_tiene_codigo(df_ca.at[idx, "OC_ID"])
+    ]
+
+    encontrados_m2 = 0
+    if sin_codigo_idx:
+        print(f"\n   🔄 Método 2 (API): {len(sin_codigo_idx)} registros sin código. Buscando en API de OC...")
+
+        # Cargar tabla de proveedores para obtener ganador + monto
+        df_prov = None
+        if ruta_ca_prov.exists():
+            df_prov = pd.read_csv(ruta_ca_prov, sep=";", encoding="utf-8-sig", dtype=str)
+        else:
+            print("   ⚠️  Maestro_Proveedores.csv no encontrado. Método 2 omitido.")
+            sin_codigo_idx = []
+
+        for idx in sin_codigo_idx:
+            ca_code = str(df_ca.at[idx, "CodigoCompraAgil"]).strip()
+            fecha_cierre_str = str(df_ca.at[idx, "FechaCierre"]).strip()
+
+            try:
+                fecha_cierre = pd.to_datetime(fecha_cierre_str).date()
+            except Exception:
+                print(f"      ⊗ {ca_code}: Fecha inválida ({fecha_cierre_str!r})")
+                continue
+
+            # Proveedor ganador
+            rut_prov, monto_total = None, 0.0
+            if df_prov is not None:
+                ganad = df_prov[
+                    (df_prov["CodigoCompraAgil"] == ca_code)
+                    & (df_prov["ProveedorSeleccionado"].str.strip().str.lower() == "true")
+                ]
+                if not ganad.empty:
+                    rut_prov   = str(ganad.iloc[0].get("RutProveedor", "")).strip()
+                    monto_total = to_float(ganad.iloc[0].get("MontoTotal", 0))
+
+            if not rut_prov:
+                print(f"      ⊗ {ca_code}: Sin proveedor ganador registrado")
+                continue
+
+            print(f"      🔍 {ca_code} | RUT: {rut_prov} | ${monto_total:,.0f}...", end=" ", flush=True)
+            codigo_oc = _buscar_codigo_oc_api(rut_prov, monto_total, fecha_cierre)
+
+            if codigo_oc:
+                df_ca.at[idx, "OC_Codigo"] = codigo_oc
+                encontrados_m2 += 1
+                print(f"✅ {codigo_oc}")
+            else:
+                print("⊗ No encontrado")
+
+        if sin_codigo_idx:
+            print(f"\n   ✅ Método 2: {encontrados_m2} códigos adicionales encontrados")
+    else:
+        print("\n   ℹ️  No quedan registros pendientes para Método 2.")
+
+    # Guardar
+    df_ca.to_csv(ruta_ca_res, sep=";", index=False, encoding="utf-8-sig")
+
+    # Resumen final
+    df_ca_reload = pd.read_csv(ruta_ca_res, sep=";", encoding="utf-8-sig", dtype=str)
+    mask_ps2 = df_ca_reload["EstadoCodigo"].str.strip().str.lower() == "proveedor_seleccionado"
+    con_codigo = df_ca_reload[mask_ps2]["OC_Codigo"].apply(_ya_tiene_codigo).sum()
+    print(f"\n   📊 RESULTADO FINAL:")
+    print(f"   ✅ CAs con OC_Codigo: {con_codigo}/{total_ps}")
+    print(f"   ⊗ Sin OC_Codigo: {total_ps - con_codigo}/{total_ps}")
+    print(f"   💾 {ruta_ca_res.name} actualizado.")
+
+
 # =========================
 # MENÚ PRINCIPAL
 # =========================
@@ -991,6 +1108,7 @@ if __name__ == "__main__":
         print("-" * 60)
         print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO)")
         print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros)")
+        print("7) ENLAZAR CÓDIGOS OC (Llena OC_Codigo en Maestro Compras Ágiles)")
         print("0) Salir")
         
         op = input("\nSeleccione opción: ")
@@ -1029,13 +1147,16 @@ if __name__ == "__main__":
                 fin = input("Hasta (dd-mm-aaaa): ")
                 d_ini = dt.datetime.strptime(ini, "%d-%m-%Y").date()
                 d_fin = dt.datetime.strptime(fin, "%d-%m-%Y").date()
-                
+
                 if d_ini > d_fin:
                     print("\n⚠️  Error: La fecha inicial no puede ser posterior a la fecha final.")
                     continue
-                
+
                 refresh_base_datos(d_ini, d_fin)
-            
+
+            elif op == "7":
+                enlazar_codigos_oc()
+
             else:
                 print("\n⚠️  Opción inválida.")
         

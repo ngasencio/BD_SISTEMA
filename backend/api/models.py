@@ -191,6 +191,8 @@ class OrdenCompra(models.Model):
     LinkMP = models.URLField(max_length=500, null=True, blank=True)
     EnlacePAC = models.CharField(max_length=255, null=True, blank=True)
     ID_Proyecto = models.CharField(max_length=255, null=True, blank=True, db_column='ID_Proyecto')
+    CodigoCompraAgil = models.CharField(max_length=100, null=True, blank=True)
+    TipoCompraInterna = models.CharField(max_length=100, null=True, blank=True)
     
     class Meta:
         db_table = 'api_ordencompra'
