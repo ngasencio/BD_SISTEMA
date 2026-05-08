@@ -121,10 +121,10 @@ def _extraer_codigo_ca(nombre: str, descripcion: str) -> str:
 
 def _enriquecer_df_oc(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Añade/recalcula las columnas CodigoCompraAgil y TipoCompraInterna.
+    Añade/recalcula las columnas CodigoCompraAgil, TipoCompraInterna y TipoOCInterno.
     Se aplica sobre el DataFrame maestro de resumen.
     """
-    for col in ["CodigoCompraAgil", "TipoCompraInterna"]:
+    for col in ["CodigoCompraAgil", "TipoCompraInterna", "TipoOCInterno"]:
         if col in df.columns:
             df.drop(columns=[col], inplace=True)
 
@@ -155,6 +155,23 @@ def _enriquecer_df_oc(df: pd.DataFrame) -> pd.DataFrame:
         return tipo_oc if tipo_oc else "Otro"
 
     df["TipoCompraInterna"] = df.apply(_clasificar, axis=1)
+
+    # TipoOCInterno: clasificación interna por prefijo del NombreOC
+    _PREFIJOS_FORMULARIO = ("F1", "F2", "F3", "F4", "F5")
+
+    def _tipo_oc_interno(row):
+        nombre = str(row.get("NombreOC", "") or "").strip().upper()
+        if nombre.startswith("CC"):
+            return "Contratos"
+        if any(nombre.startswith(p) for p in _PREFIJOS_FORMULARIO):
+            return "Formulario"
+        if nombre.startswith("PA"):
+            return "Pasajes"
+        if nombre.startswith("TD"):
+            return "Trato Directo"
+        return "Sin Clasificar"
+
+    df["TipoOCInterno"] = df.apply(_tipo_oc_interno, axis=1)
     return df
 
 
