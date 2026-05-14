@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api';
+import api from '../lib/axios';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import { daysBetween } from '../utils';
 
@@ -23,7 +23,7 @@ export default function ResumenSect({ stats }) {
             .then(res => {
                 let results = res.data.results || res.data;
                 if (searchTerm) {
-                    results = results.filter(lic => lic.Nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || lic.CodigoLicitacion?.toLowerCase().includes(searchTerm.toLowerCase()));
+                    results = results.filter(lic => lic.Nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || (lic.codigo_licitacion || lic.CodigoLicitacion)?.toLowerCase().includes(searchTerm.toLowerCase()));
                 }
                 setLicitaciones(results);
             })
@@ -106,8 +106,8 @@ export default function ResumenSect({ stats }) {
                                     <tr><td colSpan="7" style={{ textAlign: 'center' }}>No hay resultados</td></tr>
                                 ) : (
                                     licitaciones.map(lic => (
-                                        <tr key={lic.CodigoLicitacion}>
-                                            <td className="td-mono">{lic.CodigoLicitacion}</td>
+                                        <tr key={lic.codigo_licitacion || lic.CodigoLicitacion}>
+                                            <td className="td-mono">{lic.codigo_licitacion || lic.CodigoLicitacion}</td>
                                             <td><span title={lic.Nombre} style={{ maxWidth: '230px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lic.Nombre}</span></td>
                                             <td><span className="tag tag-azul">{lic.Tipo}</span></td>
                                             <td><span className="tag tag-gris">{lic.Estado}</span></td>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '../../../../api';
+import api from '../../../../lib/axios';
 
 export function useDevengoData() {
     const [rawData, setRawData] = useState([]);
@@ -13,6 +13,7 @@ export function useDevengoData() {
             td: r.tipo_documento || '',
             fc: r.fecha_conforme || '',
             cc: r.id_chile_compra ? 1 : 0,
+            id_mp: r.id_chile_compra || '',
             c01: r.catalogo_01 || '',
             c04: r.catalogo_04 || '',
             cp: r.concepto_presupuestario || '',
@@ -27,26 +28,10 @@ export function useDevengoData() {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                let allData = [];
-                let url = 'devengo/?page_size=1000';
+                // Llamamos directamente al endpoint optimizado sin paginación
+                const res = await api.get('devengo/raw_all/');
+                const allData = res.data || [];
 
-                while (url) {
-                    const res = await api.get(url);
-                    const body = res.data;
-
-                    if (Array.isArray(body)) {
-                        allData = allData.concat(body);
-                        url = null;
-                    } else {
-                        allData = allData.concat(body.results || []);
-                        if (body.next) {
-                            const match = body.next.match(/\/api\/(.*)/);
-                            url = match ? match[1] : null;
-                        } else {
-                            url = null;
-                        }
-                    }
-                }
 
                 setRawData(normalizeData(allData));
             } catch (err) {

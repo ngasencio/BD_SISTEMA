@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import api from '../api';
+import React, { useState, useEffect, useMemo } from 'react';
+import api from '../lib/axios';
 import Sidebar from '../components/Sidebar';
 import Topbar from '../components/Topbar';
 import ResumenSect from '../components/ResumenSect';
@@ -46,9 +46,9 @@ export default function Dashboard() {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', flex: 1, width: '100%' }}>
             <Sidebar />
-            <main className="main" style={{ marginTop: '0px' }}>
+            <main className="main">
                 <Topbar />
 
                 <div className="content">
