@@ -62,6 +62,75 @@ class Licitacion(models.Model):
     Adj_NumeroOferentes = models.IntegerField(null=True, blank=True)
     Adj_UrlActa = models.URLField(max_length=2000, null=True, blank=True)
 
+    # Fechas adicionales del proceso
+    FechaPubRespuestas          = models.DateTimeField(null=True, blank=True)
+    FechaActoAperturaTecnica    = models.DateTimeField(null=True, blank=True)
+    FechaActoAperturaEconomica  = models.DateTimeField(null=True, blank=True)
+    FechaSoporteFisico          = models.DateTimeField(null=True, blank=True)
+    FechaTiempoEvaluacion       = models.DateTimeField(null=True, blank=True)
+    FechaEstimadaFirma          = models.DateTimeField(null=True, blank=True)
+    FechaVisitaTerreno          = models.DateTimeField(null=True, blank=True)
+    FechaEntregaAntecedentes    = models.DateTimeField(null=True, blank=True)
+    FechaInicioContrato         = models.DateTimeField(null=True, blank=True)
+
+    # Clasificación
+    TipoConvocatoria = models.CharField(max_length=50, null=True, blank=True)
+
+    # Detalle del proceso
+    DiasCierreLicitacion    = models.IntegerField(null=True, blank=True)
+    Informada               = models.IntegerField(null=True, blank=True)
+    TomaRazon               = models.IntegerField(null=True, blank=True)
+    EstadoPublicidadOfertas = models.IntegerField(null=True, blank=True)
+    JustificacionPublicidad = models.TextField(null=True, blank=True)
+    Contrato                = models.IntegerField(null=True, blank=True)
+    Obras                   = models.IntegerField(null=True, blank=True)
+    CantidadReclamos        = models.IntegerField(null=True, blank=True)
+    UnidadTiempoEvaluacion  = models.IntegerField(null=True, blank=True)
+    DireccionVisita         = models.TextField(null=True, blank=True)
+    DireccionEntrega        = models.TextField(null=True, blank=True)
+    Estimacion              = models.IntegerField(null=True, blank=True)
+    VisibilidadMonto        = models.IntegerField(null=True, blank=True)
+    JustificacionMonto      = models.TextField(null=True, blank=True)
+    Tiempo                  = models.IntegerField(null=True, blank=True)
+    UnidadTiempo            = models.IntegerField(null=True, blank=True)
+    Modalidad               = models.CharField(max_length=255, null=True, blank=True)
+    TipoPago                = models.IntegerField(null=True, blank=True)
+    ObservacionContract     = models.TextField(null=True, blank=True)
+    CodigoBIP               = models.CharField(max_length=255, null=True, blank=True)
+
+    # Responsables
+    Resp_Pago       = models.CharField(max_length=255, null=True, blank=True)
+    Resp_Email_Pago = models.CharField(max_length=255, null=True, blank=True)
+    Resp_Contrato   = models.CharField(max_length=255, null=True, blank=True)
+    Resp_Email      = models.CharField(max_length=255, null=True, blank=True)
+    Resp_Fono       = models.CharField(max_length=255, null=True, blank=True)
+
+    # Condiciones de contratación
+    ProhibicionContratacion       = models.IntegerField(null=True, blank=True)
+    SubContratacion               = models.IntegerField(null=True, blank=True)
+    ExtensionPlazo                = models.IntegerField(null=True, blank=True)
+    EsBaseTipo                    = models.IntegerField(null=True, blank=True)
+    UnidadTiempoContratoLicitacion = models.IntegerField(null=True, blank=True)
+
+    # Columnas descriptivas (decodificación de códigos Mercado Público)
+    DescripcionTipoLicitacion     = models.CharField(max_length=255, null=True, blank=True)
+    DescripcionMoneda             = models.CharField(max_length=100, null=True, blank=True)
+    DescripcionTipoConvocatoria   = models.CharField(max_length=100, null=True, blank=True)
+    DescripcionEstimacion         = models.CharField(max_length=100, null=True, blank=True)
+    DescripcionTipoPago           = models.CharField(max_length=255, null=True, blank=True)
+    DescripcionUnidadTiempoEval   = models.CharField(max_length=100, null=True, blank=True)
+    DescripcionUnidadTiempoDuracion = models.CharField(max_length=100, null=True, blank=True)
+    DescripcionAdjTipo            = models.CharField(max_length=100, null=True, blank=True)
+    Informada_Desc      = models.CharField(max_length=10, null=True, blank=True)
+    TomaRazon_Desc      = models.CharField(max_length=10, null=True, blank=True)
+    Contrato_Desc       = models.CharField(max_length=10, null=True, blank=True)
+    Obras_Desc          = models.CharField(max_length=10, null=True, blank=True)
+    VisibilidadMonto_Desc   = models.CharField(max_length=10, null=True, blank=True)
+    SubContratacion_Desc    = models.CharField(max_length=10, null=True, blank=True)
+    ExtensionPlazo_Desc     = models.CharField(max_length=10, null=True, blank=True)
+    EsBaseTipo_Desc         = models.CharField(max_length=10, null=True, blank=True)
+    EsRenovable_Desc        = models.CharField(max_length=10, null=True, blank=True)
+
     def __str__(self):
         return f"{self.codigo_licitacion} - {self.Nombre}"
 
@@ -193,7 +262,14 @@ class OrdenCompra(models.Model):
     ID_Proyecto = models.CharField(max_length=255, null=True, blank=True, db_column='ID_Proyecto')
     CodigoCompraAgil = models.CharField(max_length=100, null=True, blank=True)
     TipoCompraInterna = models.CharField(max_length=100, null=True, blank=True)
-    
+    TipoOCInterno = models.CharField(max_length=100, null=True, blank=True)
+
+    # Columnas descriptivas (decodificación de códigos Mercado Público)
+    DescripcionTipoOC    = models.CharField(max_length=255, null=True, blank=True)
+    DescripcionMoneda    = models.CharField(max_length=100, null=True, blank=True)
+    DescripcionDespacho  = models.CharField(max_length=255, null=True, blank=True)
+    DescripcionFormaPago = models.CharField(max_length=255, null=True, blank=True)
+
     class Meta:
         db_table = 'api_ordencompra'
 

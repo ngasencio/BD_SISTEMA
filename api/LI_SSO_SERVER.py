@@ -36,6 +36,80 @@ ESPERA_ENTRE_DETALLES = 0.05  # Throttle suave
 
 URL_LICITACIONES = "https://api.mercadopublico.cl/servicios/v1/publico/licitaciones.json"
 
+# Tablas de decodificación (fuente: anexos API Mercado Público — Licitaciones)
+_TIPO_LIC_DESC: Dict[str, str] = {
+    "L1": "Licitación Pública Menor a 100 UTM",
+    "LE": "Licitación Pública Entre 100 y 1000 UTM",
+    "LP": "Licitación Pública Mayor a 1000 UTM",
+    "LS": "Servicios personales especializados",
+    "A1": "Privada por licitación pública sin oferentes",
+    "B1": "Privada por otras causales",
+    "J1": "Servicios de naturaleza confidencial",
+    "F1": "Convenios con personas jurídicas extranjeras",
+    "E1": "Remanente de contrato anterior",
+    "CO": "Privada entre 100 y 1000 UTM",
+    "B2": "Privada mayor a 1000 UTM",
+    "A2": "Trato directo por licitación privada desierta",
+    "D1": "Trato directo por proveedor único",
+    "E2": "Privada menor a 100 UTM",
+    "C2": "Trato directo (Cotización)",
+    "C1": "Compra Directa (Orden de compra)",
+    "F2": "Trato Directo (Cotización)",
+    "F3": "Compra Directa (Orden de compra)",
+    "G2": "Directo (Cotización)",
+    "G1": "Compra Directa (Orden de compra)",
+    "R1": "Orden de Compra menor a 3 UTM",
+    "CA": "Orden de Compra sin Resolución",
+    "SE": "Orden de Compra sin emisión automática",
+}
+
+_MONEDA_DESC: Dict[str, str] = {
+    "CLP": "Peso Chileno",
+    "CLF": "Unidad de Fomento",
+    "USD": "Dólar Americano",
+    "UTM": "Unidad Tributaria Mensual",
+    "EUR": "Euro",
+}
+
+_ESTIMACION_DESC: Dict[str, str] = {
+    "1": "Presupuesto Disponible",
+    "2": "Precio Referencial",
+}
+
+_TIPO_PAGO_LI_DESC: Dict[str, str] = {
+    "1":  "Pago a 30 días",
+    "2":  "Pago a 30, 60 y 90 días",
+    "3":  "Pago al día",
+    "4":  "Pago Anual",
+    "5":  "Pago a 60 días",
+    "6":  "Pagos Mensuales",
+    "7":  "Pago Contra Entrega Conforme",
+    "8":  "Pago Bimensual",
+    "9":  "Pago Por Estado de Avance",
+    "10": "Pago Trimestral",
+}
+
+_UNIDAD_TIEMPO_DESC: Dict[str, str] = {
+    "1": "Horas",
+    "2": "Días",
+    "3": "Semanas",
+    "4": "Meses",
+    "5": "Años",
+}
+
+_ADJ_TIPO_DESC: Dict[str, str] = {
+    "1": "Autorización",
+    "2": "Resolución",
+    "3": "Otros",
+    "4": "Decreto",
+    "5": "Acuerdo",
+}
+
+_TIPO_CONVOCATORIA_DESC: Dict[str, str] = {
+    "1": "Pública",
+    "2": "Privada",
+}
+
 # =========================
 # CLASES DE CONFIGURACIÓN
 # =========================
@@ -264,6 +338,60 @@ def _extraer_resumen_y_detalles(codigo: str, lic: Dict[str, Any]) -> Tuple[Dict[
     return resumen, detalles
 
 
+def _enriquecer_df_lic(df: pd.DataFrame) -> pd.DataFrame:
+    """Añade/recalcula columnas descriptivas sobre el DataFrame maestro de licitaciones."""
+    _cols_recalc = [
+        "DescripcionTipoLicitacion", "DescripcionMoneda", "DescripcionEstimacion",
+        "DescripcionTipoPago", "DescripcionUnidadTiempoEval", "DescripcionUnidadTiempoDuracion",
+        "DescripcionAdjTipo", "DescripcionTipoConvocatoria",
+        "Informada_Desc", "TomaRazon_Desc", "Contrato_Desc", "Obras_Desc",
+        "VisibilidadMonto_Desc", "SubContratacion_Desc", "ExtensionPlazo_Desc",
+        "EsBaseTipo_Desc", "EsRenovable_Desc",
+    ]
+    for col in _cols_recalc:
+        if col in df.columns:
+            df.drop(columns=[col], inplace=True)
+
+    def _decode(col: str, tabla: Dict[str, str], upper: bool = True) -> pd.Series:
+        if col not in df.columns:
+            return pd.Series("", index=df.index)
+        if upper:
+            return df[col].apply(lambda x: tabla.get(str(x or "").strip().upper(), ""))
+        return df[col].apply(lambda x: tabla.get(str(x or "").strip(), ""))
+
+    df["DescripcionTipoLicitacion"]       = _decode("Tipo",                  _TIPO_LIC_DESC)
+    df["DescripcionMoneda"]               = _decode("Moneda",                _MONEDA_DESC)
+    df["DescripcionTipoConvocatoria"]     = _decode("TipoConvocatoria",      _TIPO_CONVOCATORIA_DESC, upper=False)
+    df["DescripcionEstimacion"]           = _decode("Estimacion",            _ESTIMACION_DESC,        upper=False)
+    df["DescripcionTipoPago"]             = _decode("TipoPago",              _TIPO_PAGO_LI_DESC,      upper=False)
+    df["DescripcionUnidadTiempoEval"]     = _decode("UnidadTiempoEvaluacion",_UNIDAD_TIEMPO_DESC,     upper=False)
+    df["DescripcionUnidadTiempoDuracion"] = _decode("UnidadTiempoDuracion",  _UNIDAD_TIEMPO_DESC,     upper=False)
+    df["DescripcionAdjTipo"]              = _decode("Adj_Tipo",              _ADJ_TIPO_DESC,          upper=False)
+
+    # Campos binarios — 0/1 → No/Sí (excepción: Obras usa 1=No / 2=Sí)
+    _SINO      = {"1": "Sí", "0": "No"}
+    _SINO_OBRAS = {"2": "Sí", "1": "No"}
+
+    for campo, tabla in [
+        ("Informada",        _SINO),
+        ("TomaRazon",        _SINO),
+        ("Contrato",         _SINO),
+        ("Obras",            _SINO_OBRAS),
+        ("VisibilidadMonto", _SINO),
+        ("SubContratacion",  _SINO),
+        ("ExtensionPlazo",   _SINO),
+        ("EsBaseTipo",       _SINO),
+        ("EsRenovable",      _SINO),
+    ]:
+        col_desc = f"{campo}_Desc"
+        if campo in df.columns:
+            df[col_desc] = df[campo].apply(lambda x, t=tabla: t.get(str(x or "").strip(), ""))
+        else:
+            df[col_desc] = ""
+
+    return df
+
+
 # =========================
 # PROCESAMIENTO DIARIO (EXTRACCIÓN)
 # =========================
@@ -396,8 +524,13 @@ def guardar_en_django(db_resumen, db_detalles):
     from django.utils.timezone import make_aware, is_naive
 
     # Parseo de fechas para que Django no reclame formatos inválidos (ej: vacíos)
-    dt_fields = ['FechaCreacion', 'FechaCierre', 'FechaInicio', 'FechaFinal', 'FechaPublicacion', 
-                 'FechaAdjudicacion', 'FechaEstimadaAdjudicacion', 'Adj_Fecha']
+    dt_fields = [
+        'FechaCreacion', 'FechaCierre', 'FechaInicio', 'FechaFinal', 'FechaPublicacion',
+        'FechaAdjudicacion', 'FechaEstimadaAdjudicacion', 'Adj_Fecha',
+        'FechaPubRespuestas', 'FechaActoAperturaTecnica', 'FechaActoAperturaEconomica',
+        'FechaSoporteFisico', 'FechaTiempoEvaluacion', 'FechaEstimadaFirma',
+        'FechaVisitaTerreno', 'FechaEntregaAntecedentes', 'FechaInicioContrato',
+    ]
 
     print("    -> Vaciando la base de datos (Licitaciones) para reemplazo total...")
     DetalleLicitacion.objects.all().delete()
@@ -423,16 +556,23 @@ def guardar_en_django(db_resumen, db_detalles):
                     defaults[k] = val_dt
                 except:
                     defaults[k] = None
-            elif k in ['Etapas', 'CodigoEstado', 'CodigoTipo']:
+            elif k in [
+                'Etapas', 'CodigoEstado', 'CodigoTipo',
+                'DiasCierreLicitacion', 'CantidadReclamos',
+                'Informada', 'TomaRazon', 'EstadoPublicidadOfertas', 'Contrato', 'Obras',
+                'UnidadTiempoEvaluacion', 'Estimacion', 'VisibilidadMonto', 'TipoPago',
+                'Tiempo', 'UnidadTiempo', 'ProhibicionContratacion', 'SubContratacion',
+                'ExtensionPlazo', 'EsBaseTipo', 'UnidadTiempoContratoLicitacion',
+            ]:
                 try:
-                    defaults[k] = int(float(v)) if (v != '' and v is not None and str(v).lower() != 'none') else None
-                except ValueError:
+                    defaults[k] = int(float(v)) if (v != '' and v is not None and str(v).strip().lower() not in ('none', 'nan')) else None
+                except (ValueError, TypeError):
                     defaults[k] = None
-            elif k in ['MontoEstimado', 'CantidadReclamos', 'DiasCierreLicitacion']:
+            elif k in ['MontoEstimado']:
                 try:
                     if isinstance(v, str): v = v.replace(',', '.')
-                    defaults[k] = float(v) if (v != '' and v is not None and str(v).lower() != 'none') else None
-                except ValueError:
+                    defaults[k] = float(v) if (v != '' and v is not None and str(v).strip().lower() not in ('none', 'nan')) else None
+                except (ValueError, TypeError):
                     defaults[k] = None
             else:
                 defaults[k] = v if (v is not None and str(v).lower() != 'none' and not pd.isna(v)) else None
@@ -504,7 +644,8 @@ def unificar_base_datos():
             ignore_index=True,
         )
         df_res.drop_duplicates(subset=["CodigoLicitacion"], keep="last", inplace=True)
-        
+        df_res = _enriquecer_df_lic(df_res)
+
         ruta_m_res = CARPETA_MAESTROS / "Maestro_Resumen.csv"
         df_res.to_csv(ruta_m_res, sep=";", index=False, encoding="utf-8-sig")
         print(f"   ✅ Maestro Resumen creado: {len(df_res)} registros.")
@@ -604,7 +745,8 @@ def refresh_base_datos(
         # Concatenar y deduplicar (Keep Last asegura que la versión nueva reemplace a la vieja)
         df_final_res = pd.concat([df_master_res, df_nuevos_res])
         df_final_res.drop_duplicates(subset=["CodigoLicitacion"], keep="last", inplace=True)
-        
+        df_final_res = _enriquecer_df_lic(df_final_res)
+
         df_final_res.to_csv(ruta_m_res, sep=";", index=False, encoding="utf-8-sig")
         print(f"   ✅ Maestro Resumen actualizado. Total registros: {len(df_final_res)}")
 
@@ -675,15 +817,17 @@ if __name__ == "__main__":
     while True:
         print("\n=========================================")
         print("   EXTRACTOR LICITACIONES SSO - V3")
-        print("   (Optimizado con Concurrencia)")
         print("=========================================")
-        print("1) Hoy (Descarga a DIARIO)")
-        print("2) Manual (Un día a DIARIO)")
-        print("3) Rango de fechas (Solo descarga lo nuevo a DIARIO)")
-        print("-" * 40)
-        print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO)")
-        print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros)")
-        print("7) SINCRONIZAR MASIVAMENTE (Sube CSV Maestros a MariaDB/Django)")
+        print("── Descarga ──────────────────────────────")
+        print("1) Hoy                (descarga hoy a DIARIO)")
+        print("2) Día manual         (un día a DIARIO)")
+        print("3) Rango sin forzar   (solo descarga lo nuevo a DIARIO)")
+        print("── Maestros ──────────────────────────────")
+        print("5) UNIFICAR           (DIARIO → Maestros + enriquecimiento)")
+        print("6) REFRESH            (Descarga rango + Maestros + enriquecimiento)  ← uso habitual")
+        print("── Sincronización ────────────────────────")
+        print("7) SINCRONIZAR A BD   (Sube CSV Maestros a MariaDB/Django)")
+        print("──────────────────────────────────────────")
         print("0) Salir")
         
         op = input("\nSeleccione opción: ")

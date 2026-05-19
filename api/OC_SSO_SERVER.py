@@ -46,6 +46,53 @@ URL_OC = "https://api.mercadopublico.cl/servicios/v1/publico/ordenesdecompra.jso
 # Patrón código Compra Ágil: {CodigoUnidad}-{N}-COT{año}  ej: "1057532-18-COT22"
 _RE_COT = re.compile(r'\b(\d{4,8}-\d{1,4}-COT\d{2,4})\b', re.IGNORECASE)
 
+# Tablas de decodificación (fuente: anexos API Mercado Público)
+_TIPO_OC_DESC: Dict[str, str] = {
+    "OC": "Automática",
+    "D1": "Trato Directo por proveedor único",
+    "C1": "Trato Directo por emergencia, urgencia e imprevisto",
+    "F3": "Trato Directo por confidencialidad",
+    "G1": "Trato Directo por naturaleza de negociación",
+    "R1": "Orden de compra menor a 3 UTM",
+    "CA": "Orden de compra sin resolución",
+    "SE": "Sin emisión automática",
+    "CM": "Convenio Marco",
+    "FG": "Trato Directo (Art. 8 letras f y g - Ley 19.886)",
+    "TL": "Convenio Marco – Tienda de Libros",
+    "MC": "Microcompra",
+    "AG": "Compra Ágil",
+    "CC": "Compra Coordinada",
+    "TD": "Trato Directo",
+}
+
+_MONEDA_DESC: Dict[str, str] = {
+    "CLP": "Peso Chileno",
+    "CLF": "Unidad de Fomento",
+    "USD": "Dólar Americano",
+    "UTM": "Unidad Tributaria Mensual",
+    "EUR": "Euro",
+}
+
+_DESPACHO_DESC: Dict[str, str] = {
+    "7":  "Despachar a Dirección de envío",
+    "9":  "Despachar según programa adjuntado",
+    "12": "Otra Forma de Despacho",
+    "14": "Retiramos de su bodega",
+    "20": "Despacho por courier o encomienda aérea",
+    "21": "Despacho por courier o encomienda terrestre",
+    "22": "A convenir",
+}
+
+_FORMA_PAGO_DESC: Dict[str, str] = {
+    "1":  "15 días contra recepción de factura",
+    "2":  "30 días contra recepción de factura",
+    "39": "Otra forma de pago",
+    "46": "50 días contra recepción de factura",
+    "47": "60 días contra recepción de factura",
+    "48": "A 45 días",
+    "49": "A más de 30 días",
+}
+
 @dataclass(frozen=True)
 class ApiConfig:
     """Configuración de acceso a API y resiliencia."""
@@ -124,7 +171,11 @@ def _enriquecer_df_oc(df: pd.DataFrame) -> pd.DataFrame:
     Añade/recalcula las columnas CodigoCompraAgil, TipoCompraInterna y TipoOCInterno.
     Se aplica sobre el DataFrame maestro de resumen.
     """
-    for col in ["CodigoCompraAgil", "TipoCompraInterna", "TipoOCInterno"]:
+    _cols_recalc = [
+        "CodigoCompraAgil", "TipoCompraInterna", "TipoOCInterno",
+        "DescripcionTipoOC", "DescripcionMoneda", "DescripcionDespacho", "DescripcionFormaPago",
+    ]
+    for col in _cols_recalc:
         if col in df.columns:
             df.drop(columns=[col], inplace=True)
 
@@ -172,6 +223,22 @@ def _enriquecer_df_oc(df: pd.DataFrame) -> pd.DataFrame:
         return "Sin Clasificar"
 
     df["TipoOCInterno"] = df.apply(_tipo_oc_interno, axis=1)
+
+    # Columnas descriptivas a partir de tablas de decodificación Mercado Público
+    def _decode(col: str, tabla: Dict[str, str]) -> "pd.Series":
+        if col not in df.columns:
+            return pd.Series("", index=df.index)
+        return df[col].apply(lambda x: tabla.get(str(x or "").strip().upper(), ""))
+
+    df["DescripcionTipoOC"]    = _decode("TipoOC",      _TIPO_OC_DESC)
+    df["DescripcionMoneda"]    = _decode("TipoMoneda",   _MONEDA_DESC)
+    df["DescripcionDespacho"]  = df["TipoDespacho"].apply(
+        lambda x: _DESPACHO_DESC.get(str(x or "").strip(), "")
+    ) if "TipoDespacho" in df.columns else ""
+    df["DescripcionFormaPago"] = df["FormaPago"].apply(
+        lambda x: _FORMA_PAGO_DESC.get(str(x or "").strip(), "")
+    ) if "FormaPago" in df.columns else ""
+
     return df
 
 
@@ -526,6 +593,8 @@ def unificar_base_datos():
     else:
         print("   ⚠️ No se encontraron archivos de Detalles en DIARIO.")
 
+    enlazar_con_pac()
+
 def refresh_base_datos(
     f_ini,
     f_fin,
@@ -626,6 +695,7 @@ def refresh_base_datos(
         df_final_det.to_csv(ruta_m_det, sep=";", index=False, encoding="utf-8-sig")
         print(f"   ✅ Maestro Detalles actualizado. Total registros: {len(df_final_det)}")
 
+    enlazar_con_pac()
     print("\n✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE.")
 
 def enlazar_con_pac():
@@ -760,15 +830,19 @@ if __name__ == "__main__":
         print("\n=========================================")
         print("   EXTRACTOR SSO ULTRA - GESTIÓN TOTAL")
         print("=========================================")
-        print("1) Hoy (Descarga a DIARIO)")
-        print("2) Manual (Un día a DIARIO)")
-        print("3) Rango de fechas (Solo descarga lo nuevo a DIARIO)")
-        print("-" * 40)
-        print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO)")
-        print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros)")
-        print("7) ENLACE PAC (Añade ID Proyecto a OC_Maestro_Resumen)")
-        print("8) SINCRONIZAR MASIVAMENTE (Sube CSV Maestros a MariaDB/Django)")
-        print("9) BÚSQUEDA COMPRA ÁGIL (Extrae CodigoCompraAgil y TipoCompraInterna)")
+        print("── Descarga ──────────────────────────────")
+        print("1) Hoy                (descarga hoy a DIARIO)")
+        print("2) Día manual         (un día a DIARIO)")
+        print("3) Rango sin forzar   (solo descarga lo nuevo a DIARIO)")
+        print("── Maestros ──────────────────────────────")
+        print("5) UNIFICAR           (DIARIO → Maestros + PAC)")
+        print("6) REFRESH            (Descarga rango + Maestros + PAC)  ← uso habitual")
+        print("── Sincronización ────────────────────────")
+        print("8) SINCRONIZAR A BD   (Sube CSV Maestros a MariaDB/Django)")
+        print("── Reparación manual ─────────────────────")
+        print("7) Enlace PAC         (re-enlazar si cambió el archivo PAC)")
+        print("9) Compra Ágil        (re-clasificar tipos sin re-descargar)")
+        print("──────────────────────────────────────────")
         print("0) Salir")
         
         op = input("\nSeleccione opción: ")
