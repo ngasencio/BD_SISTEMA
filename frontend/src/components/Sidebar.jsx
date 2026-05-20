@@ -12,12 +12,13 @@ export default function Sidebar() {
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
-        abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra'),
+        abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac'),
         finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas'),
         admin: false,
     });
     const [openMods, setOpenMods] = useState({
         mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra'),
+        pac: path.startsWith('/pac'),
         inventario: false,
         garantias: path.startsWith('/abastecimiento/boletas'),
         finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas'),
@@ -89,6 +90,24 @@ export default function Sidebar() {
                                         ? <span className="nav-badge nav-badge-alert">{sinRC}</span>
                                         : <span className="nav-badge">Nuevo</span>
                                     }
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* PAC 2026 */}
+                        <div className={`nav-mod ${openMods.pac ? 'open' : ''}`}>
+                            <div className="nav-mod-title" onClick={() => toggleMod('pac')}>
+                                <span style={{ fontSize: 14 }}>📅</span>
+                                <span className="nav-mod-title-text">PAC 2026</span>
+                                <span className="nav-mod-arrow" style={{ transform: openMods.pac ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+                            </div>
+                            <div className="nav-mod-items" style={{ display: openMods.pac ? 'block' : 'none' }}>
+                                <div
+                                    className={`nav-item ${path === '/pac' && !path.includes('#') ? 'active' : ''}`}
+                                    onClick={() => goTo('/pac', 'abast', 'pac')}
+                                >
+                                    <span>📊</span>
+                                    <span className="nav-item-text">Dashboard PAC</span>
                                 </div>
                             </div>
                         </div>

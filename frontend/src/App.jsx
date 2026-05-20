@@ -34,6 +34,7 @@ import OrdenesCompraDashboard from './pages/OrdenesCompraDashboard';
 import { abastecimientoRoutes } from './features/abastecimiento/routes';
 import { finanzasRoutes } from './features/finanzas/routes';
 import { ocRoutes } from './features/ordenes-compra/routes';
+import { pacRoutes } from './features/pac/routes';
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,9 @@ function AppRoutes() {
             <Route path="/anexo3" element={<AnexoDeudaPage />} />
             <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
             {ocRoutes}
+
+            {/* Módulo PAC (todos los autenticados) */}
+            {pacRoutes}
 
             {/* Módulo Abastecimiento (admin + abastecimiento + viewer) */}
             <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'viewer']} />}>

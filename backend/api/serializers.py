@@ -6,6 +6,8 @@ from rest_framework import serializers
 from .models import (
     Licitacion, DetalleLicitacion, Devengo, OrdenCompra, DetalleOrdenCompra,
     Proveedor, Comprador, BoletaGarantia, BoletaGarantiaAudit, Factura,
+    PlanerPAC, CompraAgilResumen, CompraAgilDocumento,
+    CompraAgilProducto, CompraAgilProductoCotizado, CompraAgilProveedor,
 )
 
 ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
@@ -243,3 +245,43 @@ class BoletaGarantiaAuditSerializer(serializers.ModelSerializer):
             'snapshot_antes', 'snapshot',
             'usuario_username', 'eliminado_en', 'razon',
         ]
+
+
+# =============================================================================
+# PAC / Compras Ágiles
+# =============================================================================
+
+class PlanerPACSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlanerPAC
+        fields = '__all__'
+
+
+class CompraAgilResumenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompraAgilResumen
+        fields = '__all__'
+
+
+class CompraAgilDocumentoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompraAgilDocumento
+        fields = '__all__'
+
+
+class CompraAgilProductoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompraAgilProducto
+        fields = '__all__'
+
+
+class CompraAgilProductoCotizadoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompraAgilProductoCotizado
+        fields = '__all__'
+
+
+class CompraAgilProveedorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompraAgilProveedor
+        fields = '__all__'

@@ -541,3 +541,120 @@ class Factura(models.Model):
 
     def __str__(self):
         return f"Factura {self.folio} — {self.razon_social_emisor}"
+
+
+# ─── PAC / COMPRAS ÁGILES (managed=False — tablas existentes) ────────────────
+
+class PlanerPAC(models.Model):
+    unidad_compra = models.TextField(blank=True, null=True)
+    id_proyecto = models.TextField(blank=True, null=True)
+    codigo_presupuestario = models.TextField(blank=True, null=True)
+    nombre_proyecto = models.TextField(blank=True, null=True)
+    cantidad_items = models.TextField(blank=True, null=True)
+    nombre_item = models.TextField(blank=True, null=True)
+    monto_unitario_item = models.TextField(blank=True, null=True)
+    monto_total_item = models.TextField(blank=True, null=True)
+    nombre_responsable = models.TextField(blank=True, null=True)
+    cargo_responsable = models.TextField(blank=True, null=True)
+    fecha_inicio_compra = models.TextField(blank=True, null=True)
+    depto = models.TextField(blank=True, null=True)
+    sub = models.TextField(blank=True, null=True)
+    unidad = models.TextField(blank=True, null=True)
+    tipo_proyecto = models.TextField(blank=True, null=True)
+    pac = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'data_planerpac'
+
+    def __str__(self):
+        return f"{self.id_proyecto} — {self.nombre_proyecto}"
+
+
+class CompraAgilResumen(models.Model):
+    codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
+    nombre = models.TextField(db_column='Nombre', blank=True, null=True)
+    descripcion = models.TextField(db_column='Descripcion', blank=True, null=True)
+    estadoid = models.TextField(db_column='EstadoID', blank=True, null=True)
+    estadocodigo = models.TextField(db_column='EstadoCodigo', blank=True, null=True)
+    estadoglosa = models.TextField(db_column='EstadoGlosa', blank=True, null=True)
+    convocatoriaestado = models.TextField(db_column='ConvocatoriaEstado', blank=True, null=True)
+    fechapublicacion = models.TextField(db_column='FechaPublicacion', blank=True, null=True)
+    fechacierre = models.TextField(db_column='FechaCierre', blank=True, null=True)
+    fechaultimocambio = models.TextField(db_column='FechaUltimoCambio', blank=True, null=True)
+    presupuestoestimado = models.TextField(db_column='PresupuestoEstimado', blank=True, null=True)
+    montodisponibleclp = models.TextField(db_column='MontoDisponibleCLP', blank=True, null=True)
+    oc_codigo = models.TextField(db_column='OC_Codigo', blank=True, null=True)
+    unidadcompra = models.TextField(db_column='UnidadCompra', blank=True, null=True)
+    totalofertasrecibidas = models.TextField(db_column='TotalOfertasRecibidas', blank=True, null=True)
+    totalproveedorescotizando = models.TextField(db_column='TotalProveedoresCotizando', blank=True, null=True)
+    motivodesierta = models.TextField(db_column='MotivoDesierta', blank=True, null=True)
+    motivocancelacion = models.TextField(db_column='MotivoCancelacion', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'api_compraagil_resumen'
+
+    def __str__(self):
+        return f"CA {self.codigocompraagil} — {self.nombre}"
+
+
+class CompraAgilDocumento(models.Model):
+    codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
+    iddocumento = models.TextField(db_column='IDDocumento', blank=True, null=True)
+    nombredocumento = models.TextField(db_column='NombreDocumento', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'api_compraagil_documentos'
+
+
+class CompraAgilProducto(models.Model):
+    codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
+    codigoproducto = models.TextField(db_column='CodigoProducto', blank=True, null=True)
+    nombre = models.TextField(db_column='Nombre', blank=True, null=True)
+    descripcion = models.TextField(db_column='Descripcion', blank=True, null=True)
+    cantidad = models.TextField(db_column='Cantidad', blank=True, null=True)
+    unidadmedida = models.TextField(db_column='UnidadMedida', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'api_compraagil_productos'
+
+
+class CompraAgilProductoCotizado(models.Model):
+    codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
+    rutproveedor = models.TextField(db_column='RutProveedor', blank=True, null=True)
+    codigoproducto = models.TextField(db_column='CodigoProducto', blank=True, null=True)
+    nombreproducto = models.TextField(db_column='NombreProducto', blank=True, null=True)
+    descripcion = models.TextField(db_column='Descripcion', blank=True, null=True)
+    cantidad = models.TextField(db_column='Cantidad', blank=True, null=True)
+    preciounitario = models.TextField(db_column='PrecioUnitario', blank=True, null=True)
+    montototalproducto = models.TextField(db_column='MontoTotalProducto', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'api_compraagil_productos_cotizados'
+
+
+class CompraAgilProveedor(models.Model):
+    codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
+    rutproveedor = models.TextField(db_column='RutProveedor', blank=True, null=True)
+    razonsocial = models.TextField(db_column='RazonSocial', blank=True, null=True)
+    esemt = models.TextField(db_column='EsEMT', blank=True, null=True)
+    estadocotizacionid = models.TextField(db_column='EstadoCotizacionID', blank=True, null=True)
+    proveedorseleccionado = models.TextField(db_column='ProveedorSeleccionado', blank=True, null=True)
+    estadoporcomprador = models.TextField(db_column='EstadoPorComprador', blank=True, null=True)
+    idordencompra = models.TextField(db_column='IDOrdenCompra', blank=True, null=True)
+    fechacreacion = models.TextField(db_column='FechaCreacion', blank=True, null=True)
+    valorneto = models.TextField(db_column='ValorNeto', blank=True, null=True)
+    montototal = models.TextField(db_column='MontoTotal', blank=True, null=True)
+    porcentajeimpuesto = models.TextField(db_column='PorcentajeImpuesto', blank=True, null=True)
+    totalproductoscotizados = models.TextField(db_column='TotalProductosCotizados', blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'api_compraagil_proveedores'
+
+    def __str__(self):
+        return f"{self.codigocompraagil} — {self.razonsocial}"

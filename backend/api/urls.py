@@ -8,6 +8,8 @@ from .views import (
     DevengoViewSet, LicitacionViewSet, OrdenCompraViewSet, ProveedorViewSet,
     dashboard_stats, devengo_raw_all, devengo_stats, facturas_raw_all,
     ordenes_compra_raw_all,
+    PlanerPACViewSet, CompraAgilResumenViewSet, CompraAgilProductoViewSet,
+    CompraAgilProveedorViewSet, pac_indicadores_view, pac_oc_stats_view,
 )
 
 router = DefaultRouter()
@@ -23,6 +25,12 @@ router.register(r'compradores', CompradorViewSet)
 router.register(r'boletas-garantia', BoletaGarantiaViewSet)
 router.register(r'boletas-garantia-audit', BoletaGarantiaAuditViewSet)
 
+# Módulo PAC / Compras Ágiles
+router.register(r'planer-pac', PlanerPACViewSet)
+router.register(r'compraagil-resumen', CompraAgilResumenViewSet)
+router.register(r'compraagil-productos', CompraAgilProductoViewSet)
+router.register(r'compraagil-proveedores', CompraAgilProveedorViewSet)
+
 urlpatterns = [
     # Autenticación JWT
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
@@ -34,6 +42,8 @@ urlpatterns = [
     path('devengo/raw_all/', devengo_raw_all, name='devengo_raw_all'),
     path('ordenes-compra/raw_all/', ordenes_compra_raw_all, name='ordenes_compra_raw_all'),
     path('facturas/raw_all/', facturas_raw_all, name='facturas_raw_all'),
+    path('pac/indicadores-res188/', pac_indicadores_view, name='pac_indicadores'),
+    path('pac/oc-stats/', pac_oc_stats_view, name='pac_oc_stats'),
 
     # Router ViewSets
     path('', include(router.urls)),

@@ -13,12 +13,15 @@ from .models import (
     BoletaGarantia, BoletaGarantiaAudit, Comprador,
     DetalleLicitacion, DetalleOrdenCompra, Devengo,
     Factura, Licitacion, OrdenCompra, Proveedor,
+    PlanerPAC, CompraAgilResumen, CompraAgilProducto, CompraAgilProveedor,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
     CompradorSerializer, DetalleLicitacionSerializer,
     DetalleOrdenCompraSerializer, DevengoSerializer,
     FacturaSerializer, LicitacionSerializer, OrdenCompraSerializer, ProveedorSerializer,
+    PlanerPACSerializer, CompraAgilResumenSerializer,
+    CompraAgilProductoSerializer, CompraAgilProveedorSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -314,3 +317,79 @@ class BoletaGarantiaAuditViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSe
     filter_backends = [drf_filters.OrderingFilter]
     ordering_fields = ['eliminado_en', 'boleta_id']
     ordering = ['-eliminado_en']
+
+
+# =============================================================================
+# PAC / Compras Ágiles
+# =============================================================================
+
+class PlanerPACViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = PlanerPAC.objects.all()
+    serializer_class = PlanerPACSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    filterset_fields = ['unidad_compra', 'tipo_proyecto', 'pac']
+    search_fields = ['nombre_proyecto', 'nombre_item', 'id_proyecto']
+
+
+class CompraAgilResumenViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CompraAgilResumen.objects.all()
+    serializer_class = CompraAgilResumenSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    filterset_fields = ['estadoglosa', 'unidadcompra']
+    search_fields = ['codigocompraagil', 'nombre']
+
+
+class CompraAgilProductoViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CompraAgilProducto.objects.all()
+    serializer_class = CompraAgilProductoSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['codigocompraagil']
+
+
+class CompraAgilProveedorViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CompraAgilProveedor.objects.all()
+    serializer_class = CompraAgilProveedorSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['codigocompraagil', 'proveedorseleccionado']
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_indicadores_view(request):
+    """Indicadores Res.188 calculados desde la BD. Cache 5min."""
+    from .services import calcular_indicadores_res188
+
+    try:
+        anio = int(request.GET.get('anio', 2026))
+    except (ValueError, TypeError):
+        anio = 2026
+
+    cache_key = f'pac_indicadores_res188_{anio}'
+    data = cache.get(cache_key)
+    if not data:
+        data = calcular_indicadores_res188(anio)
+        cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_oc_stats_view(request):
+    """Estadísticas de OC para los paneles del tab Órdenes de Compra. Cache 5min."""
+    from .services import calcular_oc_stats
+
+    try:
+        anio = int(request.GET.get('anio', 2026))
+    except (ValueError, TypeError):
+        anio = 2026
+
+    cache_key = f'pac_oc_stats_{anio}'
+    data = cache.get(cache_key)
+    if not data:
+        data = calcular_oc_stats(anio)
+        cache.set(cache_key, data, timeout=300)
+    return Response(data)
