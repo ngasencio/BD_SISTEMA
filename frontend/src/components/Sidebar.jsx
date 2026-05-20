@@ -24,6 +24,7 @@ export default function Sidebar() {
         finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas'),
     });
     const isOCv2 = path.startsWith('/ordenes-compra-v2');
+    const pacTab = path === '/pac' ? (new URLSearchParams(location.search).get('tab') || 'indicadores') : null;
 
     const handleLogout = () => {
         logout();
@@ -103,11 +104,25 @@ export default function Sidebar() {
                             </div>
                             <div className="nav-mod-items" style={{ display: openMods.pac ? 'block' : 'none' }}>
                                 <div
-                                    className={`nav-item ${path === '/pac' && !path.includes('#') ? 'active' : ''}`}
-                                    onClick={() => goTo('/pac', 'abast', 'pac')}
+                                    className={`nav-item ${pacTab === 'indicadores' ? 'active' : ''}`}
+                                    onClick={() => goTo('/pac?tab=indicadores', 'abast', 'pac')}
                                 >
                                     <span>📊</span>
-                                    <span className="nav-item-text">Dashboard PAC</span>
+                                    <span className="nav-item-text">Indicadores Res.188</span>
+                                </div>
+                                <div
+                                    className={`nav-item ${pacTab === 'ordenes' ? 'active' : ''}`}
+                                    onClick={() => goTo('/pac?tab=ordenes', 'abast', 'pac')}
+                                >
+                                    <span>🛍️</span>
+                                    <span className="nav-item-text">Órdenes de Compra</span>
+                                </div>
+                                <div
+                                    className={`nav-item ${pacTab === 'informe' ? 'active' : ''}`}
+                                    onClick={() => goTo('/pac?tab=informe', 'abast', 'pac')}
+                                >
+                                    <span>🖨️</span>
+                                    <span className="nav-item-text">Informe PDF</span>
                                 </div>
                             </div>
                         </div>

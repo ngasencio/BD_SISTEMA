@@ -173,11 +173,14 @@ def calcular_indicadores_res188(anio=2026):
 
 def calcular_oc_stats(anio=2026):
     """
-    Estadísticas de OC para los paneles del tab Órdenes de Compra.
+    Estadísticas de OC para los 8 paneles del tab Órdenes de Compra.
+    Cubre: Resumen, Estado, PAC, Enlace, LeadTime, Monetario, Histórico.
+    Usa .extra() para extracciones de fecha (compatibilidad MariaDB/Django).
     """
     from .models import OrdenCompra
 
     oc_qs = OrdenCompra.objects.filter(FechaEnvio__year=anio)
+    oc_nc = oc_qs.exclude(EstadoOC='Cancelada')  # no canceladas
 
     # ── Resumen general ──
     resumen = oc_qs.aggregate(
@@ -214,43 +217,339 @@ def calcular_oc_stats(anio=2026):
         .order_by('-monto')
     )
 
-    # ── Evolución mensual ──
+    # ── Evolución mensual (total) ──
     evolucion_mensual = list(
-        oc_qs.exclude(EstadoOC='Cancelada')
+        oc_nc
         .extra(select={'mes': "MONTH(FechaEnvio)"})
         .values('mes')
         .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
         .order_by('mes')
     )
 
-    # ── Lead time (días creación → aceptación) ──
-    oc_con_fechas = oc_qs.exclude(
-        FechaAceptacion__isnull=True
-    ).exclude(FechaCreacion__isnull=True)
-
-    lead_times = list(
-        oc_con_fechas.extra(
-            select={'dias': "DATEDIFF(FechaAceptacion, FechaCreacion)"}
-        ).values('C_Unidad', 'dias').order_by('C_Unidad')
+    # ── Top proveedores ──
+    top_proveedores = list(
+        oc_nc
+        .values('P_Nombre', 'P_Rut')
+        .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
+        .order_by('-monto')[:15]
     )
-    # Promedio por unidad
+
+    # ════════════════════════════════════════════════
+    # RESUMEN GENERAL: evolución mensual por EnlacePAC
+    # ════════════════════════════════════════════════
+    evol_enlace_raw = (
+        oc_nc
+        .extra(select={'mes': "MONTH(FechaEnvio)"})
+        .values('mes', 'EnlacePAC')
+        .annotate(monto=Sum('TotalNeto'))
+        .order_by('mes')
+    )
+    evol_map = {}
+    for r in evol_enlace_raw:
+        m = r['mes']
+        if m not in evol_map:
+            evol_map[m] = {'mes': m, 'enlazada': 0.0, 'no_enlazada': 0.0}
+        v = float(r['monto'] or 0)
+        if r['EnlacePAC'] == 'Enlazada':
+            evol_map[m]['enlazada'] = v
+        else:
+            evol_map[m]['no_enlazada'] += v
+    evolucion_enlace = sorted(evol_map.values(), key=lambda x: x['mes'])
+
+    # Por TipoOCInterno con split Enlazada/No Enlazada
+    tipo_int_raw = (
+        oc_nc
+        .values('TipoOCInterno', 'EnlacePAC')
+        .annotate(monto=Sum('TotalNeto'), cantidad=Count('codigo_oc'))
+        .order_by('TipoOCInterno')
+    )
+    tipo_int_map = {}
+    for r in tipo_int_raw:
+        t = r['TipoOCInterno'] or 'Sin Clasificar'
+        if t not in tipo_int_map:
+            tipo_int_map[t] = {'tipo': t, 'enlazada': 0.0, 'no_enlazada': 0.0, 'total': 0.0, 'cantidad': 0}
+        v = float(r['monto'] or 0)
+        tipo_int_map[t]['total'] += v
+        tipo_int_map[t]['cantidad'] += r['cantidad']
+        if r['EnlacePAC'] == 'Enlazada':
+            tipo_int_map[t]['enlazada'] += v
+        else:
+            tipo_int_map[t]['no_enlazada'] += v
+    por_tipo_interno = sorted(tipo_int_map.values(), key=lambda x: x['total'], reverse=True)
+
+    # ════════════════════════════════════════════════
+    # ESTADO OC: pendientes por antigüedad
+    # ════════════════════════════════════════════════
+    pendientes_qs = oc_qs.exclude(EstadoOC__in=['Recepción Conforme', 'Cancelada'])
+    rc_count = oc_qs.filter(EstadoOC='Recepción Conforme').count()
+    pend_count = pendientes_qs.count()
+    pend_monto = float(pendientes_qs.aggregate(t=Sum('TotalNeto'))['t'] or 0)
+
+    pend_con_dias = list(
+        pendientes_qs.exclude(FechaEnvio__isnull=True)
+        .extra(select={'dias': "COALESCE(GREATEST(0, DATEDIFF(CURDATE(), FechaEnvio)), 0)"})
+        .values('codigo_oc', 'DescripcionTipoOC', 'EstadoOC', 'P_Nombre',
+                'FechaEnvio', 'TotalNeto', 'LinkMP', 'dias')
+    )
+    pend_con_dias.sort(key=lambda x: int(x['dias'] or 0), reverse=True)
+    buckets = {'0-7': 0, '8-15': 0, '16-30': 0, '31-60': 0, '61-90': 0, '>90': 0}
+    critico = atento = normal = 0
+    for r in pend_con_dias:
+        d = int(r['dias'] or 0)
+        if d <= 7:
+            buckets['0-7'] += 1; normal += 1
+        elif d <= 15:
+            buckets['8-15'] += 1; normal += 1
+        elif d <= 30:
+            buckets['16-30'] += 1; normal += 1
+        elif d <= 60:
+            buckets['31-60'] += 1; atento += 1
+        elif d <= 90:
+            buckets['61-90'] += 1; critico += 1
+        else:
+            buckets['>90'] += 1; critico += 1
+
+    pendientes_edad = [{'rango': k, 'cantidad': v} for k, v in buckets.items()]
+    pendientes_tabla = [
+        {
+            'codigo_oc': r['codigo_oc'],
+            'descripcion_tipo': r['DescripcionTipoOC'] or '',
+            'estado': r['EstadoOC'] or '',
+            'proveedor': r['P_Nombre'] or '',
+            'fecha_envio': str(r['FechaEnvio'])[:10] if r['FechaEnvio'] else '',
+            'total_neto': float(r['TotalNeto'] or 0),
+            'link_mp': r['LinkMP'] or '',
+            'dias_pend': int(r['dias'] or 0),
+        }
+        for r in pend_con_dias[:50]
+    ]
+
+    pendientes_evol = list(
+        pendientes_qs.exclude(FechaEnvio__isnull=True)
+        .extra(select={'mes': "MONTH(FechaEnvio)"})
+        .values('mes')
+        .annotate(cantidad=Count('codigo_oc'))
+        .order_by('mes')
+    )
+
+    # ════════════════════════════════════════════════
+    # ANÁLISIS PAC: semestral + no enlazadas
+    # ════════════════════════════════════════════════
+    oc_enlazada = oc_nc.filter(EnlacePAC='Enlazada')
+    oc_no_enlazada = oc_nc.filter(EnlacePAC='No Enlazada')
+
+    pac_semestral = {
+        's1_enlazada': float(oc_enlazada.filter(FechaEnvio__month__lte=6).aggregate(t=Sum('TotalNeto'))['t'] or 0),
+        's2_enlazada': float(oc_enlazada.filter(FechaEnvio__month__gte=7).aggregate(t=Sum('TotalNeto'))['t'] or 0),
+        's1_no_enlazada': float(oc_no_enlazada.filter(FechaEnvio__month__lte=6).aggregate(t=Sum('TotalNeto'))['t'] or 0),
+        's2_no_enlazada': float(oc_no_enlazada.filter(FechaEnvio__month__gte=7).aggregate(t=Sum('TotalNeto'))['t'] or 0),
+    }
+
+    no_enlazadas_tc = list(
+        oc_no_enlazada.values('TipoCompraInterna')
+        .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
+        .order_by('-monto')
+    )
+    no_enlazadas_ti = list(
+        oc_no_enlazada.values('TipoOCInterno')
+        .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
+        .order_by('-monto')
+    )
+
+    # ════════════════════════════════════════════════
+    # OPORTUNIDAD ENLACE
+    # ════════════════════════════════════════════════
+    oc_corregibles = oc_no_enlazada.exclude(CodigoLicitacion='').exclude(CodigoLicitacion__isnull=True)
+    top_lic = list(
+        oc_corregibles.values('CodigoLicitacion')
+        .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
+        .order_by('-cantidad')[:10]
+    )
+    lic_unicas = oc_corregibles.values('CodigoLicitacion').distinct().count()
+    corregibles_count = oc_corregibles.count()
+    no_enlazadas_tabla = list(
+        oc_corregibles.values(
+            'codigo_oc', 'CodigoLicitacion', 'DescripcionTipoOC',
+            'P_Nombre', 'TotalNeto', 'FechaEnvio', 'LinkMP'
+        ).order_by('-TotalNeto')[:50]
+    )
+
+    # ════════════════════════════════════════════════
+    # LEAD TIME
+    # ════════════════════════════════════════════════
+    oc_ce_raw = list(
+        oc_nc.exclude(FechaCreacion__isnull=True).exclude(FechaEnvio__isnull=True)
+        .extra(select={'dias_ce': "COALESCE(GREATEST(0, DATEDIFF(FechaEnvio, FechaCreacion)), 0)"})
+        .values('codigo_oc', 'DescripcionTipoOC', 'P_Nombre',
+                'FechaCreacion', 'FechaEnvio', 'FechaAceptacion', 'TotalNeto', 'dias_ce')
+    )
+    for r in oc_ce_raw:
+        r['dias_ce'] = int(r['dias_ce'] or 0)
+    oc_ea_map = {
+        r['codigo_oc']: int(r['dias_ea'] or 0)
+        for r in list(
+            oc_nc.exclude(FechaEnvio__isnull=True).exclude(FechaAceptacion__isnull=True)
+            .extra(select={'dias_ea': "COALESCE(GREATEST(0, DATEDIFF(FechaAceptacion, FechaEnvio)), 0)"})
+            .values('codigo_oc', 'dias_ea')
+        )
+    }
+
+    def lt_bucket(d):
+        if d is None:
+            return None
+        if d <= 3: return '0-3'
+        elif d <= 7: return '4-7'
+        elif d <= 14: return '8-14'
+        elif d <= 30: return '15-30'
+        elif d <= 60: return '31-60'
+        else: return '>60'
+
+    lt_ce_cnt = defaultdict(int)
+    lt_ea_cnt = defaultdict(int)
+    lt_modal_ce = defaultdict(list)
+    lt_modal_ea = defaultdict(list)
+
+    for r in oc_ce_raw:
+        b = lt_bucket(r['dias_ce'])
+        if b:
+            lt_ce_cnt[b] += 1
+        ea = oc_ea_map.get(r['codigo_oc'])
+        if ea is not None:
+            b_ea = lt_bucket(ea)
+            if b_ea:
+                lt_ea_cnt[b_ea] += 1
+        modal = r['DescripcionTipoOC'] or 'Sin tipo'
+        lt_modal_ce[modal].append(r['dias_ce'] or 0)
+        if ea is not None:
+            lt_modal_ea[modal].append(ea)
+
+    lt_rangos = ['0-3', '4-7', '8-14', '15-30', '31-60', '>60']
+    lt_ce_distribucion = [{'rango': rng, 'cantidad': lt_ce_cnt[rng]} for rng in lt_rangos]
+    lt_ea_distribucion = [{'rango': rng, 'cantidad': lt_ea_cnt[rng]} for rng in lt_rangos]
+    lt_por_modalidad = sorted([
+        {
+            'modalidad': k,
+            'avg_ce': round(sum(lt_modal_ce[k]) / len(lt_modal_ce[k]), 1) if lt_modal_ce[k] else 0,
+            'avg_ea': round(sum(lt_modal_ea[k]) / len(lt_modal_ea[k]), 1) if lt_modal_ea[k] else 0,
+            'cantidad': len(lt_modal_ce[k]),
+        }
+        for k in lt_modal_ce
+    ], key=lambda x: x['cantidad'], reverse=True)
+
+    all_ce_vals = [r['dias_ce'] or 0 for r in oc_ce_raw]
+    all_ea_vals = [v for v in oc_ea_map.values() if v is not None]
+    avg_ce = round(sum(all_ce_vals) / len(all_ce_vals), 1) if all_ce_vals else 0
+    avg_ea = round(sum(all_ea_vals) / len(all_ea_vals), 1) if all_ea_vals else 0
+
+    lt_tabla = [
+        {
+            'codigo_oc': r['codigo_oc'],
+            'descripcion_tipo': r['DescripcionTipoOC'] or '',
+            'proveedor': r['P_Nombre'] or '',
+            'fecha_creacion': str(r['FechaCreacion'])[:10] if r['FechaCreacion'] else '',
+            'fecha_envio': str(r['FechaEnvio'])[:10] if r['FechaEnvio'] else '',
+            'fecha_aceptacion': str(r['FechaAceptacion'])[:10] if r['FechaAceptacion'] else '',
+            'lt_ce': r['dias_ce'] or 0,
+            'lt_ea': oc_ea_map.get(r['codigo_oc']) or 0,
+            'total_neto': float(r['TotalNeto'] or 0),
+        }
+        for r in oc_ce_raw if (r['dias_ce'] or 0) > 10
+    ][:50]
+
+    # Lead time por unidad (legacy, mantenido para compatibilidad)
     lt_by_unidad = defaultdict(list)
-    for r in lead_times:
-        if r['dias'] is not None and r['dias'] >= 0:
-            lt_by_unidad[r['C_Unidad'] or 'Sin unidad'].append(r['dias'])
+    for r in oc_ce_raw:
+        ea = oc_ea_map.get(r['codigo_oc'])
+        total = (r['dias_ce'] or 0) + (ea or 0)
+        if total >= 0:
+            lt_by_unidad[r['DescripcionTipoOC'] or 'Sin tipo'].append(total)
     lead_time_stats = [
         {'unidad': u, 'avg_dias': round(sum(v) / len(v), 1), 'n': len(v)}
         for u, v in lt_by_unidad.items()
     ]
     lead_time_stats.sort(key=lambda x: x['avg_dias'], reverse=True)
 
-    # ── Top proveedores ──
-    top_proveedores = list(
-        oc_qs.exclude(EstadoOC='Cancelada')
-        .values('P_Nombre', 'P_Rut')
-        .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
-        .order_by('-monto')[:15]
+    # ════════════════════════════════════════════════
+    # ANÁLISIS MONETARIO
+    # ════════════════════════════════════════════════
+    monto_rc = float(oc_qs.filter(EstadoOC='Recepción Conforme').aggregate(t=Sum('TotalNeto'))['t'] or 0)
+    monto_cancelado = float(oc_qs.filter(EstadoOC='Cancelada').aggregate(t=Sum('TotalNeto'))['t'] or 0)
+    monto_pendiente = float(pendientes_qs.aggregate(t=Sum('TotalNeto'))['t'] or 0)
+
+    por_forma_pago = list(
+        oc_nc.values('DescripcionFormaPago')
+        .annotate(monto=Sum('TotalNeto'), cantidad=Count('codigo_oc'))
+        .order_by('-monto')
     )
+    por_despacho = list(
+        oc_nc.values('DescripcionDespacho')
+        .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
+        .order_by('-cantidad')
+    )
+    por_moneda = list(
+        oc_nc.values('DescripcionMoneda')
+        .annotate(monto=Sum('TotalNeto'), cantidad=Count('codigo_oc'))
+        .order_by('-monto')
+    )
+    por_modalidad_monto = list(
+        oc_nc.values('DescripcionTipoOC')
+        .annotate(monto=Sum('TotalNeto'), cantidad=Count('codigo_oc'))
+        .order_by('-monto')
+    )
+
+    # ════════════════════════════════════════════════
+    # COMPARATIVO HISTÓRICO (todos los años)
+    # ════════════════════════════════════════════════
+    hist_qs = OrdenCompra.objects.exclude(EstadoOC='Cancelada').exclude(FechaEnvio__isnull=True)
+
+    hist_anual_raw = list(
+        hist_qs
+        .extra(select={'year': "YEAR(FechaEnvio)"})
+        .values('year')
+        .annotate(total_oc=Count('codigo_oc'), monto_total=Sum('TotalNeto'))
+        .order_by('year')
+    )
+    historico_anual = [
+        {'anio': r['year'], 'total_oc': r['total_oc'], 'monto_total': float(r['monto_total'] or 0)}
+        for r in hist_anual_raw if r['year']
+    ]
+
+    hist_modal_raw = list(
+        hist_qs
+        .extra(select={'year': "YEAR(FechaEnvio)"})
+        .values('year', 'DescripcionTipoOC')
+        .annotate(monto=Sum('TotalNeto'), cantidad=Count('codigo_oc'))
+        .order_by('year')
+    )
+    historico_modalidad = [
+        {
+            'anio': r['year'],
+            'modalidad': r['DescripcionTipoOC'] or 'Sin tipo',
+            'monto': float(r['monto'] or 0),
+            'cantidad': r['cantidad'],
+        }
+        for r in hist_modal_raw if r['year']
+    ]
+
+    hist_sem_raw = list(
+        hist_qs
+        .extra(select={'year': "YEAR(FechaEnvio)", 'mes': "MONTH(FechaEnvio)"})
+        .values('year', 'mes')
+        .annotate(monto=Sum('TotalNeto'), cantidad=Count('codigo_oc'))
+        .order_by('year', 'mes')
+    )
+    hist_sem_map = defaultdict(lambda: {'s1_monto': 0.0, 's2_monto': 0.0, 's1_cantidad': 0, 's2_cantidad': 0})
+    for r in hist_sem_raw:
+        a = r['year']
+        mv = float(r['monto'] or 0)
+        nv = r['cantidad'] or 0
+        if (r['mes'] or 0) <= 6:
+            hist_sem_map[a]['s1_monto'] += mv
+            hist_sem_map[a]['s1_cantidad'] += nv
+        else:
+            hist_sem_map[a]['s2_monto'] += mv
+            hist_sem_map[a]['s2_cantidad'] += nv
+    historico_semestral = [{'anio': k, **v} for k, v in sorted(hist_sem_map.items())]
 
     return {
         'anio': anio,
@@ -258,6 +557,17 @@ def calcular_oc_stats(anio=2026):
             'total_oc': resumen['total'] or 0,
             'monto_total': float(resumen['monto_total'] or 0),
             'monto_bruto': float(resumen['monto_bruto'] or 0),
+            'rc_count': rc_count,
+            'pendientes_count': pend_count,
+            'pendientes_monto': pend_monto,
+            'critico': critico,
+            'atento': atento,
+            'normal': normal,
+            'monto_rc': monto_rc,
+            'monto_cancelado': monto_cancelado,
+            'monto_pendiente': monto_pendiente,
+            'avg_lt_ce': avg_ce,
+            'avg_lt_ea': avg_ea,
         },
         'por_estado': [
             {'estado': r['EstadoOC'], 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
@@ -286,4 +596,137 @@ def calcular_oc_stats(anio=2026):
              'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
             for r in top_proveedores
         ],
+        # ── Nuevos campos ──
+        'evolucion_enlace': evolucion_enlace,
+        'por_tipo_interno': por_tipo_interno,
+        'pendientes_edad': pendientes_edad,
+        'pendientes_evolucion': [{'mes': r['mes'], 'cantidad': r['cantidad']} for r in pendientes_evol],
+        'pendientes_tabla': pendientes_tabla,
+        'pac_semestral': pac_semestral,
+        'no_enlazadas_tipo_compra': [
+            {'tipo_compra': r['TipoCompraInterna'] or 'Sin tipo', 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
+            for r in no_enlazadas_tc
+        ],
+        'no_enlazadas_tipo_interno': [
+            {'tipo_interno': r['TipoOCInterno'] or 'Sin tipo', 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
+            for r in no_enlazadas_ti
+        ],
+        'oportunidades_enlace': {
+            'top_licitaciones': [
+                {'codigo_licitacion': r['CodigoLicitacion'], 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
+                for r in top_lic
+            ],
+            'lic_unicas': lic_unicas,
+            'corregibles': corregibles_count,
+        },
+        'no_enlazadas_tabla': [
+            {
+                'codigo_oc': r['codigo_oc'],
+                'codigo_licitacion': r['CodigoLicitacion'] or '',
+                'descripcion_tipo': r['DescripcionTipoOC'] or '',
+                'proveedor': r['P_Nombre'] or '',
+                'total_neto': float(r['TotalNeto'] or 0),
+                'fecha_envio': str(r['FechaEnvio'])[:10] if r['FechaEnvio'] else '',
+                'link_mp': r['LinkMP'] or '',
+            }
+            for r in no_enlazadas_tabla
+        ],
+        'lt_ce_distribucion': lt_ce_distribucion,
+        'lt_ea_distribucion': lt_ea_distribucion,
+        'lt_por_modalidad': lt_por_modalidad,
+        'lt_tabla': lt_tabla,
+        'por_forma_pago': [
+            {'forma_pago': r['DescripcionFormaPago'] or 'Sin dato', 'monto': float(r['monto'] or 0), 'cantidad': r['cantidad']}
+            for r in por_forma_pago
+        ],
+        'por_despacho': [
+            {'despacho': r['DescripcionDespacho'] or 'Sin dato', 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
+            for r in por_despacho
+        ],
+        'por_moneda': [
+            {'moneda': r['DescripcionMoneda'] or 'Sin dato', 'monto': float(r['monto'] or 0), 'cantidad': r['cantidad']}
+            for r in por_moneda
+        ],
+        'por_modalidad_monto': [
+            {'modalidad': r['DescripcionTipoOC'] or 'Sin tipo', 'monto': float(r['monto'] or 0), 'cantidad': r['cantidad']}
+            for r in por_modalidad_monto
+        ],
+        'historico_anual': historico_anual,
+        'historico_semestral': historico_semestral,
+        'historico_modalidad': historico_modalidad,
+    }
+
+
+def calcular_oc_productos(anio=2026):
+    """
+    Estadísticas de productos (DetalleOrdenCompra) para el tab Análisis Productos.
+    """
+    from .models import DetalleOrdenCompra, OrdenCompra
+
+    oc_ids = list(OrdenCompra.objects.filter(FechaEnvio__year=anio).values_list('codigo_oc', flat=True))
+    det_qs = DetalleOrdenCompra.objects.filter(orden_compra_id__in=oc_ids)
+
+    agg = det_qs.aggregate(
+        unique_prods=Count('CodigoProducto', distinct=True),
+        total_monto=Sum('TotalLinea'),
+        oc_count=Count('orden_compra', distinct=True),
+    )
+
+    top_categorias = list(
+        det_qs.values('Categoria')
+        .annotate(monto=Sum('TotalLinea'), cantidad=Count('id'))
+        .order_by('-monto')[:10]
+    )
+    top_productos = list(
+        det_qs.values('Producto')
+        .annotate(cantidad=Count('id'), monto=Sum('TotalLinea'))
+        .order_by('-cantidad')[:10]
+    )
+
+    oc_td_ids = list(OrdenCompra.objects.filter(FechaEnvio__year=anio, TipoOC='TD').values_list('codigo_oc', flat=True))
+    top_td = list(
+        DetalleOrdenCompra.objects.filter(orden_compra_id__in=oc_td_ids)
+        .values('Producto')
+        .annotate(cantidad=Count('id'), monto=Sum('TotalLinea'))
+        .order_by('-monto')[:10]
+    )
+
+    # Top 5 categorías × modalidad (gráfico apilado)
+    top5_cats = [r['Categoria'] for r in top_categorias[:5]]
+    oc_modal_map = dict(OrdenCompra.objects.filter(codigo_oc__in=oc_ids).values_list('codigo_oc', 'DescripcionTipoOC'))
+    cat_modal_raw = list(
+        det_qs.filter(Categoria__in=top5_cats)
+        .values('Categoria', 'orden_compra_id')
+        .annotate(monto=Sum('TotalLinea'))
+    )
+    cat_modal_agg = defaultdict(lambda: defaultdict(float))
+    for r in cat_modal_raw:
+        modal = oc_modal_map.get(r['orden_compra_id']) or 'Sin tipo'
+        cat_modal_agg[r['Categoria'] or 'Sin categoría'][modal] += float(r['monto'] or 0)
+
+    por_categoria_modalidad = [
+        {'categoria': cat, 'modalidades': dict(mods)}
+        for cat, mods in cat_modal_agg.items()
+    ]
+
+    return {
+        'anio': anio,
+        'resumen': {
+            'unique_productos': agg['unique_prods'] or 0,
+            'total_lineas_monto': float(agg['total_monto'] or 0),
+            'oc_con_detalle': agg['oc_count'] or 0,
+        },
+        'top_categorias': [
+            {'categoria': r['Categoria'] or 'Sin categoría', 'monto': float(r['monto'] or 0), 'cantidad': r['cantidad']}
+            for r in top_categorias
+        ],
+        'top_productos': [
+            {'producto': r['Producto'] or 'Sin nombre', 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
+            for r in top_productos
+        ],
+        'top_td': [
+            {'producto': r['Producto'] or 'Sin nombre', 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
+            for r in top_td
+        ],
+        'por_categoria_modalidad': por_categoria_modalidad,
     }

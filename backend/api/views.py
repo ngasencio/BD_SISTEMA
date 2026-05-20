@@ -379,7 +379,7 @@ def pac_indicadores_view(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def pac_oc_stats_view(request):
-    """Estadísticas de OC para los paneles del tab Órdenes de Compra. Cache 5min."""
+    """Estadísticas de OC para los 8 paneles del tab Órdenes de Compra. Cache 5min."""
     from .services import calcular_oc_stats
 
     try:
@@ -387,9 +387,28 @@ def pac_oc_stats_view(request):
     except (ValueError, TypeError):
         anio = 2026
 
-    cache_key = f'pac_oc_stats_{anio}'
+    cache_key = f'pac_oc_stats_v4_{anio}'
     data = cache.get(cache_key)
     if not data:
         data = calcular_oc_stats(anio)
+        cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_oc_productos_view(request):
+    """Estadísticas de DetalleOrdenCompra para el tab Análisis Productos. Cache 5min."""
+    from .services import calcular_oc_productos
+
+    try:
+        anio = int(request.GET.get('anio', 2026))
+    except (ValueError, TypeError):
+        anio = 2026
+
+    cache_key = f'pac_oc_productos_{anio}'
+    data = cache.get(cache_key)
+    if not data:
+        data = calcular_oc_productos(anio)
         cache.set(cache_key, data, timeout=300)
     return Response(data)

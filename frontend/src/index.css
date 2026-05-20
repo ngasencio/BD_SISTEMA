@@ -4856,16 +4856,43 @@ select.boleta-input {
 
 /* Sub-tab bar (OC paneles) */
 .pac-sub-tabs {
-  display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 16px;
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
+  justify-content: center;
 }
 .pac-sub-tab-btn {
-  padding: 5px 12px; border: 1.5px solid #c8d3de;
+  padding: 6px 14px; border: 1.5px solid #c8d3de;
   border-radius: 20px; cursor: pointer;
-  font-family: 'Outfit', sans-serif; font-size: 11.5px; font-weight: 600;
+  font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 600;
   background: #fff; color: #7a8899; transition: all .2s;
 }
-.pac-sub-tab-btn:hover { border-color: #006FB3; color: #006FB3; }
-.pac-sub-tab-btn.active { background: #006FB3; color: #fff; border-color: #006FB3; }
+.pac-sub-tab-btn:hover { border-color: #006FB3; color: #006FB3; background: #f0f7ff; }
+.pac-sub-tab-btn.active { background: #006FB3; color: #fff; border-color: #006FB3; box-shadow: 0 2px 8px rgba(0,111,179,.25); }
+
+/* ─── Tablas modernas PAC ─── */
+.pac-mt-wrap { background:#fff; border-radius:10px; border:1px solid #ecf0f5; overflow:hidden; box-shadow:0 1px 8px rgba(11,20,38,.06); }
+.pac-mt-head { display:flex; align-items:center; justify-content:space-between; padding:13px 16px 10px; border-bottom:1px solid #ecf0f5; flex-wrap:wrap; gap:8px; }
+.pac-mt-title { font-weight:700; font-size:13px; font-family:'Outfit',sans-serif; color:#1a2233; }
+.pac-mt-count { font-size:11px; color:#7a8899; background:#f5f8fc; border-radius:10px; padding:2px 8px; }
+.pac-mt-search { display:flex; align-items:center; gap:5px; background:#f5f8fc; border:1.5px solid #e0e7ef; border-radius:7px; padding:5px 10px; }
+.pac-mt-search input { border:none; background:transparent; outline:none; font-size:12px; color:#3d4a5c; width:180px; }
+.pac-mt-scroll { max-height:360px; overflow-y:auto; }
+.pac-mt { width:100%; border-collapse:collapse; font-size:12px; }
+.pac-mt thead th { position:sticky; top:0; z-index:1; background:#f5f8fc; padding:8px 12px; text-align:left; font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:#7a8899; border-bottom:1px solid #ecf0f5; white-space:nowrap; cursor:pointer; user-select:none; }
+.pac-mt thead th:hover { background:#eef3f8; color:#006FB3; }
+.pac-mt tbody tr { border-bottom:1px solid #f5f7fa; transition:background .12s; }
+.pac-mt tbody tr:hover { background:#f0f7ff !important; }
+.pac-mt tbody td { padding:7px 12px; color:#2d3748; vertical-align:middle; }
+.pac-row-critico { background:rgba(254,101,101,.07); }
+.pac-row-atento  { background:rgba(245,158,11,.06); }
+.pac-badge-dias  { display:inline-block; padding:2px 9px; border-radius:12px; font-size:11px; font-weight:700; }
+.pac-badge-critico { background:#fee2e2; color:#dc2626; }
+.pac-badge-atento  { background:#fef3c7; color:#d97706; }
+.pac-badge-normal  { background:#dcfce7; color:#16a34a; }
+.pac-badge-estado  { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:600; background:#e0f2fe; color:#0369a1; white-space:nowrap; }
+.pac-badge-lic     { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+.pac-btn-mp        { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:6px; background:#006FB3; color:#fff; font-size:10px; font-weight:700; text-decoration:none; border:none; cursor:pointer; transition:opacity .15s; }
+.pac-btn-mp:hover  { opacity:.8; }
+.pac-empty-row td  { text-align:center; color:#aaa; padding:24px; font-size:12px; }
 
 /* Score banner */
 .pac-score-banner {

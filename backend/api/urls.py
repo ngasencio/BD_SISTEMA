@@ -10,6 +10,7 @@ from .views import (
     ordenes_compra_raw_all,
     PlanerPACViewSet, CompraAgilResumenViewSet, CompraAgilProductoViewSet,
     CompraAgilProveedorViewSet, pac_indicadores_view, pac_oc_stats_view,
+    pac_oc_productos_view,
 )
 
 router = DefaultRouter()
@@ -44,6 +45,7 @@ urlpatterns = [
     path('facturas/raw_all/', facturas_raw_all, name='facturas_raw_all'),
     path('pac/indicadores-res188/', pac_indicadores_view, name='pac_indicadores'),
     path('pac/oc-stats/', pac_oc_stats_view, name='pac_oc_stats'),
+    path('pac/oc-productos/', pac_oc_productos_view, name='pac_oc_productos'),
 
     # Router ViewSets
     path('', include(router.urls)),

@@ -6,6 +6,9 @@ export const getIndicadoresRes188 = (anio = 2026) =>
 export const getOCStats = (anio = 2026) =>
     apiClient.get('pac/oc-stats/', { params: { anio } });
 
+export const getOCProductos = (anio = 2026) =>
+    apiClient.get('pac/oc-productos/', { params: { anio } });
+
 export const getPlanerPAC = (params = {}) =>
     apiClient.get('planer-pac/', { params });
 

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { usePacDashboard } from '../hooks/usePacDashboard';
 import IndicadoresRes188Tab from './tabs/IndicadoresRes188Tab';
 import OrdenesCompraTab from './tabs/OrdenesCompraTab';
@@ -13,9 +14,13 @@ const TABS = [
 const ANIOS = [2024, 2025, 2026];
 
 export default function PacDashboardPage() {
-    const [tab, setTab] = useState('indicadores');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const tab = searchParams.get('tab') || 'indicadores';
     const [anio, setAnio] = useState(2026);
-    const { indicadores, ocStats, caResumen, loading, error, refresh } = usePacDashboard(anio);
+
+    const handleTabChange = (tabId) => setSearchParams({ tab: tabId }, { replace: true });
+
+    const { indicadores, ocStats, ocProductos, caResumen, loading, error, refresh } = usePacDashboard(anio);
 
     return (
         <div className="feature-page">
@@ -59,7 +64,7 @@ export default function PacDashboardPage() {
                             <button
                                 key={t.id}
                                 className={`pac-tab-btn ${tab === t.id ? 'active' : ''}`}
-                                onClick={() => setTab(t.id)}
+                                onClick={() => handleTabChange(t.id)}
                             >
                                 {t.label}
                             </button>
@@ -70,7 +75,7 @@ export default function PacDashboardPage() {
                         <IndicadoresRes188Tab indicadores={indicadores} caResumen={caResumen} />
                     )}
                     {tab === 'ordenes' && (
-                        <OrdenesCompraTab ocStats={ocStats} />
+                        <OrdenesCompraTab ocStats={ocStats} ocProductos={ocProductos} />
                     )}
                     {tab === 'informe' && (
                         <InformePDFTab indicadores={indicadores} ocStats={ocStats} anio={anio} />
