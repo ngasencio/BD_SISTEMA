@@ -94,10 +94,6 @@
 1057532-123-COT26;77.593.236-8;31201605;Masillas;Caja de Masilla tipo Uhu Patafix.;3;7416;22248
 1057532-123-COT26;77.593.236-8;55121606;Etiquetas autoadhesivas;Pack de Etiquetas adhesivas para distintivos.;1;15147;15147
 1057532-123-COT26;77.593.236-8;60121124;Papel kraft;Papel Kraft;20;4382;87640
-1057532-122-COT26;76.056.004-9;42182304;Sets o kits de pruebas psicodiagnósticas;CPS. Cuestionario de Personalidad situacional Kit de Corrección (25 hojas de respuestas, pin 25 usos);10;67899;678990
-1057532-122-COT26;76.056.004-9;42182304;Sets o kits de pruebas psicodiagnósticas;CompeTEA. Evaluación de competencias. Kit de Corrección (25 hojas de respuestas, pin 25 usos);22;67899;1493778
-1057532-122-COT26;76.056.004-9;42182304;Sets o kits de pruebas psicodiagnósticas;16 PF-5. Cuestionario Factorial de Personalidad. Juego completo (Manual, 10 cuadernillos, Kit corrección 25 usos);1;365462;365462
-1057532-122-COT26;76.056.004-9;42182304;Sets o kits de pruebas psicodiagnósticas;16 PF-5. Cuestionario Factorial de Personalidad. Kit de Corrección (25 hojas de respuestas, pin 25 usos);14;110672;1549408
 1057532-128-COT26;77.807.565-2;50192501;Sandwiches y canapés con relleno frescos;Sándwich de pan fresco tipo hallulla, con mantequilla y doble queso (sin bordes, no artesanales). Cada sándwich deberá ser entregado envuelto individualmente en papel alusa.;20;1250;25000
 1057532-128-COT26;77.807.565-2;50192801;Empanadas, tartas y pies frescos;kuchen tamaño para 20 personas;1;20000;20000
 1057532-128-COT26;77.807.565-2;52151502;Platos desechables domésticos;platos desechables chicos (18 cm diámetro aprox.);30;350;10500
@@ -14699,3 +14695,603 @@
 1057532-931-COT25;77.372.975-1;42311526;Vendajes de apósitos;Apósitos de Poliéster (Telfa), de acuerdo a requerimientos técnicos adjuntos. Se debe adjuntar obligatoriamente catálogo o ficha técnica para corroborar las especificaciones.;300;13000;3900000
 1057532-931-COT25;76.205.137-0;42311526;Vendajes de apósitos;Apósitos de Poliéster (Telfa), de acuerdo a requerimientos técnicos adjuntos. Se debe adjuntar obligatoriamente catálogo o ficha técnica para corroborar las especificaciones.;300;13990;4197000
 1057532-931-COT25;77.354.084-5;42311526;Vendajes de apósitos;Apósitos de Poliéster (Telfa), de acuerdo a requerimientos técnicos adjuntos. Se debe adjuntar obligatoriamente catálogo o ficha técnica para corroborar las especificaciones.;300;14990;4497000
+1057532-154-COT26;76.759.642-1;46171503;Juegos de cerraduras;Cerradura 9380 Oficina/dormitorio inoxidable, color plata, material  de acero;1;11560;11560
+1057532-154-COT26;76.759.642-1;53102504;Guantes o manoplas;Guantes de agarre Unisex, 2 Talla S, 2 talla M y 2 talla L;6;1264;7584
+1057532-154-COT26;76.759.642-1;15121802;Lubricantes anticorrosivos;Spray  WD-40 Anticorrosivo-aerosol 311g;2;6282;12564
+1057532-163-COT26;77.272.885-9;42182802;Básculas de bebé;Pesa Digital Pediátrica Balanza Bebés / Según especificaciones adjuntas;2;37815;75630
+1057532-163-COT26;77.272.885-9;52141802;Estufas domésticas;Calefactor por convección eléctrico / Según especificaciones adjuntas;2;33613;67226
+1057532-163-COT26;77.354.084-5;42182802;Básculas de bebé;Pesa Digital Pediátrica Balanza Bebés / Según especificaciones adjuntas;2;30000;60000
+1057532-163-COT26;77.354.084-5;52141802;Estufas domésticas;Calefactor por convección eléctrico / Según especificaciones adjuntas;2;60000;120000
+1057532-163-COT26;77.568.149-7;42182802;Básculas de bebé;Pesa Digital Pediátrica Balanza Bebés / Según especificaciones adjuntas;2;50000;100000
+1057532-163-COT26;77.568.149-7;52141802;Estufas domésticas;Calefactor por convección eléctrico / Según especificaciones adjuntas;2;50000;100000
+1057532-163-COT26;77.568.149-7;42182802;Básculas de bebé;Pesa Digital Pediátrica Balanza Bebés / Según especificaciones adjuntas;2;50000;100000
+1057532-163-COT26;77.568.149-7;52141802;Estufas domésticas;Calefactor por convección eléctrico / Según especificaciones adjuntas;2;50000;100000
+1057532-163-COT26;76.850.591-8;42182802;Básculas de bebé;Pesa Digital Pediátrica Balanza Bebés / Según especificaciones adjuntas;2;64900;129800
+1057532-163-COT26;76.850.591-8;52141802;Estufas domésticas;Calefactor por convección eléctrico / Según especificaciones adjuntas;2;49900;99800
+1057532-163-COT26;77.209.881-2;42182802;Básculas de bebé;Pesa Digital Pediátrica Balanza Bebés / Según especificaciones adjuntas;2;80598;161196
+1057532-163-COT26;77.209.881-2;52141802;Estufas domésticas;Calefactor por convección eléctrico / Según especificaciones adjuntas;2;78473;156946
+1057532-163-COT26;78.027.120-5;42182802;Básculas de bebé;Pesa Digital Pediátrica Balanza Bebés / Según especificaciones adjuntas;2;141240;282480
+1057532-163-COT26;78.027.120-5;52141802;Estufas domésticas;Calefactor por convección eléctrico / Según especificaciones adjuntas;2;105180;210360
+1057532-163-COT26;78.027.120-5;42182802;Básculas de bebé;Pesa Digital Pediátrica Balanza Bebés / Según especificaciones adjuntas;2;408000;816000
+1057532-163-COT26;78.027.120-5;52141802;Estufas domésticas;Calefactor por convección eléctrico / Según especificaciones adjuntas;2;105180;210360
+1057532-157-COT26;76.759.642-1;53111601;Zapatos de hombre;ZAPATOS DE SEGURIDAD N° 39 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;49265;49265
+1057532-157-COT26;76.759.642-1;53111601;Zapatos de hombre;ZAPATOS DE SEGURIDAD N° 42 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;49265;49265
+1057532-157-COT26;76.759.642-1;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 36 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;49265;49265
+1057532-157-COT26;76.759.642-1;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 38 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;49265;49265
+1057532-157-COT26;76.759.642-1;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 39 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;49265;49265
+1057532-157-COT26;78.129.445-4;53111601;Zapatos de hombre;ZAPATOS DE SEGURIDAD N° 39 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;60803;60803
+1057532-157-COT26;78.129.445-4;53111601;Zapatos de hombre;ZAPATOS DE SEGURIDAD N° 42 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;60803;60803
+1057532-157-COT26;78.129.445-4;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 36 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;60803;60803
+1057532-157-COT26;78.129.445-4;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 38 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;60803;60803
+1057532-157-COT26;78.129.445-4;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 39 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;60803;60803
+1057532-157-COT26;78.158.096-1;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 36 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;111827;111827
+1057532-157-COT26;78.158.096-1;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 38 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;111827;111827
+1057532-157-COT26;78.158.096-1;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 39 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;111827;111827
+1057532-157-COT26;78.158.096-1;53111601;Zapatos de hombre;ZAPATOS DE SEGURIDAD N° 39 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;44023;44023
+1057532-157-COT26;78.158.096-1;53111601;Zapatos de hombre;ZAPATOS DE SEGURIDAD N° 42 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;44023;44023
+1057532-157-COT26;76.888.386-6;53111601;Zapatos de hombre;ZAPATOS DE SEGURIDAD N° 39 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;82990;82990
+1057532-157-COT26;76.888.386-6;53111601;Zapatos de hombre;ZAPATOS DE SEGURIDAD N° 42 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;82990;82990
+1057532-157-COT26;76.888.386-6;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 36 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;82990;82990
+1057532-157-COT26;76.888.386-6;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 38 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;82990;82990
+1057532-157-COT26;76.888.386-6;53111602;Zapatos de mujer;ZAPATOS DE SEGURIDAD N° 39 / SEGÚN ESPECIFICACIONES ADJUNTAS. INDICAR MEDIDAS DE LONGITUD DE PIE PARA EVALUAR TALLA CORRECTA.;1;82990;82990
+1057532-122-COT26;76.056.004-9;42182304;Sets o kits de pruebas psicodiagnósticas;CPS. Cuestionario de Personalidad situacional Kit de Corrección (25 hojas de respuestas, pin 25 usos);10;67899;678990
+1057532-122-COT26;76.056.004-9;42182304;Sets o kits de pruebas psicodiagnósticas;CompeTEA. Evaluación de competencias. Kit de Corrección (25 hojas de respuestas, pin 25 usos);22;67899;1493778
+1057532-122-COT26;76.056.004-9;42182304;Sets o kits de pruebas psicodiagnósticas;16 PF-5. Cuestionario Factorial de Personalidad. Juego completo (Manual, 10 cuadernillos, Kit corrección 25 usos);1;365462;365462
+1057532-122-COT26;76.056.004-9;42182304;Sets o kits de pruebas psicodiagnósticas;16 PF-5. Cuestionario Factorial de Personalidad. Kit de Corrección (25 hojas de respuestas, pin 25 usos);14;110672;1549408
+1057532-169-COT26;76.183.249-2;82101901;Avisos en radio;Elaboración y difusión de avisos radiales Campaña Invierno 2026 de acuerdo a requerimientos técnicos adjuntos.;1;1200000;1200000
+1057532-169-COT26;78.321.973-5;82101901;Avisos en radio;Elaboración y difusión de avisos radiales Campaña Invierno 2026 de acuerdo a requerimientos técnicos adjuntos.;1;1728000;1728000
+1077241-10-COT26;77.684.461-6;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;49;98000
+1077241-10-COT26;77.684.461-6;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;49;98000
+1077241-10-COT26;77.684.461-6;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;49;98000
+1077241-10-COT26;77.780.159-7;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;69;138000
+1077241-10-COT26;77.780.159-7;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;49;98000
+1077241-10-COT26;77.780.159-7;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;39;78000
+1077241-10-COT26;88.248.700-8;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;57;114000
+1077241-10-COT26;88.248.700-8;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;46;92000
+1077241-10-COT26;88.248.700-8;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;56;112000
+1077241-10-COT26;13.732.983-2;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;56;112000
+1077241-10-COT26;13.732.983-2;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;56;112000
+1077241-10-COT26;13.732.983-2;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;56;112000
+1077241-10-COT26;77.566.418-5;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;67;134000
+1077241-10-COT26;77.566.418-5;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;75;150000
+1077241-10-COT26;77.566.418-5;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;67;134000
+1077241-10-COT26;77.802.011-4;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;70;140000
+1077241-10-COT26;77.802.011-4;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;70;140000
+1077241-10-COT26;77.802.011-4;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;70;140000
+1077241-10-COT26;77.585.800-1;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;73;146000
+1077241-10-COT26;77.585.800-1;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;71;142000
+1077241-10-COT26;77.585.800-1;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;70;140000
+1077241-10-COT26;76.713.021-K;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;80;160000
+1077241-10-COT26;76.713.021-K;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;60;120000
+1077241-10-COT26;76.713.021-K;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;80;160000
+1077241-10-COT26;16.951.092-K;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;105;210000
+1077241-10-COT26;16.951.092-K;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;53;106000
+1077241-10-COT26;16.951.092-K;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;72;144000
+1077241-10-COT26;6.060.811-3;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;85;170000
+1077241-10-COT26;6.060.811-3;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;85;170000
+1077241-10-COT26;6.060.811-3;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;85;170000
+1077241-10-COT26;13.404.248-6;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;85;170000
+1077241-10-COT26;13.404.248-6;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;100;200000
+1077241-10-COT26;13.404.248-6;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;100;200000
+1077241-10-COT26;76.805.650-1;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;97;194000
+1077241-10-COT26;76.805.650-1;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;96;192000
+1077241-10-COT26;76.805.650-1;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;97;194000
+1077241-10-COT26;78.727.750-0;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;140;280000
+1077241-10-COT26;78.727.750-0;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;101;202000
+1077241-10-COT26;78.727.750-0;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;114;228000
+1077241-10-COT26;78.239.046-5;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;123;246000
+1077241-10-COT26;78.239.046-5;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;123;246000
+1077241-10-COT26;78.239.046-5;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;123;246000
+1077241-10-COT26;77.181.967-2;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Técnica de Higiene"" Según Características Técnicas adjunta.";2000;300;600000
+1077241-10-COT26;77.181.967-2;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Anomalías Dentomaxilares"" Según Características Técnicas adjunta.";2000;300;600000
+1077241-10-COT26;77.181.967-2;82121507;Impresión de papelería o formularios comerciales;"Afiches ""Uso Seda Dental"" Según Características Técnicas adjunta.";2000;300;600000
+1057532-164-COT26;77.439.199-1;52141537;Olla eléctrica doméstica;Sartén eléctrico para ortesis: Sartén eléctrico para termoplástico y confección de ortesis. Superficie antiadherente. Medidas: 40 x 30 cm, Incluye tapa, indicar marca y adjuntar catálogo. Según especificaciones técnicas adjuntas.;1;67220;67220
+1057532-156-COT26;77.396.355-K;43221721;Equipo de comunicación de datos de radiofrecuencia;Antena Portátil VHF original para Radio Portátil marca Motorola EP450;2;14977;29954
+1057532-156-COT26;77.396.355-K;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original IMPRES Para Radio Portátil Motorola DGP8550;5;111700;558500
+1057532-156-COT26;77.396.355-K;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original para Radio Portátil marca Motorola EP350;2;59377;118754
+1057532-156-COT26;77.396.355-K;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original para Radio Portátil marca Motorola EP450;2;59377;118754
+1057532-156-COT26;77.396.355-K;43221721;Equipo de comunicación de datos de radiofrecuencia;Tapa original para conector programación de radio Portátil marca Motorola DEP570;5;5997;29985
+1057532-156-COT26;77.396.355-K;43221721;Equipo de comunicación de datos de radiofrecuencia;Tapa original para conector programación de radio Portátil marca Motorola DGP8550;5;5997;29985
+1057532-156-COT26;76.532.411-4;43221721;Equipo de comunicación de datos de radiofrecuencia;Antena Portátil VHF original para Radio Portátil marca Motorola EP450;2;14581;29162
+1057532-156-COT26;76.532.411-4;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original IMPRES Para Radio Portátil Motorola DGP8550;5;117987;589935
+1057532-156-COT26;76.532.411-4;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original para Radio Portátil marca Motorola EP350;2;60033;120066
+1057532-156-COT26;76.532.411-4;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original para Radio Portátil marca Motorola EP450;2;60033;120066
+1057532-156-COT26;76.532.411-4;43221721;Equipo de comunicación de datos de radiofrecuencia;Tapa original para conector programación de radio Portátil marca Motorola DEP570;5;4464;22320
+1057532-156-COT26;76.532.411-4;43221721;Equipo de comunicación de datos de radiofrecuencia;Tapa original para conector programación de radio Portátil marca Motorola DGP8550;5;4464;22320
+1057532-156-COT26;76.156.939-2;43221721;Equipo de comunicación de datos de radiofrecuencia;Antena Portátil VHF original para Radio Portátil marca Motorola EP450;2;12990;25980
+1057532-156-COT26;76.156.939-2;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original IMPRES Para Radio Portátil Motorola DGP8550;5;113990;569950
+1057532-156-COT26;76.156.939-2;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original para Radio Portátil marca Motorola EP350;2;57990;115980
+1057532-156-COT26;76.156.939-2;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original para Radio Portátil marca Motorola EP450;2;57990;115980
+1057532-156-COT26;76.156.939-2;43221721;Equipo de comunicación de datos de radiofrecuencia;Tapa original para conector programación de radio Portátil marca Motorola DEP570;5;7065;35325
+1057532-156-COT26;76.156.939-2;43221721;Equipo de comunicación de datos de radiofrecuencia;Tapa original para conector programación de radio Portátil marca Motorola DGP8550;5;31550;157750
+1057532-156-COT26;77.985.532-5;43221721;Equipo de comunicación de datos de radiofrecuencia;Antena Portátil VHF original para Radio Portátil marca Motorola EP450;2;17926;35852
+1057532-156-COT26;77.985.532-5;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original IMPRES Para Radio Portátil Motorola DGP8550;5;157281;786405
+1057532-156-COT26;77.985.532-5;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original para Radio Portátil marca Motorola EP350;2;79737;159474
+1057532-156-COT26;77.985.532-5;43221721;Equipo de comunicación de datos de radiofrecuencia;Batería original para Radio Portátil marca Motorola EP450;2;79737;159474
+1057532-156-COT26;77.985.532-5;43221721;Equipo de comunicación de datos de radiofrecuencia;Tapa original para conector programación de radio Portátil marca Motorola DEP570;5;4750;23750
+1057532-156-COT26;77.985.532-5;43221721;Equipo de comunicación de datos de radiofrecuencia;Tapa original para conector programación de radio Portátil marca Motorola DGP8550;5;37787;188935
+1057532-141-COT26;77.354.084-5;53131616;Cremas o lociones homeopáticas o naturales;Lanolina natural tubo 15 grs / Según especificaciones adjuntas;29;15000;435000
+1077241-6-COT26;76.217.441-3;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;220000;440000
+1077241-6-COT26;77.889.305-3;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;292000;584000
+1077241-6-COT26;77.071.344-7;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;345193;690386
+1077241-6-COT26;76.612.187-K;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;394350;788700
+1077241-6-COT26;76.850.591-8;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;399000;798000
+1077241-6-COT26;76.958.160-k;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;395500;791000
+1077241-6-COT26;78.123.126-6;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;428314;856628
+1077241-6-COT26;78.086.615-2;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;474000;948000
+1077241-6-COT26;78.195.329-6;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;488690;977380
+1077241-6-COT26;78.002.548-4;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;489000;978000
+1077241-6-COT26;76.499.211-3;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;490000;980000
+1077241-6-COT26;76.276.399-0;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;495000;990000
+1077241-6-COT26;76.850.591-8;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;499000;998000
+1077241-6-COT26;76.512.686-k;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;556000;1112000
+1077241-6-COT26;78.327.118-4;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;567080;1134160
+1077241-6-COT26;16.343.816-K;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;590000;1180000
+1077241-6-COT26;78.333.599-9;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;604827;1209654
+1077241-6-COT26;78.333.189-6;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;635112;1270224
+1077241-6-COT26;78.027.120-5;41111503;Básculas mecánicas;BALANZA MECANICA + TALLIMETRO TELESCOPICO / SEGÚN ESPECIFICACIONES ADJUNTAS;2;719820;1439640
+1057532-151-COT26;76.814.443-5;51142619;Alcohol aromático de amoniaco;Alcohol Gel sin enguaje al 70% 75ml;30;1400;42000
+1057532-151-COT26;76.814.443-5;53131609;Protector solar;Bloqueador Solar Fps 50+ 200 grs hipoalergénico;10;4800;48000
+1057532-151-COT26;78.045.809-7;51142619;Alcohol aromático de amoniaco;Alcohol Gel sin enguaje al 70% 75ml;30;826;24780
+1057532-151-COT26;78.045.809-7;53131609;Protector solar;Bloqueador Solar Fps 50+ 200 grs hipoalergénico;10;8235;82350
+1057532-151-COT26;77.943.232-7;51142619;Alcohol aromático de amoniaco;Alcohol Gel sin enguaje al 70% 75ml;30;1991;59730
+1057532-151-COT26;77.943.232-7;53131609;Protector solar;Bloqueador Solar Fps 50+ 200 grs hipoalergénico;10;8703;87030
+1057532-151-COT26;78.076.718-9;51142619;Alcohol aromático de amoniaco;Alcohol Gel sin enguaje al 70% 75ml;30;4190;125700
+1057532-151-COT26;78.076.718-9;53131609;Protector solar;Bloqueador Solar Fps 50+ 200 grs hipoalergénico;10;3192;31920
+1057532-151-COT26;78.109.855-8;51142619;Alcohol aromático de amoniaco;Alcohol Gel sin enguaje al 70% 75ml;30;2126;63780
+1057532-151-COT26;78.109.855-8;53131609;Protector solar;Bloqueador Solar Fps 50+ 200 grs hipoalergénico;10;10982;109820
+1057532-151-COT26;77.989.117-8;51142619;Alcohol aromático de amoniaco;Alcohol Gel sin enguaje al 70% 75ml;30;7888;236640
+1057532-151-COT26;77.989.117-8;53131609;Protector solar;Bloqueador Solar Fps 50+ 200 grs hipoalergénico;10;15663;156630
+1057532-174-COT26;78.129.445-4;53111602;Zapatos de mujer;"1 Calzado Seguridad, según eett  • Planta antideslizante  • Puntera de composite  • Dieléctricos  • Planta anti perforante  • Resistencia a hidrocarburos  • Resistencia al agua  • Antimicrobiano  •Calzado media caña""";1;55386;55386
+1057532-166-COT26;76.341.344-6;44121708;Marcadores;plumones de pizarra color negro;20;300;6000
+1057532-166-COT26;76.341.344-6;44121708;Marcadores;plumones de pizarra color azul;20;300;6000
+1057532-166-COT26;76.341.344-6;44121708;Marcadores;plumones de pizarra color rojo;20;300;6000
+1057532-166-COT26;76.341.344-6;14111610;Cartulina;carpeta de cartulina española;30;1000;30000
+1057532-166-COT26;76.341.344-6;31201517;Cinta para empaquetar;cintas masking tape 48 mm;30;1150;34500
+1057532-166-COT26;76.341.344-6;31201512;Cinta Transparente;cinta de embalaje;30;360;10800
+1057532-166-COT26;76.341.344-6;44121701;Lápiz pasta;Lápiz pasta azul. Caja de 50 unidades.;2;5700;11400
+1057532-166-COT26;76.341.344-6;60105704;Barras de pegamento libres de ácido;Pegamento en barra 21 gramos;30;400;12000
+1057532-166-COT26;76.341.344-6;44102001;Lámina para plastificar;Láminas para termolaminar tamaño carta (100 unidades);2;8500;17000
+1057532-166-COT26;76.341.344-6;12352310;Siliconas;Silicona líquida 250 ml.;15;2200;33000
+1057532-166-COT26;76.341.344-6;14111525;Papel multiuso;Carpeta de Papel volantín (10 pliegos);15;1100;16500
+1057532-166-COT26;76.341.344-6;60101722;Libretas de notas;Block de apuntes carta;30;1600;48000
+1057532-166-COT26;76.341.344-6;44121710;Tiza para escribir o accesorios;Tiza color blanca. Caja de 12 unidades;15;280;4200
+1057532-166-COT26;76.341.344-6;31201505;Cinta adhesiva de doble cara;Cinta doble contacto;15;1620;24300
+1057532-166-COT26;76.341.344-6;14111601;Papel, bolsas o cajas de regalo;Bolsas ecológicas colores 25x30x8 cm.;100;230;23000
+1057532-166-COT26;78.290.116-8;44121708;Marcadores;plumones de pizarra color negro;20;353;7060
+1057532-166-COT26;78.290.116-8;44121708;Marcadores;plumones de pizarra color azul;20;353;7060
+1057532-166-COT26;78.290.116-8;44121708;Marcadores;plumones de pizarra color rojo;20;353;7060
+1057532-166-COT26;78.290.116-8;14111610;Cartulina;carpeta de cartulina española;30;1045;31350
+1057532-166-COT26;78.290.116-8;31201517;Cinta para empaquetar;cintas masking tape 48 mm;30;1398;41940
+1057532-166-COT26;78.290.116-8;31201512;Cinta Transparente;cinta de embalaje;30;769;23070
+1057532-166-COT26;78.290.116-8;44121701;Lápiz pasta;Lápiz pasta azul. Caja de 50 unidades.;2;5300;10600
+1057532-166-COT26;78.290.116-8;60105704;Barras de pegamento libres de ácido;Pegamento en barra 21 gramos;30;416;12480
+1057532-166-COT26;78.290.116-8;44102001;Lámina para plastificar;Láminas para termolaminar tamaño carta (100 unidades);2;8322;16644
+1057532-166-COT26;78.290.116-8;12352310;Siliconas;Silicona líquida 250 ml.;15;1256;18840
+1057532-166-COT26;78.290.116-8;14111525;Papel multiuso;Carpeta de Papel volantín (10 pliegos);15;1115;16725
+1057532-166-COT26;78.290.116-8;60101722;Libretas de notas;Block de apuntes carta;30;1094;32820
+1057532-166-COT26;78.290.116-8;44121710;Tiza para escribir o accesorios;Tiza color blanca. Caja de 12 unidades;15;184;2760
+1057532-166-COT26;78.290.116-8;31201505;Cinta adhesiva de doble cara;Cinta doble contacto;15;558;8370
+1057532-166-COT26;78.290.116-8;14111601;Papel, bolsas o cajas de regalo;Bolsas ecológicas colores 25x30x8 cm.;100;655;65500
+1057532-166-COT26;77.399.254-1;44121708;Marcadores;plumones de pizarra color negro;20;397;7940
+1057532-166-COT26;77.399.254-1;44121708;Marcadores;plumones de pizarra color azul;20;397;7940
+1057532-166-COT26;77.399.254-1;44121708;Marcadores;plumones de pizarra color rojo;20;397;7940
+1057532-166-COT26;77.399.254-1;14111610;Cartulina;carpeta de cartulina española;30;1242;37260
+1057532-166-COT26;77.399.254-1;31201517;Cinta para empaquetar;cintas masking tape 48 mm;30;1606;48180
+1057532-166-COT26;77.399.254-1;31201512;Cinta Transparente;cinta de embalaje;30;405;12150
+1057532-166-COT26;77.399.254-1;44121701;Lápiz pasta;Lápiz pasta azul. Caja de 50 unidades.;2;8450;16900
+1057532-166-COT26;77.399.254-1;60105704;Barras de pegamento libres de ácido;Pegamento en barra 21 gramos;30;464;13920
+1057532-166-COT26;77.399.254-1;44102001;Lámina para plastificar;Láminas para termolaminar tamaño carta (100 unidades);2;10750;21500
+1057532-166-COT26;77.399.254-1;12352310;Siliconas;Silicona líquida 250 ml.;15;2010;30150
+1057532-166-COT26;77.399.254-1;14111525;Papel multiuso;Carpeta de Papel volantín (10 pliegos);15;1136;17040
+1057532-166-COT26;77.399.254-1;60101722;Libretas de notas;Block de apuntes carta;30;1715;51450
+1057532-166-COT26;77.399.254-1;44121710;Tiza para escribir o accesorios;Tiza color blanca. Caja de 12 unidades;15;268;4020
+1057532-166-COT26;77.399.254-1;31201505;Cinta adhesiva de doble cara;Cinta doble contacto;15;599;8985
+1057532-166-COT26;77.399.254-1;14111601;Papel, bolsas o cajas de regalo;Bolsas ecológicas colores 25x30x8 cm.;100;470;47000
+1057532-166-COT26;77.516.956-7;44121708;Marcadores;plumones de pizarra color negro;20;500;10000
+1057532-166-COT26;77.516.956-7;44121708;Marcadores;plumones de pizarra color azul;20;500;10000
+1057532-166-COT26;77.516.956-7;44121708;Marcadores;plumones de pizarra color rojo;20;500;10000
+1057532-166-COT26;77.516.956-7;14111610;Cartulina;carpeta de cartulina española;30;1450;43500
+1057532-166-COT26;77.516.956-7;31201517;Cinta para empaquetar;cintas masking tape 48 mm;30;1800;54000
+1057532-166-COT26;77.516.956-7;31201512;Cinta Transparente;cinta de embalaje;30;800;24000
+1057532-166-COT26;77.516.956-7;44121701;Lápiz pasta;Lápiz pasta azul. Caja de 50 unidades.;2;10000;20000
+1057532-166-COT26;77.516.956-7;60105704;Barras de pegamento libres de ácido;Pegamento en barra 21 gramos;30;600;18000
+1057532-166-COT26;77.516.956-7;44102001;Lámina para plastificar;Láminas para termolaminar tamaño carta (100 unidades);2;14000;28000
+1057532-166-COT26;77.516.956-7;12352310;Siliconas;Silicona líquida 250 ml.;15;800;12000
+1057532-166-COT26;77.516.956-7;14111525;Papel multiuso;Carpeta de Papel volantín (10 pliegos);15;1200;18000
+1057532-166-COT26;77.516.956-7;60101722;Libretas de notas;Block de apuntes carta;30;1500;45000
+1057532-166-COT26;77.516.956-7;44121710;Tiza para escribir o accesorios;Tiza color blanca. Caja de 12 unidades;15;900;13500
+1057532-166-COT26;77.516.956-7;31201505;Cinta adhesiva de doble cara;Cinta doble contacto;15;800;12000
+1057532-166-COT26;77.516.956-7;14111601;Papel, bolsas o cajas de regalo;Bolsas ecológicas colores 25x30x8 cm.;100;200;20000
+1057532-166-COT26;76.955.038-0;44121708;Marcadores;plumones de pizarra color negro;20;261;5220
+1057532-166-COT26;76.955.038-0;44121708;Marcadores;plumones de pizarra color azul;20;261;5220
+1057532-166-COT26;76.955.038-0;44121708;Marcadores;plumones de pizarra color rojo;20;261;5220
+1057532-166-COT26;76.955.038-0;14111610;Cartulina;carpeta de cartulina española;30;1202;36060
+1057532-166-COT26;76.955.038-0;31201517;Cinta para empaquetar;cintas masking tape 48 mm;30;1622;48660
+1057532-166-COT26;76.955.038-0;31201512;Cinta Transparente;cinta de embalaje;30;288;8640
+1057532-166-COT26;76.955.038-0;44121701;Lápiz pasta;Lápiz pasta azul. Caja de 50 unidades.;2;4500;9000
+1057532-166-COT26;76.955.038-0;60105704;Barras de pegamento libres de ácido;Pegamento en barra 21 gramos;30;295;8850
+1057532-166-COT26;76.955.038-0;44102001;Lámina para plastificar;Láminas para termolaminar tamaño carta (100 unidades);2;6886;13772
+1057532-166-COT26;76.955.038-0;12352310;Siliconas;Silicona líquida 250 ml.;15;2237;33555
+1057532-166-COT26;76.955.038-0;14111525;Papel multiuso;Carpeta de Papel volantín (10 pliegos);15;1715;25725
+1057532-166-COT26;76.955.038-0;60101722;Libretas de notas;Block de apuntes carta;30;1526;45780
+1057532-166-COT26;76.955.038-0;44121710;Tiza para escribir o accesorios;Tiza color blanca. Caja de 12 unidades;15;242;3630
+1057532-166-COT26;76.955.038-0;31201505;Cinta adhesiva de doble cara;Cinta doble contacto;15;553;8295
+1057532-166-COT26;76.955.038-0;14111601;Papel, bolsas o cajas de regalo;Bolsas ecológicas colores 25x30x8 cm.;100;682;68200
+1057532-166-COT26;77.593.236-8;44121708;Marcadores;plumones de pizarra color negro;20;990;19800
+1057532-166-COT26;77.593.236-8;44121708;Marcadores;plumones de pizarra color azul;20;990;19800
+1057532-166-COT26;77.593.236-8;44121708;Marcadores;plumones de pizarra color rojo;20;989;19780
+1057532-166-COT26;77.593.236-8;14111610;Cartulina;carpeta de cartulina española;30;1935;58050
+1057532-166-COT26;77.593.236-8;31201517;Cinta para empaquetar;cintas masking tape 48 mm;30;2529;75870
+1057532-166-COT26;77.593.236-8;31201512;Cinta Transparente;cinta de embalaje;30;1388;41640
+1057532-166-COT26;77.593.236-8;44121701;Lápiz pasta;Lápiz pasta azul. Caja de 50 unidades.;2;19187;38374
+1057532-166-COT26;77.593.236-8;60105704;Barras de pegamento libres de ácido;Pegamento en barra 21 gramos;30;742;22260
+1057532-166-COT26;77.593.236-8;44102001;Lámina para plastificar;Láminas para termolaminar tamaño carta (100 unidades);2;15909;31818
+1057532-166-COT26;77.593.236-8;12352310;Siliconas;Silicona líquida 250 ml.;15;2843;42645
+1057532-166-COT26;77.593.236-8;14111525;Papel multiuso;Carpeta de Papel volantín (10 pliegos);15;2121;31815
+1057532-166-COT26;77.593.236-8;60101722;Libretas de notas;Block de apuntes carta;30;2244;67320
+1057532-166-COT26;77.593.236-8;44121710;Tiza para escribir o accesorios;Tiza color blanca. Caja de 12 unidades;15;2012;30180
+1057532-166-COT26;77.593.236-8;31201505;Cinta adhesiva de doble cara;Cinta doble contacto;15;3819;57285
+1057532-166-COT26;77.593.236-8;14111601;Papel, bolsas o cajas de regalo;Bolsas ecológicas colores 25x30x8 cm.;100;875;87500
+1057532-143-COT26;77.997.344-1;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna mínimo 210 ml / Según especificaciones adjuntas;20;1;20
+1057532-143-COT26;77.997.344-1;42142608;Jeringas médicas sin agujas;Jeringas de 20 ml sin aguja / Según especificaciones adjuntas;1000;172;172000
+1057532-143-COT26;77.997.344-1;42293603;Sondas quirúrgicas;Sondas de alimentación enteral de silicona 5 fr / Según especificaciones adjuntas;200;1;200
+1057532-143-COT26;77.751.405-9;42142608;Jeringas médicas sin agujas;Jeringas de 20 ml sin aguja / Según especificaciones adjuntas;1000;260;260000
+1057532-143-COT26;77.751.405-9;42293603;Sondas quirúrgicas;Sondas de alimentación enteral de silicona 5 fr / Según especificaciones adjuntas;200;1;200
+1057532-143-COT26;77.751.405-9;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna mínimo 210 ml / Según especificaciones adjuntas;20;1;20
+1057532-143-COT26;77.272.885-9;42142608;Jeringas médicas sin agujas;Jeringas de 20 ml sin aguja / Según especificaciones adjuntas;1000;224;224000
+1057532-143-COT26;77.272.885-9;42293603;Sondas quirúrgicas;Sondas de alimentación enteral de silicona 5 fr / Según especificaciones adjuntas;200;305;61000
+1057532-143-COT26;77.272.885-9;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna mínimo 210 ml / Según especificaciones adjuntas;20;2556;51120
+1057532-143-COT26;77.714.157-0;42142608;Jeringas médicas sin agujas;Jeringas de 20 ml sin aguja / Según especificaciones adjuntas;1000;270;270000
+1057532-143-COT26;77.714.157-0;42293603;Sondas quirúrgicas;Sondas de alimentación enteral de silicona 5 fr / Según especificaciones adjuntas;200;838;167600
+1057532-143-COT26;77.714.157-0;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna mínimo 210 ml / Según especificaciones adjuntas;20;275;5500
+1057532-143-COT26;77.884.799-K;42142608;Jeringas médicas sin agujas;Jeringas de 20 ml sin aguja / Según especificaciones adjuntas;1000;287;287000
+1057532-143-COT26;77.884.799-K;42293603;Sondas quirúrgicas;Sondas de alimentación enteral de silicona 5 fr / Según especificaciones adjuntas;200;890;178000
+1057532-143-COT26;77.884.799-K;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna mínimo 210 ml / Según especificaciones adjuntas;20;292;5840
+1057532-143-COT26;78.027.120-5;42142608;Jeringas médicas sin agujas;Jeringas de 20 ml sin aguja / Según especificaciones adjuntas;1000;217;217000
+1057532-143-COT26;78.027.120-5;42293603;Sondas quirúrgicas;Sondas de alimentación enteral de silicona 5 fr / Según especificaciones adjuntas;200;226;45200
+1057532-143-COT26;78.027.120-5;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna mínimo 210 ml / Según especificaciones adjuntas;20;12677;253540
+1057532-143-COT26;77.209.881-2;42142608;Jeringas médicas sin agujas;Jeringas de 20 ml sin aguja / Según especificaciones adjuntas;1000;241;241000
+1057532-143-COT26;77.209.881-2;42293603;Sondas quirúrgicas;Sondas de alimentación enteral de silicona 5 fr / Según especificaciones adjuntas;200;406;81200
+1057532-143-COT26;77.209.881-2;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna mínimo 210 ml / Según especificaciones adjuntas;20;10268;205360
+1057532-143-COT26;77.025.316-0;42142608;Jeringas médicas sin agujas;Jeringas de 20 ml sin aguja / Según especificaciones adjuntas;1000;160;160000
+1057532-143-COT26;77.025.316-0;42293603;Sondas quirúrgicas;Sondas de alimentación enteral de silicona 5 fr / Según especificaciones adjuntas;200;14400;2880000
+1057532-143-COT26;77.025.316-0;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna mínimo 210 ml / Según especificaciones adjuntas;20;15500;310000
+1057532-144-COT26;89.752.800-2;42142108;Almohadillas o compresas de calentar o de refrescar;Almohadillas de gel frio calor / Según especificaciones adjuntas;20;5245;104900
+1057532-144-COT26;89.752.800-2;42231902;Pezoneras o discos protectores mamarios;Formador de pezón / Según especificaciones adjuntas;24;1;24
+1057532-144-COT26;89.752.800-2;42231902;Pezoneras o discos protectores mamarios;Pezonera de silicona talla S / Según especificaciones adjuntas;14;1;14
+1057532-144-COT26;89.752.800-2;42231902;Pezoneras o discos protectores mamarios;Pezonera de silicona talla M / Según especificaciones adjuntas;14;1;14
+1057532-144-COT26;89.752.800-2;42231902;Pezoneras o discos protectores mamarios;Pezonera de silicona talla L / Según especificaciones adjuntas;14;1;14
+1057532-144-COT26;89.752.800-2;42251617;Cojines de asiento terapéuticos o accesorios;Cojín de Lactancia / Según especificaciones adjuntas;3;15408;46224
+1057532-144-COT26;77.272.885-9;42142108;Almohadillas o compresas de calentar o de refrescar;Almohadillas de gel frio calor / Según especificaciones adjuntas;20;7563;151260
+1057532-144-COT26;77.272.885-9;42231902;Pezoneras o discos protectores mamarios;Formador de pezón / Según especificaciones adjuntas;24;10084;242016
+1057532-144-COT26;77.272.885-9;42231902;Pezoneras o discos protectores mamarios;Pezonera de silicona talla S / Según especificaciones adjuntas;14;7145;100030
+1057532-144-COT26;77.272.885-9;42231902;Pezoneras o discos protectores mamarios;Pezonera de silicona talla M / Según especificaciones adjuntas;14;7145;100030
+1057532-144-COT26;77.272.885-9;42231902;Pezoneras o discos protectores mamarios;Pezonera de silicona talla L / Según especificaciones adjuntas;14;7145;100030
+1057532-144-COT26;77.272.885-9;42251617;Cojines de asiento terapéuticos o accesorios;Cojín de Lactancia / Según especificaciones adjuntas;3;20978;62934
+1057532-144-COT26;77.209.881-2;42142108;Almohadillas o compresas de calentar o de refrescar;Almohadillas de gel frio calor / Según especificaciones adjuntas;20;8694;173880
+1057532-144-COT26;77.209.881-2;42231902;Pezoneras o discos protectores mamarios;Formador de pezón / Según especificaciones adjuntas;24;11753;282072
+1057532-144-COT26;77.209.881-2;42231902;Pezoneras o discos protectores mamarios;Pezonera de silicona talla S / Según especificaciones adjuntas;14;2929;41006
+1057532-144-COT26;77.209.881-2;42231902;Pezoneras o discos protectores mamarios;Pezonera de silicona talla M / Según especificaciones adjuntas;14;8574;120036
+1057532-144-COT26;77.209.881-2;42231902;Pezoneras o discos protectores mamarios;Pezonera de silicona talla L / Según especificaciones adjuntas;14;8574;120036
+1057532-144-COT26;77.209.881-2;42251617;Cojines de asiento terapéuticos o accesorios;Cojín de Lactancia / Según especificaciones adjuntas;3;22767;68301
+1057532-147-COT26;78.208.735-5;31261501;Cubiertas y cajas de plástico;Caja Plástica Transparente según Especificaciones Técnicas adjuntas;60;2790;167400
+1057532-147-COT26;78.208.735-5;31261501;Cubiertas y cajas de plástico;Caja Plástica Organizadora modular, según Especificaciones Técnicas adjuntas;6;23500;141000
+1057532-147-COT26;77.900.706-5;31261501;Cubiertas y cajas de plástico;Caja Plástica Transparente según Especificaciones Técnicas adjuntas;60;3800;228000
+1057532-147-COT26;77.900.706-5;31261501;Cubiertas y cajas de plástico;Caja Plástica Organizadora modular, según Especificaciones Técnicas adjuntas;6;27200;163200
+1057532-147-COT26;78.102.019-2;31261501;Cubiertas y cajas de plástico;Caja Plástica Transparente según Especificaciones Técnicas adjuntas;60;4100;246000
+1057532-147-COT26;78.102.019-2;31261501;Cubiertas y cajas de plástico;Caja Plástica Organizadora modular, según Especificaciones Técnicas adjuntas;6;45000;270000
+1057532-147-COT26;77.989.133-K;31261501;Cubiertas y cajas de plástico;Caja Plástica Transparente según Especificaciones Técnicas adjuntas;60;7520;451200
+1057532-147-COT26;77.989.133-K;31261501;Cubiertas y cajas de plástico;Caja Plástica Organizadora modular, según Especificaciones Técnicas adjuntas;6;39000;234000
+1057532-142-COT26;76.850.591-8;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna / Según especificaciones adjuntas;20;1;20
+1057532-142-COT26;76.850.591-8;42231901;Sacaleches o sus accesorios;Extractor de leche materna manual / Según especificaciones adjuntas;42;19900;835800
+1057532-142-COT26;76.850.591-8;52151704;Cucharas domésticas;Cucharas de silicona Reutilizables Niños Bebes / Según especificaciones adjuntas;14;1;14
+1057532-142-COT26;76.850.591-8;42192603;Vasos o botellas de administración de medicamentos o accesorios;Vasitos de lactancia / Según especificaciones adjuntas;10;1;10
+1057532-142-COT26;76.850.591-8;52151614;Coolers;Cooler o bolso transportador de leche / Según especificaciones adjuntas;5;1;5
+1057532-142-COT26;77.272.885-9;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna / Según especificaciones adjuntas;20;4630;92600
+1057532-142-COT26;77.272.885-9;42231901;Sacaleches o sus accesorios;Extractor de leche materna manual / Según especificaciones adjuntas;42;16810;706020
+1057532-142-COT26;77.272.885-9;52151704;Cucharas domésticas;Cucharas de silicona Reutilizables Niños Bebes / Según especificaciones adjuntas;14;5470;76580
+1057532-142-COT26;77.272.885-9;42192603;Vasos o botellas de administración de medicamentos o accesorios;Vasitos de lactancia / Según especificaciones adjuntas;10;6720;67200
+1057532-142-COT26;77.272.885-9;52151614;Coolers;Cooler o bolso transportador de leche / Según especificaciones adjuntas;5;12610;63050
+1057532-142-COT26;77.211.198-3;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna / Según especificaciones adjuntas;20;4622;92440
+1057532-142-COT26;77.211.198-3;42231901;Sacaleches o sus accesorios;Extractor de leche materna manual / Según especificaciones adjuntas;42;19328;811776
+1057532-142-COT26;77.211.198-3;52151704;Cucharas domésticas;Cucharas de silicona Reutilizables Niños Bebes / Según especificaciones adjuntas;14;3361;47054
+1057532-142-COT26;77.211.198-3;42192603;Vasos o botellas de administración de medicamentos o accesorios;Vasitos de lactancia / Según especificaciones adjuntas;10;11229;112290
+1057532-142-COT26;77.211.198-3;52151614;Coolers;Cooler o bolso transportador de leche / Según especificaciones adjuntas;5;26891;134455
+1057532-142-COT26;77.710.483-7;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna / Según especificaciones adjuntas;20;4655;93100
+1057532-142-COT26;77.710.483-7;42231901;Sacaleches o sus accesorios;Extractor de leche materna manual / Según especificaciones adjuntas;42;24077;1011234
+1057532-142-COT26;77.710.483-7;52151704;Cucharas domésticas;Cucharas de silicona Reutilizables Niños Bebes / Según especificaciones adjuntas;14;4098;57372
+1057532-142-COT26;77.710.483-7;42192603;Vasos o botellas de administración de medicamentos o accesorios;Vasitos de lactancia / Según especificaciones adjuntas;10;2238;22380
+1057532-142-COT26;77.710.483-7;52151614;Coolers;Cooler o bolso transportador de leche / Según especificaciones adjuntas;5;19105;95525
+1057532-142-COT26;78.321.973-5;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna / Según especificaciones adjuntas;20;5217;104340
+1057532-142-COT26;78.321.973-5;42231901;Sacaleches o sus accesorios;Extractor de leche materna manual / Según especificaciones adjuntas;42;26980;1133160
+1057532-142-COT26;78.321.973-5;52151704;Cucharas domésticas;Cucharas de silicona Reutilizables Niños Bebes / Según especificaciones adjuntas;14;4592;64288
+1057532-142-COT26;78.321.973-5;42192603;Vasos o botellas de administración de medicamentos o accesorios;Vasitos de lactancia / Según especificaciones adjuntas;10;2507;25070
+1057532-142-COT26;78.321.973-5;52151614;Coolers;Cooler o bolso transportador de leche / Según especificaciones adjuntas;5;21408;107040
+1057532-142-COT26;77.209.881-2;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna / Según especificaciones adjuntas;20;12463;249260
+1057532-142-COT26;77.209.881-2;42231901;Sacaleches o sus accesorios;Extractor de leche materna manual / Según especificaciones adjuntas;42;26031;1093302
+1057532-142-COT26;77.209.881-2;52151704;Cucharas domésticas;Cucharas de silicona Reutilizables Niños Bebes / Según especificaciones adjuntas;14;5276;73864
+1057532-142-COT26;77.209.881-2;42192603;Vasos o botellas de administración de medicamentos o accesorios;Vasitos de lactancia / Según especificaciones adjuntas;10;15190;151900
+1057532-142-COT26;77.209.881-2;52151614;Coolers;Cooler o bolso transportador de leche / Según especificaciones adjuntas;5;70602;353010
+1057532-142-COT26;76.576.352-5;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna / Según especificaciones adjuntas;20;4150;83000
+1057532-142-COT26;76.576.352-5;42231901;Sacaleches o sus accesorios;Extractor de leche materna manual / Según especificaciones adjuntas;42;38000;1596000
+1057532-142-COT26;76.576.352-5;52151704;Cucharas domésticas;Cucharas de silicona Reutilizables Niños Bebes / Según especificaciones adjuntas;14;4800;67200
+1057532-142-COT26;76.576.352-5;42192603;Vasos o botellas de administración de medicamentos o accesorios;Vasitos de lactancia / Según especificaciones adjuntas;10;4800;48000
+1057532-142-COT26;76.576.352-5;52151614;Coolers;Cooler o bolso transportador de leche / Según especificaciones adjuntas;5;38500;192500
+1057532-142-COT26;78.027.120-5;42231901;Sacaleches o sus accesorios;Bolsas de recolección de leche materna / Según especificaciones adjuntas;20;17690;353800
+1057532-142-COT26;78.027.120-5;42231901;Sacaleches o sus accesorios;Extractor de leche materna manual / Según especificaciones adjuntas;42;31000;1302000
+1057532-142-COT26;78.027.120-5;52151704;Cucharas domésticas;Cucharas de silicona Reutilizables Niños Bebes / Según especificaciones adjuntas;14;6990;97860
+1057532-142-COT26;78.027.120-5;42192603;Vasos o botellas de administración de medicamentos o accesorios;Vasitos de lactancia / Según especificaciones adjuntas;10;1;10
+1057532-142-COT26;78.027.120-5;52151614;Coolers;Cooler o bolso transportador de leche / Según especificaciones adjuntas;5;79000;395000
+1057532-172-COT26;76.403.662-k;46181704;Cascos de protección;Casco Seguridad: •	Casco debe ser Clase A, Tipo I, blanco, ajustable. •	Peso: Entre 200gr a 300gr. •	Debe contar con certificación: Nch 461: Clase A y   ANSI Z89.1 Clase E DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;5416;21664
+1057532-172-COT26;76.403.662-k;91111703;Vestuario;Polera de Trabajo Mujeres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;6789;27156
+1057532-172-COT26;76.403.662-k;91111703;Vestuario;Polera de Trabajo Hombres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;7725;15450
+1057532-172-COT26;76.403.662-k;46181527;Pantalones protectores;Pantalón de Trabajo Mujeres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada. •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;3;15326;45978
+1057532-172-COT26;76.403.662-k;46181527;Pantalones protectores;Pantalón de Trabajo Hombres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada.  •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;15552;31104
+1057532-172-COT26;76.403.662-k;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Mujeres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable. •	Puños Ajustables. •	Cierre con cremallera. •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;16531;66124
+1057532-172-COT26;76.403.662-k;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Hombres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable.  •	Puños Ajustables.  •	Cierre con cremallera.  •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;16531;33062
+1057532-172-COT26;76.403.662-k;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Mujeres: •	Micro Polar o polar con cierre. •	Cuello Elevado. •	Manga larga con puño sesgado. •	Pretina en basta. •	Composición: 100% poliéster.  •	Color negro.  •	Logo corporativo impreso en color blanco en lado izquierdo. •	En el caso de Polar Mujer con corte princesa  con bolsillos en corte. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;9198;36792
+1057532-172-COT26;76.403.662-k;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Hombres: •	Micro Polar o polar con cierre.  •	Cuello Elevado  •	Manga larga con puño sesgado  •	Pretina en basta •	Composición: 100% poliéster  •	Color negro  •	Logo corporativo impreso en color blanco en lado izquierdo. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;10489;20978
+1057532-172-COT26;76.403.662-k;46181504;Guantes protectores;Guantes Seguridad: •	Guante Hecho de fibra HDPE, Cut 5, 13 Gauge con palma de PU.  •	Con resistencia a las abrasión y transpirabilidad. •	Con Certificación: EN 420: 2003 + A1: 2009 EN 388:2003 Riesgos Mecánicos DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;7;2864;20048
+1057532-172-COT26;77.091.882-0;46181704;Cascos de protección;Casco Seguridad: •	Casco debe ser Clase A, Tipo I, blanco, ajustable. •	Peso: Entre 200gr a 300gr. •	Debe contar con certificación: Nch 461: Clase A y   ANSI Z89.1 Clase E DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;4910;19640
+1057532-172-COT26;77.091.882-0;91111703;Vestuario;Polera de Trabajo Mujeres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;8690;34760
+1057532-172-COT26;77.091.882-0;91111703;Vestuario;Polera de Trabajo Hombres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;9745;19490
+1057532-172-COT26;77.091.882-0;46181527;Pantalones protectores;Pantalón de Trabajo Mujeres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada. •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;3;29640;88920
+1057532-172-COT26;77.091.882-0;46181527;Pantalones protectores;Pantalón de Trabajo Hombres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada.  •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;30815;61630
+1057532-172-COT26;77.091.882-0;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Mujeres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable. •	Puños Ajustables. •	Cierre con cremallera. •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;13135;52540
+1057532-172-COT26;77.091.882-0;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Hombres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable.  •	Puños Ajustables.  •	Cierre con cremallera.  •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;13135;26270
+1057532-172-COT26;77.091.882-0;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Mujeres: •	Micro Polar o polar con cierre. •	Cuello Elevado. •	Manga larga con puño sesgado. •	Pretina en basta. •	Composición: 100% poliéster.  •	Color negro.  •	Logo corporativo impreso en color blanco en lado izquierdo. •	En el caso de Polar Mujer con corte princesa  con bolsillos en corte. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;9075;36300
+1057532-172-COT26;77.091.882-0;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Hombres: •	Micro Polar o polar con cierre.  •	Cuello Elevado  •	Manga larga con puño sesgado  •	Pretina en basta •	Composición: 100% poliéster  •	Color negro  •	Logo corporativo impreso en color blanco en lado izquierdo. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;10055;20110
+1057532-172-COT26;77.091.882-0;46181504;Guantes protectores;Guantes Seguridad: •	Guante Hecho de fibra HDPE, Cut 5, 13 Gauge con palma de PU.  •	Con resistencia a las abrasión y transpirabilidad. •	Con Certificación: EN 420: 2003 + A1: 2009 EN 388:2003 Riesgos Mecánicos DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;7;4565;31955
+1057532-172-COT26;78.129.445-4;46181704;Cascos de protección;Casco Seguridad: •	Casco debe ser Clase A, Tipo I, blanco, ajustable. •	Peso: Entre 200gr a 300gr. •	Debe contar con certificación: Nch 461: Clase A y   ANSI Z89.1 Clase E DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;2897;11588
+1057532-172-COT26;78.129.445-4;91111703;Vestuario;Polera de Trabajo Mujeres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;8958;35832
+1057532-172-COT26;78.129.445-4;91111703;Vestuario;Polera de Trabajo Hombres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;8958;17916
+1057532-172-COT26;78.129.445-4;46181527;Pantalones protectores;Pantalón de Trabajo Mujeres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada. •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;3;31953;95859
+1057532-172-COT26;78.129.445-4;46181527;Pantalones protectores;Pantalón de Trabajo Hombres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada.  •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;32925;65850
+1057532-172-COT26;78.129.445-4;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Mujeres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable. •	Puños Ajustables. •	Cierre con cremallera. •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;21253;85012
+1057532-172-COT26;78.129.445-4;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Hombres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable.  •	Puños Ajustables.  •	Cierre con cremallera.  •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;21253;42506
+1057532-172-COT26;78.129.445-4;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Mujeres: •	Micro Polar o polar con cierre. •	Cuello Elevado. •	Manga larga con puño sesgado. •	Pretina en basta. •	Composición: 100% poliéster.  •	Color negro.  •	Logo corporativo impreso en color blanco en lado izquierdo. •	En el caso de Polar Mujer con corte princesa  con bolsillos en corte. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;9694;38776
+1057532-172-COT26;78.129.445-4;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Hombres: •	Micro Polar o polar con cierre.  •	Cuello Elevado  •	Manga larga con puño sesgado  •	Pretina en basta •	Composición: 100% poliéster  •	Color negro  •	Logo corporativo impreso en color blanco en lado izquierdo. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;9694;19388
+1057532-172-COT26;78.129.445-4;46181504;Guantes protectores;Guantes Seguridad: •	Guante Hecho de fibra HDPE, Cut 5, 13 Gauge con palma de PU.  •	Con resistencia a las abrasión y transpirabilidad. •	Con Certificación: EN 420: 2003 + A1: 2009 EN 388:2003 Riesgos Mecánicos DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;7;2364;16548
+1057532-172-COT26;76.964.686-8;46181704;Cascos de protección;Casco Seguridad: •	Casco debe ser Clase A, Tipo I, blanco, ajustable. •	Peso: Entre 200gr a 300gr. •	Debe contar con certificación: Nch 461: Clase A y   ANSI Z89.1 Clase E DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;9900;39600
+1057532-172-COT26;76.964.686-8;91111703;Vestuario;Polera de Trabajo Mujeres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;8990;35960
+1057532-172-COT26;76.964.686-8;91111703;Vestuario;Polera de Trabajo Hombres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;9990;19980
+1057532-172-COT26;76.964.686-8;46181527;Pantalones protectores;Pantalón de Trabajo Mujeres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada. •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;3;24990;74970
+1057532-172-COT26;76.964.686-8;46181527;Pantalones protectores;Pantalón de Trabajo Hombres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada.  •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;23990;47980
+1057532-172-COT26;76.964.686-8;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Mujeres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable. •	Puños Ajustables. •	Cierre con cremallera. •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;24990;99960
+1057532-172-COT26;76.964.686-8;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Hombres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable.  •	Puños Ajustables.  •	Cierre con cremallera.  •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;24990;49980
+1057532-172-COT26;76.964.686-8;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Mujeres: •	Micro Polar o polar con cierre. •	Cuello Elevado. •	Manga larga con puño sesgado. •	Pretina en basta. •	Composición: 100% poliéster.  •	Color negro.  •	Logo corporativo impreso en color blanco en lado izquierdo. •	En el caso de Polar Mujer con corte princesa  con bolsillos en corte. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;19990;79960
+1057532-172-COT26;76.964.686-8;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Hombres: •	Micro Polar o polar con cierre.  •	Cuello Elevado  •	Manga larga con puño sesgado  •	Pretina en basta •	Composición: 100% poliéster  •	Color negro  •	Logo corporativo impreso en color blanco en lado izquierdo. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;19990;39980
+1057532-172-COT26;76.964.686-8;46181504;Guantes protectores;Guantes Seguridad: •	Guante Hecho de fibra HDPE, Cut 5, 13 Gauge con palma de PU.  •	Con resistencia a las abrasión y transpirabilidad. •	Con Certificación: EN 420: 2003 + A1: 2009 EN 388:2003 Riesgos Mecánicos DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;7;1990;13930
+1057532-172-COT26;76.228.281-k;46181704;Cascos de protección;Casco Seguridad: •	Casco debe ser Clase A, Tipo I, blanco, ajustable. •	Peso: Entre 200gr a 300gr. •	Debe contar con certificación: Nch 461: Clase A y   ANSI Z89.1 Clase E DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;6990;27960
+1057532-172-COT26;76.228.281-k;91111703;Vestuario;Polera de Trabajo Mujeres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;9990;39960
+1057532-172-COT26;76.228.281-k;91111703;Vestuario;Polera de Trabajo Hombres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;9990;19980
+1057532-172-COT26;76.228.281-k;46181527;Pantalones protectores;Pantalón de Trabajo Mujeres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada. •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;3;26990;80970
+1057532-172-COT26;76.228.281-k;46181527;Pantalones protectores;Pantalón de Trabajo Hombres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada.  •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;26990;53980
+1057532-172-COT26;76.228.281-k;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Mujeres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable. •	Puños Ajustables. •	Cierre con cremallera. •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;32990;131960
+1057532-172-COT26;76.228.281-k;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Hombres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable.  •	Puños Ajustables.  •	Cierre con cremallera.  •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;32990;65980
+1057532-172-COT26;76.228.281-k;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Mujeres: •	Micro Polar o polar con cierre. •	Cuello Elevado. •	Manga larga con puño sesgado. •	Pretina en basta. •	Composición: 100% poliéster.  •	Color negro.  •	Logo corporativo impreso en color blanco en lado izquierdo. •	En el caso de Polar Mujer con corte princesa  con bolsillos en corte. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;12990;51960
+1057532-172-COT26;76.228.281-k;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Hombres: •	Micro Polar o polar con cierre.  •	Cuello Elevado  •	Manga larga con puño sesgado  •	Pretina en basta •	Composición: 100% poliéster  •	Color negro  •	Logo corporativo impreso en color blanco en lado izquierdo. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;12990;25980
+1057532-172-COT26;76.228.281-k;46181504;Guantes protectores;Guantes Seguridad: •	Guante Hecho de fibra HDPE, Cut 5, 13 Gauge con palma de PU.  •	Con resistencia a las abrasión y transpirabilidad. •	Con Certificación: EN 420: 2003 + A1: 2009 EN 388:2003 Riesgos Mecánicos DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;7;4990;34930
+1057532-172-COT26;78.026.692-9;46181704;Cascos de protección;Casco Seguridad: •	Casco debe ser Clase A, Tipo I, blanco, ajustable. •	Peso: Entre 200gr a 300gr. •	Debe contar con certificación: Nch 461: Clase A y   ANSI Z89.1 Clase E DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;7892;31568
+1057532-172-COT26;78.026.692-9;91111703;Vestuario;Polera de Trabajo Mujeres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;17875;71500
+1057532-172-COT26;78.026.692-9;91111703;Vestuario;Polera de Trabajo Hombres: •	Polera de Pique manga corta. •	Cuello tejido con botones. •	Color negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre.   DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;21266;42532
+1057532-172-COT26;78.026.692-9;46181527;Pantalones protectores;Pantalón de Trabajo Mujeres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada. •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;3;50668;152004
+1057532-172-COT26;78.026.692-9;46181527;Pantalones protectores;Pantalón de Trabajo Hombres:  Pantalón cargo  •	Tipo de Tela: 100% poliéster Ripstop Strech.  Spandex elasticada.  •	Tiro largo a la cintura. •	Bolsillos:  Entre 4 a 6. •	Cierre con cremallera. •	Diferenciar Corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;50668;101336
+1057532-172-COT26;78.026.692-9;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Mujeres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable. •	Puños Ajustables. •	Cierre con cremallera. •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Mujer. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;33057;132228
+1057532-172-COT26;78.026.692-9;53101802;Abrigos y chaquetas para hombre;Cortaviento Impermeable Hombres:  •	Cortaviento de poliéster, liviano con ajuste elasticado en capucha. •	Impermeable.  •	Puños Ajustables.  •	Cierre con cremallera.  •	2 bolsillos externos uno a cada lado. •	Color Negro. •	Logo corporativo impreso en color blanco en lado izquierdo. •	Diferenciar corte para Hombre. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;33057;66114
+1057532-172-COT26;78.026.692-9;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Mujeres: •	Micro Polar o polar con cierre. •	Cuello Elevado. •	Manga larga con puño sesgado. •	Pretina en basta. •	Composición: 100% poliéster.  •	Color negro.  •	Logo corporativo impreso en color blanco en lado izquierdo. •	En el caso de Polar Mujer con corte princesa  con bolsillos en corte. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;4;22396;89584
+1057532-172-COT26;78.026.692-9;53101802;Abrigos y chaquetas para hombre;Chaqueta de Polar Hombres: •	Micro Polar o polar con cierre.  •	Cuello Elevado  •	Manga larga con puño sesgado  •	Pretina en basta •	Composición: 100% poliéster  •	Color negro  •	Logo corporativo impreso en color blanco en lado izquierdo. DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;2;22961;45922
+1057532-172-COT26;78.026.692-9;46181504;Guantes protectores;Guantes Seguridad: •	Guante Hecho de fibra HDPE, Cut 5, 13 Gauge con palma de PU.  •	Con resistencia a las abrasión y transpirabilidad. •	Con Certificación: EN 420: 2003 + A1: 2009 EN 388:2003 Riesgos Mecánicos DEBE CUMPLIR Y FIRMAR ESPECIFICACIONES TÉCNICAS ADJUNTAS.;7;6758;47306
+1057532-145-COT26;77.209.881-2;60104105;Materiales de enseñanza de los sistemas del cuerpo;Set de Masas Terapéuticas con diferentes resistencias (6 colores)//Masa de ejercicios utilizada para el tratamiento y rehabilitación de la mano, fortaleciendo el agarre de esta. Esta masa se encuentra en cómodos recipientes de plástico fáciles de abrir. Incluye 6 potes de 6 Oz. de los sgtes colores y resistencias:  Tan (Extra Extra Blanda) Amarillo (Extra Blanda) Rojo (Blanda) Verde (Medio) Azul (Fuerte) Negro (Extra Fuerte);10;40285;402850
+1057532-181-COT26;76.779.675-7;44103104;Rollos de transferencia;ROLLOS TERMICOS / SEGÚ ESPECIFICACIONES ADJUNTAS;100;980;98000
+1057532-181-COT26;78.083.346-7;44103104;Rollos de transferencia;ROLLOS TERMICOS / SEGÚ ESPECIFICACIONES ADJUNTAS;100;1114;111400
+1057532-173-COT26;16.343.816-K;46171503;Juegos de cerraduras;Cerradura 9380 Oficina/dormitorio inoxidable, color plata, material de acero;1;54000;54000
+1057532-173-COT26;16.343.816-K;53102504;Guantes o manoplas;Pares de Guantes de agarre Unisex, 2 Talla S, 2 talla M y 2 talla L;6;2000;12000
+1057532-173-COT26;16.343.816-K;15121802;Lubricantes anticorrosivos;Spray WD-40 Anticorrosivo-aerosol 311g;2;14000;28000
+1057532-173-COT26;77.989.133-K;46171503;Juegos de cerraduras;Cerradura 9380 Oficina/dormitorio inoxidable, color plata, material de acero;1;300000;300000
+1057532-173-COT26;77.989.133-K;53102504;Guantes o manoplas;Pares de Guantes de agarre Unisex, 2 Talla S, 2 talla M y 2 talla L;6;29000;174000
+1057532-173-COT26;77.989.133-K;15121802;Lubricantes anticorrosivos;Spray WD-40 Anticorrosivo-aerosol 311g;2;39000;78000
+1057532-175-COT26;13.904.609-9;43232604;Software de diseño asistido por computador (CAD);28 licencias con suscripción de 12 meses para software CAD para la creación de dibujos en 2D, en modalidad de pago a 12 meses.;28;150000;4200000
+1057532-175-COT26;13.904.609-9;43232604;Software de diseño asistido por computador (CAD);01  licencia  con  suscripción  de  12  meses  para  software  CAD para  la  creación  de dibujos en 2D y 3D, en modalidad de pago a 12 meses.;1;300000;300000
+1057532-175-COT26;76.882.864-4;43232604;Software de diseño asistido por computador (CAD);28 licencias con suscripción de 12 meses para software CAD para la creación de dibujos en 2D, en modalidad de pago a 12 meses.;28;190000;5320000
+1057532-175-COT26;76.882.864-4;43232604;Software de diseño asistido por computador (CAD);01  licencia  con  suscripción  de  12  meses  para  software  CAD para  la  creación  de dibujos en 2D y 3D, en modalidad de pago a 12 meses.;1;260000;260000
+1057532-175-COT26;77.455.918-3;43232604;Software de diseño asistido por computador (CAD);28 licencias con suscripción de 12 meses para software CAD para la creación de dibujos en 2D, en modalidad de pago a 12 meses.;28;179890;5036920
+1057532-175-COT26;77.455.918-3;43232604;Software de diseño asistido por computador (CAD);01  licencia  con  suscripción  de  12  meses  para  software  CAD para  la  creación  de dibujos en 2D y 3D, en modalidad de pago a 12 meses.;1;649890;649890
+1057532-179-COT26;76.628.610-0;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;180;432000
+1057532-179-COT26;76.698.617-k;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;450;1080000
+1057532-179-COT26;76.205.148-6;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;500;1200000
+1057532-179-COT26;77.561.431-5;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;525;1260000
+1057532-179-COT26;76.628.610-0;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;550;1320000
+1057532-179-COT26;77.814.080-2;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;598;1435200
+1057532-179-COT26;77.354.932-K;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;633;1519200
+1057532-179-COT26;76.057.398-1;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;800;1920000
+1057532-179-COT26;76.209.015-5;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;1005;2412000
+1057532-179-COT26;78.027.120-5;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;1450;3480000
+1057532-179-COT26;77.819.498-8;41116205;Kits de exámenes rápidos;TEST RAPIDO DE DETERMINACIÓN DE EMBARAZO HCG 25 MUI EN ORINA, LAPIZ O MID STREAM O CASSETTE MAS GOTARIO. CADA DISPOSITIVO DE LECTURA EN ENVASE INDIVIDUAL SELLADO. ENVASE RESISTENTE CON SELLO QUE ASEGURE LA INVIOLABILIDAD DEL CONTENIDO. DEBE INCORPORAR 1 FOLLETO INFORMATIVO AL PACIENTE POR CADA UNIDAD. INDICAR LOTE Y VENCIMIENTO IGUAL O SUPERIOR A 12 MESES.;2400;2350;5640000
+1057532-182-COT26;88.248.700-8;14111805;Talones o talonarios;400 TALONARIOS DE RECETAS MEDICAS PARA UNIDAD DE FARMACIA COSAM ORIENTE.DEBERÁ CUMPLIR CON LAS ESPECIFICACIONES TÉCNICAS ADJUNTAS ADEMÁS DE FIRMARLAS. ASIMISMO, SE SOLICITA OBLIGATORIAMENTE COMPLETAR Y FIRMAR LOS FORMULARIOS ADJUNTOS.;400;1425;570000
+1057532-182-COT26;77.601.240-8;14111805;Talones o talonarios;400 TALONARIOS DE RECETAS MEDICAS PARA UNIDAD DE FARMACIA COSAM ORIENTE.DEBERÁ CUMPLIR CON LAS ESPECIFICACIONES TÉCNICAS ADJUNTAS ADEMÁS DE FIRMARLAS. ASIMISMO, SE SOLICITA OBLIGATORIAMENTE COMPLETAR Y FIRMAR LOS FORMULARIOS ADJUNTOS.;400;1940;776000
+1057532-182-COT26;76.098.470-1;14111805;Talones o talonarios;400 TALONARIOS DE RECETAS MEDICAS PARA UNIDAD DE FARMACIA COSAM ORIENTE.DEBERÁ CUMPLIR CON LAS ESPECIFICACIONES TÉCNICAS ADJUNTAS ADEMÁS DE FIRMARLAS. ASIMISMO, SE SOLICITA OBLIGATORIAMENTE COMPLETAR Y FIRMAR LOS FORMULARIOS ADJUNTOS.;400;2500;1000000
+1057532-182-COT26;6.060.811-3;14111805;Talones o talonarios;400 TALONARIOS DE RECETAS MEDICAS PARA UNIDAD DE FARMACIA COSAM ORIENTE.DEBERÁ CUMPLIR CON LAS ESPECIFICACIONES TÉCNICAS ADJUNTAS ADEMÁS DE FIRMARLAS. ASIMISMO, SE SOLICITA OBLIGATORIAMENTE COMPLETAR Y FIRMAR LOS FORMULARIOS ADJUNTOS.;400;2500;1000000
+1057532-182-COT26;6.060.811-3;14111805;Talones o talonarios;400 TALONARIOS DE RECETAS MEDICAS PARA UNIDAD DE FARMACIA COSAM ORIENTE.DEBERÁ CUMPLIR CON LAS ESPECIFICACIONES TÉCNICAS ADJUNTAS ADEMÁS DE FIRMARLAS. ASIMISMO, SE SOLICITA OBLIGATORIAMENTE COMPLETAR Y FIRMAR LOS FORMULARIOS ADJUNTOS.;400;2500;1000000
+1057532-182-COT26;76.911.530-7;14111805;Talones o talonarios;400 TALONARIOS DE RECETAS MEDICAS PARA UNIDAD DE FARMACIA COSAM ORIENTE.DEBERÁ CUMPLIR CON LAS ESPECIFICACIONES TÉCNICAS ADJUNTAS ADEMÁS DE FIRMARLAS. ASIMISMO, SE SOLICITA OBLIGATORIAMENTE COMPLETAR Y FIRMAR LOS FORMULARIOS ADJUNTOS.;400;2500;1000000
+1057532-182-COT26;78.049.957-5;14111805;Talones o talonarios;400 TALONARIOS DE RECETAS MEDICAS PARA UNIDAD DE FARMACIA COSAM ORIENTE.DEBERÁ CUMPLIR CON LAS ESPECIFICACIONES TÉCNICAS ADJUNTAS ADEMÁS DE FIRMARLAS. ASIMISMO, SE SOLICITA OBLIGATORIAMENTE COMPLETAR Y FIRMAR LOS FORMULARIOS ADJUNTOS.;400;2592;1036800
+1057532-182-COT26;77.852.771-5;14111805;Talones o talonarios;400 TALONARIOS DE RECETAS MEDICAS PARA UNIDAD DE FARMACIA COSAM ORIENTE.DEBERÁ CUMPLIR CON LAS ESPECIFICACIONES TÉCNICAS ADJUNTAS ADEMÁS DE FIRMARLAS. ASIMISMO, SE SOLICITA OBLIGATORIAMENTE COMPLETAR Y FIRMAR LOS FORMULARIOS ADJUNTOS.;400;3700;1480000
+1057532-189-COT26;78.026.692-9;51142619;Alcohol aromático de amoniaco;Alcohol Gel sin enguaje al 70% 75ml;20;2138;42760
+1057532-189-COT26;78.026.692-9;53131609;Protector solar;Bloqueador Solar Fps 50+ 200 grs hipoalergénico;5;18961;94805
+1057532-190-COT26;77.704.078-2;60104105;Materiales de enseñanza de los sistemas del cuerpo;Set de Masas Terapéuticas con diferentes resistencias (6 colores)//Masa de ejercicios utilizada para el tratamiento y rehabilitación de la mano, fortaleciendo el agarre de esta. Esta masa se encuentra en cómodos recipientes de plástico fáciles de abrir. Incluye 6 potes de 6 Oz. de los sgtes colores y resistencias: Tan (Extra Extra Blanda) Amarillo (Extra Blanda) Rojo (Blanda) Verde (Medio) Azul (Fuerte) Negro (Extra Fuerte);10;36790;367900
+1057532-195-COT26;76.955.038-0;60101722;Libretas de notas;Libreta con lápiz incluido, según especificaciones adjuntas.;100;1799;179900
+1057532-195-COT26;76.955.038-0;44122011;Carpetas para archivos;Carpetas con accoclip diferentes colores.;100;547;54700
+1057532-195-COT26;76.955.038-0;44121708;Marcadores;Destacadores diferentes colores.;100;214;21400
+1057532-195-COT26;78.151.009-2;60101722;Libretas de notas;Libreta con lápiz incluido, según especificaciones adjuntas.;100;3276;327600
+1057532-195-COT26;78.151.009-2;44122011;Carpetas para archivos;Carpetas con accoclip diferentes colores.;100;859;85900
+1057532-195-COT26;78.151.009-2;44121708;Marcadores;Destacadores diferentes colores.;100;476;47600
+1057532-195-COT26;77.593.236-8;60101722;Libretas de notas;Libreta con lápiz incluido, según especificaciones adjuntas.;100;4714;471400
+1057532-195-COT26;77.593.236-8;44122011;Carpetas para archivos;Carpetas con accoclip diferentes colores.;100;1447;144700
+1057532-195-COT26;77.593.236-8;44121708;Marcadores;Destacadores diferentes colores.;100;1032;103200
+1057532-178-COT26;77.348.275-6;53111601;Zapatos de hombre;Zapatos de Seguridad / Según Especificaciones Adjuntas;2;60183;120366
+1057532-178-COT26;77.348.275-6;46181504;Guantes protectores;Guantes de Nitrilo / Según Especificaciones Adjuntas;12;3584;43008
+1057532-178-COT26;77.348.275-6;46181504;Guantes protectores;Guantes de PU / Según Especificaciones Adjuntas;12;405;4860
+1057532-178-COT26;10.344.931-6;53111601;Zapatos de hombre;Zapatos de Seguridad / Según Especificaciones Adjuntas;2;48990;97980
+1057532-178-COT26;10.344.931-6;46181504;Guantes protectores;Guantes de Nitrilo / Según Especificaciones Adjuntas;12;7787;93444
+1057532-178-COT26;10.344.931-6;46181504;Guantes protectores;Guantes de PU / Según Especificaciones Adjuntas;12;533;6396
+1057532-178-COT26;76.286.670-6;53111601;Zapatos de hombre;Zapatos de Seguridad / Según Especificaciones Adjuntas;2;1;2
+1057532-178-COT26;76.286.670-6;46181504;Guantes protectores;Guantes de Nitrilo / Según Especificaciones Adjuntas;12;18000;216000
+1057532-178-COT26;76.286.670-6;46181504;Guantes protectores;Guantes de PU / Según Especificaciones Adjuntas;12;1;12
+1057532-178-COT26;77.900.394-9;53111601;Zapatos de hombre;Zapatos de Seguridad / Según Especificaciones Adjuntas;2;59990;119980
+1057532-178-COT26;77.900.394-9;46181504;Guantes protectores;Guantes de Nitrilo / Según Especificaciones Adjuntas;12;10700;128400
+1057532-178-COT26;77.900.394-9;46181504;Guantes protectores;Guantes de PU / Según Especificaciones Adjuntas;12;650;7800
+1057532-178-COT26;76.403.662-k;53111601;Zapatos de hombre;Zapatos de Seguridad / Según Especificaciones Adjuntas;2;61986;123972
+1057532-178-COT26;76.403.662-k;46181504;Guantes protectores;Guantes de Nitrilo / Según Especificaciones Adjuntas;12;12644;151728
+1057532-178-COT26;76.403.662-k;46181504;Guantes protectores;Guantes de PU / Según Especificaciones Adjuntas;12;813;9756
+1057532-184-COT26;96.944.900-5;44122011;Carpetas para archivos;Carpetas plastificadas tamaño oficio en color morado, con accoclip o bolsillo.;200;1000;200000
+1057532-184-COT26;65.130.162-9;44122011;Carpetas para archivos;Carpetas plastificadas tamaño oficio en color morado, con accoclip o bolsillo.;200;1250;250000
+1057532-193-COT26;88.248.700-8;55101520;Hojas o Folletos de Instrucciones;Talonarios de 13 cm de ancho x 21 cm de largo, cada talonario debe tener 99 hojas. Especificaciones adjuntas.;150;1200;180000
+1057532-193-COT26;77.585.800-1;55101520;Hojas o Folletos de Instrucciones;Talonarios de 13 cm de ancho x 21 cm de largo, cada talonario debe tener 99 hojas. Especificaciones adjuntas.;150;1487;223050
+1057532-193-COT26;6.060.811-3;55101520;Hojas o Folletos de Instrucciones;Talonarios de 13 cm de ancho x 21 cm de largo, cada talonario debe tener 99 hojas. Especificaciones adjuntas.;150;2300;345000
+1057532-193-COT26;76.098.470-1;55101520;Hojas o Folletos de Instrucciones;Talonarios de 13 cm de ancho x 21 cm de largo, cada talonario debe tener 99 hojas. Especificaciones adjuntas.;150;2450;367500
+1057532-193-COT26;77.566.418-5;55101520;Hojas o Folletos de Instrucciones;Talonarios de 13 cm de ancho x 21 cm de largo, cada talonario debe tener 99 hojas. Especificaciones adjuntas.;150;2455;368250
+1057532-193-COT26;78.321.973-5;55101520;Hojas o Folletos de Instrucciones;Talonarios de 13 cm de ancho x 21 cm de largo, cada talonario debe tener 99 hojas. Especificaciones adjuntas.;150;3244;486600
+1057532-188-COT26;76.356.855-5;44121618;Tijeras;"Tijera de oficina 7.5"" ergonómica 19 cm unidad";3;788;2364
+1057532-188-COT26;76.356.855-5;44121615;Corcheteras;Corchetera oficina 20 hojas metal/plástico 26/6mm unidad;2;1738;3476
+1057532-188-COT26;76.356.855-5;44121635;Portarrollos de cinta adhesiva;Dispensador de Cinta Adhesiva de color negro;3;1288;3864
+1057532-188-COT26;76.356.855-5;31201505;Cinta adhesiva de doble cara;Cinta doble contacto, 18mmx50m;3;1053;3159
+1057532-188-COT26;76.356.855-5;60101722;Libretas de notas;Block Carta 7 Mm 80 Hojas;4;1100;4400
+1057532-188-COT26;76.356.855-5;56121303;Borradores;Borrador de Pizarra Económico Azul;2;350;700
+1057532-188-COT26;76.356.855-5;44111503;Bandejas de correspondencia;Bandeja Organizador Documentos Escritorio 3 Niveles, color negro;2;8437;16874
+1057532-188-COT26;76.356.855-5;44102001;Lámina para plastificar;Lámina Termolaminada Oficio 125 Mic de 100 Unidades;2;8154;16308
+1057532-188-COT26;76.356.855-5;44111509;Portalápiz;Porta Lápiz Malla Metal Mediano, Color negro;3;965;2895
+1057532-188-COT26;76.356.855-5;45101702;Guillotinas de imprenta;Guillotina de mesa, Metálica 30X37.5 cm;1;40004;40004
+1057532-188-COT26;76.356.855-5;31201515;Cintas de papel;Cinta Masking, 24x40 m unidad;3;844;2532
+1057532-188-COT26;76.356.855-5;14111525;Papel multiuso;opalina blanca, lisa, tamaño carta,;500;113;56500
+1057532-188-COT26;76.356.855-5;44122011;Carpetas para archivos;Carpeta con fundas, tamaño oficio, color negro;4;1690;6760
+1057532-188-COT26;76.356.855-5;31261501;Cubiertas y cajas de plástico;Caja 53x38x40 cm transparente;4;14942;59768
+1057532-188-COT26;76.356.855-5;14111509;Artículos de papelería;Papel Couché Glossy Laser Carta Resma 250 hojas 130 grs para Laser;250;40;10000
+1057532-188-COT26;77.961.005-5;44121618;Tijeras;"Tijera de oficina 7.5"" ergonómica 19 cm unidad";3;1474;4422
+1057532-188-COT26;77.961.005-5;44121615;Corcheteras;Corchetera oficina 20 hojas metal/plástico 26/6mm unidad;2;1760;3520
+1057532-188-COT26;77.961.005-5;44121635;Portarrollos de cinta adhesiva;Dispensador de Cinta Adhesiva de color negro;3;1240;3720
+1057532-188-COT26;77.961.005-5;31201505;Cinta adhesiva de doble cara;Cinta doble contacto, 18mmx50m;3;1217;3651
+1057532-188-COT26;77.961.005-5;60101722;Libretas de notas;Block Carta 7 Mm 80 Hojas;4;1528;6112
+1057532-188-COT26;77.961.005-5;56121303;Borradores;Borrador de Pizarra Económico Azul;2;493;986
+1057532-188-COT26;77.961.005-5;44111503;Bandejas de correspondencia;Bandeja Organizador Documentos Escritorio 3 Niveles, color negro;2;6942;13884
+1057532-188-COT26;77.961.005-5;44102001;Lámina para plastificar;Lámina Termolaminada Oficio 125 Mic de 100 Unidades;2;9419;18838
+1057532-188-COT26;77.961.005-5;44111509;Portalápiz;Porta Lápiz Malla Metal Mediano, Color negro;3;1021;3063
+1057532-188-COT26;77.961.005-5;45101702;Guillotinas de imprenta;Guillotina de mesa, Metálica 30X37.5 cm;1;38123;38123
+1057532-188-COT26;77.961.005-5;31201515;Cintas de papel;Cinta Masking, 24x40 m unidad;3;796;2388
+1057532-188-COT26;77.961.005-5;14111525;Papel multiuso;opalina blanca, lisa, tamaño carta,;500;108;54000
+1057532-188-COT26;77.961.005-5;44122011;Carpetas para archivos;Carpeta con fundas, tamaño oficio, color negro;4;1521;6084
+1057532-188-COT26;77.961.005-5;31261501;Cubiertas y cajas de plástico;Caja 53x38x40 cm transparente;4;10986;43944
+1057532-188-COT26;77.961.005-5;14111509;Artículos de papelería;Papel Couché Glossy Laser Carta Resma 250 hojas 130 grs para Laser;250;121;30250
+1057532-188-COT26;76.888.386-6;44121618;Tijeras;"Tijera de oficina 7.5"" ergonómica 19 cm unidad";3;2500;7500
+1057532-188-COT26;76.888.386-6;44121615;Corcheteras;Corchetera oficina 20 hojas metal/plástico 26/6mm unidad;2;5000;10000
+1057532-188-COT26;76.888.386-6;44121635;Portarrollos de cinta adhesiva;Dispensador de Cinta Adhesiva de color negro;3;2100;6300
+1057532-188-COT26;76.888.386-6;31201505;Cinta adhesiva de doble cara;Cinta doble contacto, 18mmx50m;3;2000;6000
+1057532-188-COT26;76.888.386-6;60101722;Libretas de notas;Block Carta 7 Mm 80 Hojas;4;1900;7600
+1057532-188-COT26;76.888.386-6;56121303;Borradores;Borrador de Pizarra Económico Azul;2;2800;5600
+1057532-188-COT26;76.888.386-6;44111503;Bandejas de correspondencia;Bandeja Organizador Documentos Escritorio 3 Niveles, color negro;2;11000;22000
+1057532-188-COT26;76.888.386-6;44102001;Lámina para plastificar;Lámina Termolaminada Oficio 125 Mic de 100 Unidades;2;23000;46000
+1057532-188-COT26;76.888.386-6;44111509;Portalápiz;Porta Lápiz Malla Metal Mediano, Color negro;3;2000;6000
+1057532-188-COT26;76.888.386-6;45101702;Guillotinas de imprenta;Guillotina de mesa, Metálica 30X37.5 cm;1;63000;63000
+1057532-188-COT26;76.888.386-6;31201515;Cintas de papel;Cinta Masking, 24x40 m unidad;3;1200;3600
+1057532-188-COT26;76.888.386-6;14111525;Papel multiuso;opalina blanca, lisa, tamaño carta,;500;110;55000
+1057532-188-COT26;76.888.386-6;44122011;Carpetas para archivos;Carpeta con fundas, tamaño oficio, color negro;4;3800;15200
+1057532-188-COT26;76.888.386-6;31261501;Cubiertas y cajas de plástico;Caja 53x38x40 cm transparente;4;13500;54000
+1057532-188-COT26;76.888.386-6;14111509;Artículos de papelería;Papel Couché Glossy Laser Carta Resma 250 hojas 130 grs para Laser;250;70;17500
+1057532-188-COT26;78.026.692-9;44121618;Tijeras;"Tijera de oficina 7.5"" ergonómica 19 cm unidad";3;6022;18066
+1057532-188-COT26;78.026.692-9;44121615;Corcheteras;Corchetera oficina 20 hojas metal/plástico 26/6mm unidad;2;49873;99746
+1057532-188-COT26;78.026.692-9;44121635;Portarrollos de cinta adhesiva;Dispensador de Cinta Adhesiva de color negro;3;5567;16701
+1057532-188-COT26;78.026.692-9;31201505;Cinta adhesiva de doble cara;Cinta doble contacto, 18mmx50m;3;7050;21150
+1057532-188-COT26;78.026.692-9;60101722;Libretas de notas;Block Carta 7 Mm 80 Hojas;4;4963;19852
+1057532-188-COT26;78.026.692-9;56121303;Borradores;Borrador de Pizarra Económico Azul;2;4585;9170
+1057532-188-COT26;78.026.692-9;44111503;Bandejas de correspondencia;Bandeja Organizador Documentos Escritorio 3 Niveles, color negro;2;9817;19634
+1057532-188-COT26;78.026.692-9;44102001;Lámina para plastificar;Lámina Termolaminada Oficio 125 Mic de 100 Unidades;2;30684;61368
+1057532-188-COT26;78.026.692-9;44111509;Portalápiz;Porta Lápiz Malla Metal Mediano, Color negro;3;3212;9636
+1057532-188-COT26;78.026.692-9;45101702;Guillotinas de imprenta;Guillotina de mesa, Metálica 30X37.5 cm;1;16746;16746
+1057532-188-COT26;78.026.692-9;31201515;Cintas de papel;Cinta Masking, 24x40 m unidad;3;2000;6000
+1057532-188-COT26;78.026.692-9;14111525;Papel multiuso;opalina blanca, lisa, tamaño carta,;500;170;85000
+1057532-188-COT26;78.026.692-9;44122011;Carpetas para archivos;Carpeta con fundas, tamaño oficio, color negro;4;7656;30624
+1057532-188-COT26;78.026.692-9;31261501;Cubiertas y cajas de plástico;Caja 53x38x40 cm transparente;4;16140;64560
+1057532-188-COT26;78.026.692-9;14111509;Artículos de papelería;Papel Couché Glossy Laser Carta Resma 250 hojas 130 grs para Laser;250;89;22250
+1077241-8-COT26;78.041.826-5;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;563;140750
+1077241-8-COT26;78.041.826-5;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;1260;315000
+1077241-8-COT26;78.041.826-5;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;447;111750
+1077241-8-COT26;78.041.826-5;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;563;140750
+1077241-8-COT26;78.041.826-5;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;807;201750
+1077241-8-COT26;76.708.081-6;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;555;138750
+1077241-8-COT26;76.708.081-6;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;1812;453000
+1077241-8-COT26;76.708.081-6;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;1034;258500
+1077241-8-COT26;76.708.081-6;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;528;132000
+1077241-8-COT26;76.708.081-6;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;757;189250
+1077241-8-COT26;96.696.000-0;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;1402;350500
+1077241-8-COT26;96.696.000-0;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;965;241250
+1077241-8-COT26;96.696.000-0;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;1007;251750
+1077241-8-COT26;96.696.000-0;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;533;133250
+1077241-8-COT26;96.696.000-0;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;1718;429500
+1077241-8-COT26;76.863.035-6;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;680;170000
+1077241-8-COT26;76.863.035-6;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;600;150000
+1077241-8-COT26;76.863.035-6;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;750;187500
+1077241-8-COT26;76.863.035-6;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;2700;675000
+1077241-8-COT26;76.863.035-6;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;1100;275000
+1077241-8-COT26;76.144.219-8;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;1215;303750
+1077241-8-COT26;76.144.219-8;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;1200;300000
+1077241-8-COT26;76.144.219-8;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;1050;262500
+1077241-8-COT26;76.144.219-8;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;1950;487500
+1077241-8-COT26;76.144.219-8;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;1080;270000
+1077241-8-COT26;77.192.195-7;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;3367;841750
+1077241-8-COT26;77.192.195-7;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;1633;408250
+1077241-8-COT26;77.192.195-7;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;1238;309500
+1077241-8-COT26;77.192.195-7;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;732;183000
+1077241-8-COT26;77.192.195-7;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;1126;281500
+1077241-8-COT26;77.706.750-8;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;3170;792500
+1077241-8-COT26;77.706.750-8;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;1820;455000
+1077241-8-COT26;77.706.750-8;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;1270;317500
+1077241-8-COT26;77.706.750-8;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;970;242500
+1077241-8-COT26;77.706.750-8;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;970;242500
+1077241-8-COT26;77.945.971-3;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;2100;525000
+1077241-8-COT26;77.945.971-3;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;2900;725000
+1077241-8-COT26;77.945.971-3;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;750;187500
+1077241-8-COT26;77.945.971-3;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;2100;525000
+1077241-8-COT26;77.945.971-3;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;850;212500
+1077241-8-COT26;77.879.905-7;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;4157;1039250
+1077241-8-COT26;77.879.905-7;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;2195;548750
+1077241-8-COT26;77.879.905-7;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;1022;255500
+1077241-8-COT26;77.879.905-7;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;627;156750
+1077241-8-COT26;77.879.905-7;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;1054;263500
+1077241-8-COT26;78.028.927-9;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;878;219500
+1077241-8-COT26;78.028.927-9;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;2459;614750
+1077241-8-COT26;78.028.927-9;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;926;231500
+1077241-8-COT26;78.028.927-9;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;5178;1294500
+1077241-8-COT26;78.028.927-9;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;1234;308500
+1077241-8-COT26;77.908.543-0;42151909;Pastas o kits de odontología preventiva;Seda/Hilo dental con cera de 50 mts. Adjunta ficha técnica.;250;1801;450250
+1077241-8-COT26;77.908.543-0;42151909;Pastas o kits de odontología preventiva;Pasta dental adulto según las siguientes EETT 1450 ppm de flúor y 50 gr. Adjunta ficha técnica.;250;1080;270000
+1077241-8-COT26;77.908.543-0;42151909;Pastas o kits de odontología preventiva;Cepillo dental INFANTIL según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas Suaves, mango recto/anatómico). Adjunta ficha técnica.;250;3361;840250
+1077241-8-COT26;77.908.543-0;42151909;Pastas o kits de odontología preventiva;Pasta dental infantil tipo Aquafresh/ colgate kids (o similar), de 1100 o 1450 ppm de flúor. adjunta ficha técnica.;250;1009;252250
+1077241-8-COT26;77.908.543-0;42151909;Pastas o kits de odontología preventiva;Cepillo dental ADULTO, según las siguientes EETT (cabezal redondeado, Pequeño, Cerdas rectas, suaves, mango recto/anatómico, Diversos colores y Con capuchón protector del cabezal tipo VITIS, PHB  o similar. Adjuntar ficha técnica.;250;5210;1302500
+1057532-177-COT26;76.484.330-4;42152703;Pernos o puntales dentales o suministros relacionados;Insumos dentales varios los cuales están identificado en un Excel donde están por ítems y indica lote y fecha de vencimiento, se solicita adjuntar ficha técnica para la evaluación se debe cotizar todos los items.;1;65000;65000
+1057532-177-COT26;76.144.219-8;42152703;Pernos o puntales dentales o suministros relacionados;Insumos dentales varios los cuales están identificado en un Excel donde están por ítems y indica lote y fecha de vencimiento, se solicita adjuntar ficha técnica para la evaluación se debe cotizar todos los items.;1;3932595;3932595
+1057532-177-COT26;78.049.957-5;42152703;Pernos o puntales dentales o suministros relacionados;Insumos dentales varios los cuales están identificado en un Excel donde están por ítems y indica lote y fecha de vencimiento, se solicita adjuntar ficha técnica para la evaluación se debe cotizar todos los items.;1;4501958;4501958
+1057532-192-COT26;89.752.800-2;85121810;Test de detección de drogas o alcohol;Test kit screening multidrogas mínimo 4 drogas ( cocaína, marihuana, benzodiazepina y THC) en orina, se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;150;1;150
+1057532-192-COT26;89.752.800-2;42142523;Agujas hipodérmicas;Aguja 19 G x 1, se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;600;1;600
+1057532-192-COT26;89.752.800-2;42142609;Jeringas médicas con aguja;Jeringa 20 cc 21x1 1/2 luer lock,se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;200;196;39200
+1057532-192-COT26;89.752.800-2;42311708;Cintas adhesivas médicas y quirúrgicas para el uso general;Parche curita adhesivo redondo, se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;1500;9;13500
+1057532-192-COT26;89.752.800-2;42311708;Cintas adhesivas médicas y quirúrgicas para el uso general;Tela Adhesiva micropore blanca 2.5 cm x 9 mts.(rollo+dispensador), se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;12;1;12
+1057532-192-COT26;89.752.800-2;42141504;Aplicadores o absorbentes médicos;Tórulas de algodón (100 unidades 0,5 gramos), se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;6;1;6
+1057532-192-COT26;76.057.398-1;85121810;Test de detección de drogas o alcohol;Test kit screening multidrogas mínimo 4 drogas ( cocaína, marihuana, benzodiazepina y THC) en orina, se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;150;2800;420000
+1057532-192-COT26;76.057.398-1;42142523;Agujas hipodérmicas;Aguja 19 G x 1, se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;600;1;600
+1057532-192-COT26;76.057.398-1;42142609;Jeringas médicas con aguja;Jeringa 20 cc 21x1 1/2 luer lock,se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;200;1;200
+1057532-192-COT26;76.057.398-1;42311708;Cintas adhesivas médicas y quirúrgicas para el uso general;Parche curita adhesivo redondo, se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;1500;1;1500
+1057532-192-COT26;76.057.398-1;42311708;Cintas adhesivas médicas y quirúrgicas para el uso general;Tela Adhesiva micropore blanca 2.5 cm x 9 mts.(rollo+dispensador), se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;12;1;12
+1057532-192-COT26;76.057.398-1;42141504;Aplicadores o absorbentes médicos;Tórulas de algodón (100 unidades 0,5 gramos), se solicita periodo vigencia 24 meses igual o superior, adjunta ficha técnica de lo ofertado.;6;1;6
+1057532-191-COT26;77.961.005-5;44111905;Pizarras para plumón y accesorios;Pizarra Corcho + Blanca (45x60);2;24215;48430
+1057532-191-COT26;77.961.005-5;44111503;Bandejas de correspondencia;BANDEJA DE ESCRITORIO TRIPLE DE MADERA, LAS MEDIDAS SON 38X35 (RESPETAR MEDIDAS);1;5188;5188
+1057532-191-COT26;77.961.005-5;44111907;Diario mural y accesorios;Pizarra de Corcho (50x30);1;14599;14599
+1057532-191-COT26;77.961.005-5;44111907;Diario mural y accesorios;Pizarra de Corcho (45x60);1;15628;15628
+1057532-191-COT26;77.961.005-5;44121615;Corcheteras;Corchetera Metálica mediana CM-70 para 45 Hojas;6;5964;35784
+1057532-191-COT26;77.961.005-5;41111604;Reglas;Regla metálica 30 cm;4;1064;4256
+1057532-191-COT26;77.961.005-5;44121618;Tijeras;"Tijeras 5.5"" (13,97 cm) Negro";4;1162;4648
+1057532-185-COT26;10.857.824-6;14111533;Cuadernillos o formularios para exámenes;Talonario tamaño oficio en duplicado, 50 originales y 50 la copias, con formato personalizado adjunto.;1;35000;35000
+1057532-185-COT26;10.857.824-6;44121604;Timbres y sellos;Timbre de goma automático, sello redondo de 4 cms. Diseño adjunto.;1;25000;25000
+1057532-185-COT26;87.726.400-9;14111533;Cuadernillos o formularios para exámenes;Talonario tamaño oficio en duplicado, 50 originales y 50 la copias, con formato personalizado adjunto.;1;49000;49000
+1057532-185-COT26;87.726.400-9;44121604;Timbres y sellos;Timbre de goma automático, sello redondo de 4 cms. Diseño adjunto.;1;45000;45000
+1057532-186-COT26;16.343.816-K;24101605;Equipo de carga;CARRO DE CARGA MANUAL / SEGÚN ESPECIFICACIONES ADJUNTAS;1;167000;167000
+1057532-186-COT26;10.725.347-5;24101605;Equipo de carga;CARRO DE CARGA MANUAL / SEGÚN ESPECIFICACIONES ADJUNTAS;1;199920;199920

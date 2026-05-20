@@ -49,6 +49,21 @@ URL_BASE_API = "https://api2.mercadopublico.cl"
 URL_LISTADO = f"{URL_BASE_API}/v2/compra-agil"
 
 # =========================
+# CONFIGURACIÓN BASE DE DATOS LOCAL
+# =========================
+DB_HOST = "127.0.0.1"
+DB_PORT = 3306
+DB_NAME = "bd_sistema"
+DB_USER = "root"
+DB_PASSWORD = "Nicolas2017#"
+
+TABLA_RESUMEN          = "api_compraagil_Resumen"
+TABLA_PRODUCTOS        = "api_compraagil_Productos"
+TABLA_PROVEEDORES      = "api_compraagil_Proveedores"
+TABLA_PROD_COTIZADOS   = "api_compraagil_Productos_Cotizados"
+TABLA_DOCUMENTOS       = "api_compraagil_Documentos"
+
+# =========================
 # CLASES DE CONFIGURACIÓN
 # =========================
 
@@ -944,6 +959,11 @@ def refresh_base_datos(f_ini: dt.date, f_fin: dt.date):
     
     print("\n✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE.")
 
+    # Enlazar códigos OC automáticamente tras cada refresh
+    print("\n" + "─" * 60)
+    print("🔗 Ejecutando enlace de códigos OC (automático post-refresh)...")
+    enlazar_codigos_oc()
+
 
 def enlazar_codigos_oc():
     """
@@ -1089,6 +1109,73 @@ def enlazar_codigos_oc():
     print(f"   💾 {ruta_ca_res.name} actualizado.")
 
 
+def sincronizar_con_servidor():
+    """
+    Sube los 5 Maestros de Compra Ágil a MariaDB bd_sistema.
+    Cada tabla se reemplaza completamente (DROP + recreación).
+
+    Tablas destino:
+        api_compraagil_Resumen
+        api_compraagil_Productos
+        api_compraagil_Proveedores
+        api_compraagil_Productos_Cotizados
+        api_compraagil_Documentos
+    """
+    try:
+        from sqlalchemy import create_engine, text
+    except ImportError:
+        print("❌ Requiere sqlalchemy: pip install sqlalchemy")
+        return
+
+    print("\n" + "=" * 60)
+    print("🚀 SINCRONIZANDO MAESTROS → bd_sistema")
+    print(f"   Host: {DB_HOST}:{DB_PORT}  /  BD: {DB_NAME}")
+    print("=" * 60)
+
+    # Intentar conexión con mysqldb (mysqlclient) o pymysql como fallback
+    engine = None
+    pwd_enc = urllib.parse.quote_plus(DB_PASSWORD) if DB_PASSWORD else ""
+    auth = f"{DB_USER}:{pwd_enc}@" if DB_PASSWORD else f"{DB_USER}@"
+
+    for dialect in ("mysql+mysqldb", "mysql+pymysql"):
+        try:
+            dsn = f"{dialect}://{auth}{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
+            eng = create_engine(dsn, pool_pre_ping=True)
+            with eng.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            engine = eng
+            break
+        except Exception:
+            continue
+
+    if engine is None:
+        print("❌ No se pudo conectar a MariaDB.")
+        print("   Verifica que mysqlclient o pymysql estén instalados y que el servidor esté activo.")
+        return
+
+    tablas = [
+        (CARPETA_MAESTROS / "Maestro_Resumen.csv",              TABLA_RESUMEN),
+        (CARPETA_MAESTROS / "Maestro_Productos.csv",            TABLA_PRODUCTOS),
+        (CARPETA_MAESTROS / "Maestro_Proveedores.csv",          TABLA_PROVEEDORES),
+        (CARPETA_MAESTROS / "Maestro_Productos_Cotizados.csv",  TABLA_PROD_COTIZADOS),
+        (CARPETA_MAESTROS / "Maestro_Documentos.csv",           TABLA_DOCUMENTOS),
+    ]
+
+    for ruta_csv, nombre_tabla in tablas:
+        if not ruta_csv.exists():
+            print(f"   ⚠️  {ruta_csv.name} no encontrado. Omitiendo {nombre_tabla}.")
+            continue
+        try:
+            df = pd.read_csv(ruta_csv, sep=";", encoding="utf-8-sig", dtype=str)
+            df.to_sql(nombre_tabla, con=engine, if_exists="replace", index=False, chunksize=500)
+            print(f"   ✅ {nombre_tabla}: {len(df)} registros")
+        except Exception as e:
+            print(f"   ❌ Error en {nombre_tabla}: {e}")
+
+    engine.dispose()
+    print("\n✨ SINCRONIZACIÓN COMPLETADA.")
+
+
 # =========================
 # MENÚ PRINCIPAL
 # =========================
@@ -1107,8 +1194,8 @@ if __name__ == "__main__":
         print("3) Rango de fechas (Solo descarga lo nuevo a DIARIO)")
         print("-" * 60)
         print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO)")
-        print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros)")
-        print("7) ENLAZAR CÓDIGOS OC (Llena OC_Codigo en Maestro Compras Ágiles)")
+        print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros + Enlaza OC)")
+        print("7) SINCRONIZAR CON SERVIDOR (Sube Maestros a bd_sistema)")
         print("0) Salir")
         
         op = input("\nSeleccione opción: ")
@@ -1155,7 +1242,7 @@ if __name__ == "__main__":
                 refresh_base_datos(d_ini, d_fin)
 
             elif op == "7":
-                enlazar_codigos_oc()
+                sincronizar_con_servidor()
 
             else:
                 print("\n⚠️  Opción inválida.")

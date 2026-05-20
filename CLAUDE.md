@@ -6,6 +6,15 @@ Contexto persistente del proyecto para Claude Code. Leer antes de cualquier tare
 > - `backend/CLAUDE.md` — Django REST API: modelos, endpoints, convenciones
 > - `frontend/CLAUDE.md` — React SPA: features, hooks, rutas, componentes
 > - `api/CLAUDE.md` — Scripts ETL: flujo de datos, integración Django, CSV
+>
+> **Equipo de agentes especializados (`.claude/`):**
+> - `agent-arquitectura.md` — Cómo agregar nuevos módulos, decisiones de diseño, patrón completo de feature
+> - `agent-datos.md` — Mapa completo de tablas DB, relaciones, fuentes de datos, convenciones de nombres
+> - `agent-seguridad.md` — Vulnerabilidades conocidas, fixes pendientes, checklist para código nuevo
+> - `agent-testing.md` — Estrategia de tests, patrones Django/React, prioridades P1/P2/P3
+> - `agent-devops.md` — Deploy con Nginx+Gunicorn, systemd, ETL automatizado, checklist de producción
+> - `django_mysql_expert.md` — Buenas prácticas generales Django + MySQL (Clean Architecture, SOLID)
+> - `react_expert.md` — Buenas prácticas generales React (SOLID, Feature-Sliced Design)
 
 ---
 
