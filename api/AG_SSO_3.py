@@ -57,11 +57,11 @@ DB_NAME = "bd_sistema"
 DB_USER = "root"
 DB_PASSWORD = "Nicolas2017#"
 
-TABLA_RESUMEN          = "api_compraagil_Resumen"
-TABLA_PRODUCTOS        = "api_compraagil_Productos"
-TABLA_PROVEEDORES      = "api_compraagil_Proveedores"
-TABLA_PROD_COTIZADOS   = "api_compraagil_Productos_Cotizados"
-TABLA_DOCUMENTOS       = "api_compraagil_Documentos"
+TABLA_RESUMEN          = "api_compraagil_resumen"
+TABLA_PRODUCTOS        = "api_compraagil_productos"
+TABLA_PROVEEDORES      = "api_compraagil_proveedores"
+TABLA_PROD_COTIZADOS   = "api_compraagil_productos_cotizados"
+TABLA_DOCUMENTOS       = "api_compraagil_documentos"
 
 # =========================
 # CLASES DE CONFIGURACIÓN
@@ -1167,7 +1167,10 @@ def sincronizar_con_servidor():
             continue
         try:
             df = pd.read_csv(ruta_csv, sep=";", encoding="utf-8-sig", dtype=str)
-            df.to_sql(nombre_tabla, con=engine, if_exists="replace", index=False, chunksize=500)
+            with engine.connect() as conn:
+                conn.execute(text(f"DROP TABLE IF EXISTS `{nombre_tabla}`"))
+                conn.commit()
+            df.to_sql(nombre_tabla, con=engine, if_exists="append", index=False, chunksize=500)
             print(f"   ✅ {nombre_tabla}: {len(df)} registros")
         except Exception as e:
             print(f"   ❌ Error en {nombre_tabla}: {e}")
