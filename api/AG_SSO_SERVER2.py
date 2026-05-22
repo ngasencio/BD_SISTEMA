@@ -1,0 +1,1256 @@
+import csv
+import datetime as dt
+import json
+import pathlib
+import ssl
+import time
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
+
+# =========================
+# CONFIGURACIÓN FIJA SSO (COMPRA ÁGIL)
+# =========================
+CODIGO_ORGANISMO = "7296"  # SSO
+TICKET = "2798F2D3-0AC5-4323-9BB9-5E90618194BA"
+REGION_LOS_LAGOS = 10
+RUT_SSO = "616076000"
+
+# Códigos de organismo del SSO en Compra Ágil (primer nivel del código)
+CODIGOS_ORGANISMO_SSO = [
+    "1057532",
+    "1077241", 
+    "1180747",
+    "1057976",
+    "1057922",
+    "1057727"
+]
+
+# RUTAS
+RUTA_API = pathlib.Path(__file__).parent.absolute()
+CARPETA_BASE = RUTA_API / "CA_DSSO"
+CARPETA_DIARIO = CARPETA_BASE / "DIARIO"
+CARPETA_MAESTROS = CARPETA_BASE / "MAESTROS"
+
+# Aseguramos que existan las carpetas
+CARPETA_DIARIO.mkdir(parents=True, exist_ok=True)
+CARPETA_MAESTROS.mkdir(parents=True, exist_ok=True)
+
+# Configuración de rendimiento (SEGURO - SIN CONCURRENCIA)
+MAX_REINTENTOS = 5
+ESPERA_ENTRE_INTENTOS = 2.0
+ESPERA_ENTRE_DETALLES = 0.8  # Pausa entre llamadas de detalle
+ESPERA_ENTRE_PAGINAS = 0.5   # Pausa entre páginas de listado
+
+URL_BASE_API = "https://api2.mercadopublico.cl"
+URL_LISTADO = f"{URL_BASE_API}/v2/compra-agil"
+
+# =========================
+# CONFIGURACIÓN BASE DE DATOS LOCAL
+# =========================
+DB_HOST = "127.0.0.1"
+DB_PORT = 3306
+DB_NAME = "bd_sistema"
+DB_USER = "root"
+DB_PASSWORD = "Nicolas2017#"
+
+TABLA_RESUMEN          = "api_compraagil_resumen"
+TABLA_PRODUCTOS        = "api_compraagil_productos"
+TABLA_PROVEEDORES      = "api_compraagil_proveedores"
+TABLA_PROD_COTIZADOS   = "api_compraagil_productos_cotizados"
+TABLA_DOCUMENTOS       = "api_compraagil_documentos"
+
+# =========================
+# CLASES DE CONFIGURACIÓN
+# =========================
+
+@dataclass(frozen=True)
+class ApiConfig:
+    """Configuración de acceso a API Compra Ágil v2."""
+    ticket: str
+    region: int
+    max_reintentos: int = MAX_REINTENTOS
+    espera_base: float = ESPERA_ENTRE_INTENTOS
+    timeout: int = 30
+    url_base: str = URL_BASE_API
+
+
+class MercadoPublicoCompraAgilClient:
+    """Cliente para la API de Compra Ágil v2 con backoff y manejo de errores."""
+
+    def __init__(self, cfg: ApiConfig):
+        self.cfg = cfg
+        self._ctx = ssl._create_unverified_context()
+
+    def get_json(self, url: str, params: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
+        """Realiza petición GET con reintentos y backoff."""
+        if params:
+            url_completa = url + "?" + urllib.parse.urlencode(params)
+        else:
+            url_completa = url
+        
+        # Añadir ticket al header
+        headers = {"ticket": self.cfg.ticket}
+        req = urllib.request.Request(url_completa, headers=headers)
+        
+        last_err: Optional[Exception] = None
+
+        for intento in range(1, self.cfg.max_reintentos + 1):
+            try:
+                with urllib.request.urlopen(req, context=self._ctx, timeout=self.cfg.timeout) as resp:
+                    data = json.load(resp)
+                    
+                    # Verificar respuesta exitosa
+                    if data.get("success") == "NOK":
+                        print(f"⚠️  API retornó error: {data.get('errors')}")
+                        return None
+                    
+                    return data
+                    
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    # Rate limit alcanzado
+                    retry_after = int(e.headers.get('Retry-After', 60))
+                    print(f"⚠️  Rate limit alcanzado. Esperando {retry_after} segundos...")
+                    time.sleep(retry_after)
+                    continue
+                elif e.code == 401:
+                    print(f"❌ Error de autenticación. Verifica el ticket.")
+                    return None
+                elif e.code == 404:
+                    return None
+                else:
+                    last_err = e
+                    time.sleep(self.cfg.espera_base * intento)
+                    
+            except Exception as e:
+                last_err = e
+                time.sleep(self.cfg.espera_base * intento)
+
+        print(f"⚠️  API sin respuesta tras {self.cfg.max_reintentos} intentos: {last_err}")
+        return None
+
+    def obtener_listado_con_paginacion(self, params_base: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Obtiene el listado completo de Compras Ágiles con paginación automática.
+        Retorna lista de items (no detalles, solo el listado básico).
+        """
+        params = {**params_base, "region": self.cfg.region, "tamano_pagina": 50, "numero_pagina": 1}
+        
+        items_totales = []
+        
+        # Primera página
+        print(f"   📄 Obteniendo página 1...")
+        data = self.get_json(URL_LISTADO, params)
+        
+        if not data or not data.get("payload"):
+            print("   ⚠️  No se pudo obtener primera página o no hay datos.")
+            return []
+        
+        paginacion = data["payload"]["paginacion"]
+        total_paginas = paginacion["total_paginas"]
+        total_resultados = paginacion["total_resultados"]
+        
+        print(f"   📊 Total: {total_resultados} registros en {total_paginas} páginas")
+        
+        # Agregar items de primera página
+        items_totales.extend(data["payload"]["items"])
+        
+        # Resto de páginas
+        for num_pagina in range(2, total_paginas + 1):
+            print(f"   📄 Obteniendo página {num_pagina}/{total_paginas}...")
+            params["numero_pagina"] = num_pagina
+            
+            data = self.get_json(URL_LISTADO, params)
+            if not data or not data.get("payload"):
+                print(f"   ⚠️  Falló página {num_pagina}")
+                continue
+            
+            items_totales.extend(data["payload"]["items"])
+            time.sleep(ESPERA_ENTRE_PAGINAS)
+        
+        print(f"   ✅ Total items listado extraídos: {len(items_totales)}")
+        return items_totales
+
+    def obtener_detalle_compra_agil(self, codigo: str) -> Optional[Dict[str, Any]]:
+        """Obtiene el detalle completo de una Compra Ágil específica."""
+        url = f"{self.cfg.url_base}/v2/compra-agil/{codigo}"
+        data = self.get_json(url)
+        
+        if data and data.get("payload"):
+            return data["payload"]
+        return None
+
+
+# =========================
+# FUNCIONES AUXILIARES
+# =========================
+
+def normalizar_rut(rut: str) -> str:
+    """Normaliza RUT removiendo puntos, guiones y espacios."""
+    if not rut:
+        return ""
+    return rut.replace(".", "").replace("-", "").replace(" ", "").upper()
+
+
+def es_compra_agil_sso(codigo_compra_agil: str, rut_comprador: str) -> bool:
+    """
+    Valida si una Compra Ágil pertenece al SSO mediante doble validación.
+    
+    Validación 1: El código de organismo (primer nivel) debe estar en la lista del SSO
+    Validación 2: El RUT del comprador debe ser el del SSO
+    
+    Args:
+        codigo_compra_agil: Código de la Compra Ágil (ej: "1057532-942-COT25")
+        rut_comprador: RUT del organismo comprador
+    
+    Returns:
+        True si cumple AMBAS validaciones (código Y RUT), False en caso contrario
+    """
+    # Validación 1: Código de organismo
+    try:
+        primer_nivel = codigo_compra_agil.split("-")[0]
+        codigo_valido = primer_nivel in CODIGOS_ORGANISMO_SSO
+    except:
+        codigo_valido = False
+    
+    # Validación 2: RUT
+    rut_normalizado = normalizar_rut(rut_comprador)
+    rut_sso_normalizado = normalizar_rut(RUT_SSO)
+    rut_valido = rut_normalizado == rut_sso_normalizado
+    
+    # Debe cumplir AMBAS validaciones
+    return codigo_valido and rut_valido
+
+
+def limpiar(texto):
+    """Limpia texto para CSV."""
+    if texto is None:
+        return ""
+    return str(texto).replace("\n", " ").replace(";", ",").replace("\r", " ").strip()
+
+
+def to_float(val):
+    """Convierte valor a float de forma segura."""
+    try:
+        return float(val)
+    except:
+        return 0.0
+
+
+def _buscar_codigo_oc_api(rut_proveedor: str, monto_total: float, fecha_cierre: dt.date) -> Optional[str]:
+    """
+    Busca el código alfanumérico de una OC en la API v1 de Mercado Público.
+    Cruza por fecha (rango 12 días post-cierre), RUT proveedor, monto y TipoOC == AG.
+    """
+    ctx = ssl._create_unverified_context()
+    rut_normalizado = normalizar_rut(rut_proveedor)
+    url_base = "https://api.mercadopublico.cl/servicios/v1/publico/ordenesdecompra.json"
+
+    for dias in range(12):
+        fecha_busqueda = fecha_cierre + dt.timedelta(days=dias)
+        params = {
+            "fecha": fecha_busqueda.strftime("%d%m%Y"),
+            "CodigoOrganismo": CODIGO_ORGANISMO,
+            "ticket": TICKET,
+        }
+        url = url_base + "?" + urllib.parse.urlencode(params)
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                data = json.load(resp)
+            for oc in data.get("Listado", []):
+                rut_oc = normalizar_rut(oc.get("RutProveedor", ""))
+                monto_oc = to_float(oc.get("Total", 0))
+                tipo_oc = str(oc.get("Tipo", "")).strip().upper()
+                if rut_oc == rut_normalizado and abs(monto_oc - monto_total) < 1000 and tipo_oc == "AG":
+                    return oc.get("Codigo")
+        except Exception:
+            continue
+        time.sleep(0.3)
+
+    return None
+
+
+def _write_csv_dicts(path: pathlib.Path, rows: List[Dict[str, Any]], delimiter: str = ";") -> None:
+    """Escritura CSV consistente y rápida para lista de dicts."""
+    if not rows:
+        return
+    with open(path, "w", newline="", encoding="utf-8-sig") as csvfile:
+        w = csv.DictWriter(csvfile, fieldnames=rows[0].keys(), delimiter=delimiter)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def _extraer_tablas_normalizadas(detalle: Dict[str, Any], buscar_codigo_oc: bool = False) -> Tuple[
+    Dict[str, Any],           # Resumen
+    List[Dict[str, Any]],     # Productos Solicitados
+    List[Dict[str, Any]],     # Proveedores
+    List[Dict[str, Any]],     # Productos Cotizados
+    List[Dict[str, Any]]      # Documentos
+]:
+    """
+    Normaliza el JSON de detalle de Compra Ágil en 5 tablas relacionales.
+    Extrae TODOS los campos disponibles en la API.
+    
+    Args:
+        detalle: Diccionario con el detalle de la Compra Ágil
+        buscar_codigo_oc: Si True, busca el código alfanumérico de OC en API v1 (más lento)
+    """
+    
+    codigo = detalle.get("codigo", "")
+    
+    # ==================
+    # TABLA 1: RESUMEN
+    # ==================
+    estado = detalle.get("estado", {})
+    convocatoria = detalle.get("convocatoria", {})
+    fechas = detalle.get("fechas", {})
+    entrega = detalle.get("entrega", {})
+    presupuesto = detalle.get("presupuesto", {})
+    # IMPORTANTE: La API retorna id_orden_compra en la raíz, NO en un objeto "orden_compra"
+    # Esto difiere de la documentación del PDF
+    institucion = detalle.get("institucion", {})
+    resumen_obj = detalle.get("resumen", {})
+    motivos = detalle.get("motivos", {})
+    flags = detalle.get("flags", {})
+    
+    resumen = {
+        # Identificación básica
+        "CodigoCompraAgil": codigo,
+        "Nombre": limpiar(detalle.get("nombre")),
+        "Descripcion": limpiar(detalle.get("descripcion")),
+        
+        # Estado
+        "EstadoID": estado.get("id_estado"),
+        "EstadoCodigo": estado.get("codigo"),
+        "EstadoGlosa": estado.get("glosa"),
+        
+        # Convocatoria
+        "ConvocatoriaEstado": convocatoria.get("estado_convocatoria"),
+        "ConvocatoriaDescripcion": convocatoria.get("descripcion"),
+        "FechaCierrePrimerLlamado": convocatoria.get("fecha_cierre_primer_llamado"),
+        "FechaCierreSegundoLlamado": convocatoria.get("fecha_cierre_segundo_llamado"),
+        
+        # Fechas
+        "FechaPublicacion": fechas.get("fecha_publicacion"),
+        "FechaCierre": fechas.get("fecha_cierre"),
+        "FechaUltimoCambio": fechas.get("fecha_ultimo_cambio"),
+        "FechaCancelacion": fechas.get("fecha_cancelacion"),
+        
+        # Entrega
+        "DireccionEntrega": limpiar(entrega.get("direccion_entrega")),
+        "PlazoEntregaDias": entrega.get("plazo_entrega_dias"),
+        
+        # Presupuesto
+        "TipoPresupuesto": presupuesto.get("tipo_presupuesto"),
+        "Moneda": presupuesto.get("moneda"),
+        "PresupuestoEstimado": presupuesto.get("presupuesto_estimado"),
+        "MontoDisponible": presupuesto.get("monto_disponible"),
+        "MontoDisponibleCLP": presupuesto.get("monto_disponible_clp"),
+        "ValorCambioMoneda": presupuesto.get("valor_cambio_moneda"),
+        "FechaCambioMoneda": presupuesto.get("fecha_cambio_moneda"),
+        
+        # Orden de Compra (la API retorna estos campos en la raíz, no en un objeto)
+        # IMPORTANTE: El estado "oc_emitida" NO se usa en la práctica por la API.
+        # Las OCs emitidas mantienen estado "proveedor_seleccionado" pero con id_orden_compra lleno.
+        # Para detectar OCs emitidas: verificar si id_orden_compra is not None
+        "OC_ID": detalle.get("id_orden_compra"),
+        "OC_Codigo": None,  # Se llenará después si buscar_codigo_oc=True
+        # Nota: codigo_orden_compra y estado_orden_compra NO existen en la respuesta real
+        
+        # Institución
+        "OrganismoComprador": limpiar(institucion.get("organismo_comprador")),
+        "RutComprador": institucion.get("rut"),
+        "UnidadCompra": limpiar(institucion.get("unidad_compra")),
+        "Region": institucion.get("region"),
+        "NombreRegion": institucion.get("nombre_region"),
+        
+        # Resumen
+        "MultaSancion": resumen_obj.get("multa_sancion"),
+        "TotalOfertasRecibidas": resumen_obj.get("total_ofertas_recibidas"),
+        "TotalDemandas": resumen_obj.get("total_demandas"),
+        
+        # Motivos
+        "MotivoCancelacion": limpiar(motivos.get("motivo_cancelacion")),
+        "MotivoDesierta": limpiar(motivos.get("motivo_desierta")),
+        "MotivoSeleccion": limpiar(motivos.get("motivo_seleccion")),
+        
+        # Flags
+        "RequisitosMedioambientales": flags.get("considera_requisitos_medioambientales"),
+        "RequisitosImpactoSocial": flags.get("considera_requisitos_impacto_social_economico"),
+        
+        # Contadores
+        "TotalDocumentos": len(detalle.get("documentos", [])),
+        "TotalProductosSolicitados": len(detalle.get("productos_solicitados", [])),
+        "TotalProveedoresCotizando": len(detalle.get("proveedores_cotizando", []))
+    }
+    
+    # ==================
+    # TABLA 2: PRODUCTOS SOLICITADOS
+    # ==================
+    productos_solicitados = []
+    for prod in detalle.get("productos_solicitados", []):
+        productos_solicitados.append({
+            "CodigoCompraAgil": codigo,
+            "CodigoProducto": prod.get("codigo_producto"),
+            "Nombre": limpiar(prod.get("nombre")),
+            "Descripcion": limpiar(prod.get("descripcion")),
+            "Cantidad": prod.get("cantidad"),
+            "UnidadMedida": prod.get("unidad_medida")
+        })
+    
+    # ==================
+    # TABLA 3: PROVEEDORES
+    # ==================
+    proveedores = []
+    for prov in detalle.get("proveedores_cotizando", []):
+        # La API retorna campos adicionales no documentados
+        # estado_cotizacion viene como int, no como objeto
+        fechas_prov = prov.get("fechas", {})
+        
+        proveedores.append({
+            "CodigoCompraAgil": codigo,
+            "RutProveedor": prov.get("rut_proveedor"),
+            "RazonSocial": limpiar(prov.get("razon_social")),
+            "EsEMT": prov.get("es_emt"),
+            
+            # Estado cotización (viene como int en la API real, no como objeto)
+            "EstadoCotizacionID": prov.get("estado"),
+            "JustificacionInadmisibilidad": limpiar(prov.get("justificacion_inadmisibilidad")),
+            
+            # Selección
+            "ProveedorSeleccionado": prov.get("proveedor_seleccionado"),
+            "EstadoPorComprador": prov.get("estado_por_comprador"),
+            
+            # OC vinculada al proveedor (campo adicional encontrado)
+            "IDOrdenCompra": prov.get("id_oc"),
+            
+            # Fechas
+            "FechaCreacion": prov.get("fecha_creacion"),
+            "FechaVigencia": prov.get("fecha_vigencia"),
+            
+            # Montos
+            "ValorNeto": prov.get("valor_neto"),
+            "TotalImpuesto": prov.get("total_impuesto"),
+            "MontoDespacho": prov.get("monto_despacho"),
+            "MontoTotal": prov.get("monto_total"),
+            "NombreImpuesto": prov.get("nombre_impuesto"),
+            "PorcentajeImpuesto": prov.get("porcentaje_impuesto"),
+            
+            # Descripciones
+            "DescripcionCotizacion": limpiar(prov.get("descripcion_cotizacion")),
+            "Descripcion": limpiar(prov.get("descripcion")),
+            
+            # Campos adicionales encontrados en la API
+            "IDCotizacion": prov.get("id_cotizacion"),
+            "CodigoSucursalEmpresa": prov.get("codigo_sucursal_empresa"),
+            "CodigoEmpresa": prov.get("codigo_empresa"),
+            "Activo": prov.get("activo"),
+            
+            # Contador
+            "TotalProductosCotizados": len(prov.get("productos_cotizados", []))
+        })
+    
+    # ==================
+    # TABLA 4: PRODUCTOS COTIZADOS
+    # ==================
+    productos_cotizados = []
+    for prov in detalle.get("proveedores_cotizando", []):
+        rut_proveedor = prov.get("rut_proveedor")
+        
+        for prod_cot in prov.get("productos_cotizados", []):
+            productos_cotizados.append({
+                "CodigoCompraAgil": codigo,
+                "RutProveedor": rut_proveedor,
+                "CodigoProducto": prod_cot.get("codigo_producto"),
+                "NombreProducto": limpiar(prod_cot.get("nombre_producto")),
+                "Descripcion": limpiar(prod_cot.get("descripcion")),
+                "Cantidad": prod_cot.get("cantidad"),
+                "PrecioUnitario": prod_cot.get("precio_unitario"),
+                "MontoTotalProducto": prod_cot.get("monto_total_producto")
+            })
+    
+    # ==================
+    # TABLA 5: DOCUMENTOS
+    # ==================
+    documentos = []
+    for doc in detalle.get("documentos", []):
+        documentos.append({
+            "CodigoCompraAgil": codigo,
+            "IDDocumento": doc.get("id"),
+            "NombreDocumento": limpiar(doc.get("nombre"))
+        })
+    
+    return resumen, productos_solicitados, proveedores, productos_cotizados, documentos
+
+
+def procesar_dia(
+    fecha_dt: dt.date,
+    modo_actualizar: bool = False,
+    ticket: str = TICKET,
+    region: int = REGION_LOS_LAGOS
+) -> bool:
+    """
+    Descarga Compras Ágiles del SSO para una fecha específica (según fecha_ultimo_cambio).
+    
+    FILTRO DOBLE (máxima seguridad):
+    1. Pre-filtro por código de organismo (6 códigos SSO) - NO descarga detalles innecesarios
+    2. Validación por RUT del SSO - Confirma que es SSO
+    
+    Solo se guardan registros que cumplen AMBAS validaciones.
+    
+    Genera 5 archivos CSV en CARPETA_DIARIO:
+    - COMPRA_AGIL_SSO_YYYYMMDD_RESUMEN.csv
+    - COMPRA_AGIL_SSO_YYYYMMDD_PRODUCTOS.csv
+    - COMPRA_AGIL_SSO_YYYYMMDD_PROVEEDORES.csv
+    - COMPRA_AGIL_SSO_YYYYMMDD_PRODUCTOS_COTIZADOS.csv
+    - COMPRA_AGIL_SSO_YYYYMMDD_DOCUMENTOS.csv
+    
+    Args:
+        fecha_dt: Fecha a procesar
+        modo_actualizar: Si True, sobrescribe archivos existentes
+        ticket: Ticket de API
+        region: Código de región (10 = Los Lagos)
+    
+    Returns:
+        True si se encontraron y procesaron datos del SSO
+    """
+    fecha_str = fecha_dt.strftime("%Y%m%d")
+    
+    # Archivos de salida
+    arch_resumen = CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{fecha_str}_RESUMEN.csv"
+    arch_productos = CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{fecha_str}_PRODUCTOS.csv"
+    arch_proveedores = CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{fecha_str}_PROVEEDORES.csv"
+    arch_prod_cotizados = CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{fecha_str}_PRODUCTOS_COTIZADOS.csv"
+    arch_documentos = CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{fecha_str}_DOCUMENTOS.csv"
+    
+    # Verificar si ya existe
+    if not modo_actualizar and arch_resumen.exists():
+        print(f"   ⚠️  {fecha_str} ya descargado. Use opción 6 para actualizar.")
+        return False
+    
+    print(f"\n{'='*60}")
+    print(f"📅 PROCESANDO: {fecha_dt.strftime('%d-%m-%Y')}")
+    print(f"🏥 ORGANISMO: Servicio de Salud Osorno")
+    print(f"🔐 VALIDACIÓN DOBLE:")
+    print(f"   1️⃣ Código organismo: {', '.join(CODIGOS_ORGANISMO_SSO)}")
+    print(f"   2️⃣ RUT: {RUT_SSO}")
+    print(f"{'='*60}")
+    
+    # Cliente API
+    cfg = ApiConfig(ticket=ticket, region=region)
+    client = MercadoPublicoCompraAgilClient(cfg)
+    
+    # PASO 1: Obtener listado del día (filtrar por fecha_ultimo_cambio)
+    fecha_inicio = dt.datetime.combine(fecha_dt, dt.time.min).replace(tzinfo=dt.timezone.utc)
+    fecha_fin = dt.datetime.combine(fecha_dt, dt.time.max).replace(tzinfo=dt.timezone.utc)
+    
+    params_base = {
+        "cambio_desde": fecha_inicio.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "cambio_hasta": fecha_fin.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ordenar_por": "FechaUltimaModificacion"
+    }
+    
+    print("\n🔍 PASO 1: Obteniendo listado del día (Región Los Lagos)...")
+    items = client.obtener_listado_con_paginacion(params_base)
+    
+    if not items:
+        print(f"   ℹ️  No hay Compras Ágiles con cambios en {fecha_dt.strftime('%d-%m-%Y')}")
+        return False
+    
+    codigos = [item["codigo"] for item in items]
+    print(f"   ✅ Encontrados {len(codigos)} códigos en Región 10")
+    
+    # PASO 2: Obtener detalles y filtrar por código SSO + RUT
+    print(f"\n📦 PASO 2: Descargando detalles y filtrando por SSO...")
+    print(f"   🔍 Validación doble: Código de organismo + RUT")
+    
+    detalles_sso = []
+    descartados_codigo = 0
+    descartados_rut = 0
+    
+    for i, codigo in enumerate(codigos, 1):
+        # Pre-filtro rápido por código (antes de descargar detalle)
+        primer_nivel = codigo.split("-")[0]
+        
+        if primer_nivel not in CODIGOS_ORGANISMO_SSO:
+            # Descartado por código - ni siquiera descargamos el detalle
+            descartados_codigo += 1
+            print(f"   [{i}/{len(codigos)}] {codigo}... ⊗ Código organismo ({primer_nivel})")
+            continue
+        
+        # Si pasa el filtro de código, descargamos el detalle
+        print(f"   [{i}/{len(codigos)}] {codigo}...", end=" ", flush=True)
+        
+        detalle = client.obtener_detalle_compra_agil(codigo)
+        
+        if detalle:
+            # Validación final por RUT
+            rut_comprador = normalizar_rut(detalle.get("institucion", {}).get("rut", ""))
+            rut_sso_norm = normalizar_rut(RUT_SSO)
+            
+            if rut_comprador == rut_sso_norm:
+                detalles_sso.append(detalle)
+                print("✅ SSO (Código + RUT)")
+            else:
+                descartados_rut += 1
+                organismo = detalle.get("institucion", {}).get("organismo_comprador", "Otro")
+                print(f"⊗ RUT no coincide ({organismo[:25]})")
+        else:
+            print("❌ Error")
+        
+        time.sleep(ESPERA_ENTRE_DETALLES)
+    
+    # Reporte de filtrado mejorado
+    total_descartados = descartados_codigo + descartados_rut
+    print(f"\n   📊 RESULTADO DEL FILTRADO:")
+    print(f"   ✅ SSO (ambas validaciones): {len(detalles_sso)} registros")
+    print(f"   ⊗ Descartados por código organismo: {descartados_codigo} registros")
+    print(f"   ⊗ Descartados por RUT: {descartados_rut} registros")
+    print(f"   📉 Total descartados: {total_descartados} registros")
+    print(f"   ⚡ Eficiencia: {descartados_codigo} detalles NO descargados (ahorro de tiempo)")
+    
+    if not detalles_sso:
+        print(f"   ℹ️  No se encontraron Compras Ágiles del SSO en {fecha_dt.strftime('%d-%m-%Y')}")
+        return False
+    
+    # PASO 3: Normalizar en 5 tablas
+    print(f"\n🔄 PASO 3: Normalizando {len(detalles_sso)} registros del SSO...")
+    
+    todos_resumenes = []
+    todos_productos = []
+    todos_proveedores = []
+    todos_prod_cotizados = []
+    todos_documentos = []
+    
+    for detalle in detalles_sso:
+        resumen, productos, proveedores, prod_cotizados, documentos = _extraer_tablas_normalizadas(detalle)
+        
+        todos_resumenes.append(resumen)
+        todos_productos.extend(productos)
+        todos_proveedores.extend(proveedores)
+        todos_prod_cotizados.extend(prod_cotizados)
+        todos_documentos.extend(documentos)
+    
+    # PASO 3.5: Buscar códigos de OC (OPCIONAL - comentar para ahorrar tiempo)
+    # Esta búsqueda es lenta porque usa la API v1 de OC
+    # Descomentar solo si necesitas los códigos alfanuméricos de OC
+    """
+    print(f"\n🔍 PASO 3.5: Buscando códigos de OC (puede tomar varios minutos)...")
+    for i, resumen in enumerate(todos_resumenes):
+        if resumen["OC_ID"]:
+            # Buscar proveedor ganador para obtener RUT y monto
+            provs = [p for p in todos_proveedores if p["CodigoCompraAgil"] == resumen["CodigoCompraAgil"] and p["ProveedorSeleccionado"]]
+            if provs:
+                prov_ganador = provs[0]
+                codigo_oc = buscar_codigo_oc(
+                    id_oc=int(resumen["OC_ID"]),
+                    rut_proveedor=prov_ganador["RutProveedor"],
+                    monto_total=to_float(prov_ganador["MontoTotal"]),
+                    fecha_cierre=dt.datetime.strptime(resumen["FechaCierre"], "%Y-%m-%d %H:%M").date()
+                )
+                if codigo_oc:
+                    todos_resumenes[i]["OC_Codigo"] = codigo_oc
+                    print(f"   ✅ {resumen['CodigoCompraAgil']}: OC {codigo_oc}")
+                else:
+                    print(f"   ⊗ {resumen['CodigoCompraAgil']}: OC no encontrada")
+    """
+    
+    # PASO 4: Escribir CSVs
+    print(f"\n💾 PASO 4: Guardando CSVs...")
+    
+    _write_csv_dicts(arch_resumen, todos_resumenes)
+    print(f"   ✅ {arch_resumen.name}: {len(todos_resumenes)} registros")
+    
+    if todos_productos:
+        _write_csv_dicts(arch_productos, todos_productos)
+        print(f"   ✅ {arch_productos.name}: {len(todos_productos)} registros")
+    
+    if todos_proveedores:
+        _write_csv_dicts(arch_proveedores, todos_proveedores)
+        print(f"   ✅ {arch_proveedores.name}: {len(todos_proveedores)} registros")
+    
+    if todos_prod_cotizados:
+        _write_csv_dicts(arch_prod_cotizados, todos_prod_cotizados)
+        print(f"   ✅ {arch_prod_cotizados.name}: {len(todos_prod_cotizados)} registros")
+    
+    if todos_documentos:
+        _write_csv_dicts(arch_documentos, todos_documentos)
+        print(f"   ✅ {arch_documentos.name}: {len(todos_documentos)} registros")
+    
+    print(f"\n✨ DÍA {fecha_str} COMPLETADO EXITOSAMENTE.\n")
+    return True
+
+
+def unificar_base_datos():
+    """
+    Lee todos los archivos de CARPETA_DIARIO y crea Maestros consolidados 
+    en CARPETA_MAESTROS (sobrescribe si existen).
+    """
+    print("\n" + "="*60)
+    print("🔄 UNIFICANDO BASE DE DATOS (DIARIO → MAESTROS)")
+    print("="*60)
+    
+    archivos_diario = sorted(CARPETA_DIARIO.glob("COMPRA_AGIL_SSO_*_RESUMEN.csv"))
+    
+    if not archivos_diario:
+        print("\n   ⚠️  No se encontraron archivos en DIARIO. Ejecute primero las opciones 1-3.")
+        return
+    
+    print(f"\n   📂 Encontrados {len(archivos_diario)} días de datos en DIARIO")
+    
+    # --- RESUMEN ---
+    print("\n   🔄 Consolidando RESUMEN...")
+    df_resumen_completo = pd.concat(
+        [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_diario],
+        ignore_index=True
+    )
+    df_resumen_completo.drop_duplicates(subset=["CodigoCompraAgil"], keep="last", inplace=True)
+    
+    ruta_m_resumen = CARPETA_MAESTROS / "Maestro_Resumen.csv"
+    df_resumen_completo.to_csv(ruta_m_resumen, sep=";", index=False, encoding="utf-8-sig")
+    print(f"   ✅ {ruta_m_resumen.name}: {len(df_resumen_completo)} registros")
+    
+    # --- PRODUCTOS ---
+    archivos_productos = sorted(CARPETA_DIARIO.glob("COMPRA_AGIL_SSO_*_PRODUCTOS.csv"))
+    if archivos_productos:
+        print("   🔄 Consolidando PRODUCTOS...")
+        df_productos = pd.concat(
+            [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_productos],
+            ignore_index=True
+        )
+        df_productos.drop_duplicates(subset=["CodigoCompraAgil", "CodigoProducto"], keep="last", inplace=True)
+        
+        ruta_m_productos = CARPETA_MAESTROS / "Maestro_Productos.csv"
+        df_productos.to_csv(ruta_m_productos, sep=";", index=False, encoding="utf-8-sig")
+        print(f"   ✅ {ruta_m_productos.name}: {len(df_productos)} registros")
+    
+    # --- PROVEEDORES ---
+    archivos_proveedores = sorted(CARPETA_DIARIO.glob("COMPRA_AGIL_SSO_*_PROVEEDORES.csv"))
+    if archivos_proveedores:
+        print("   🔄 Consolidando PROVEEDORES...")
+        df_proveedores = pd.concat(
+            [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_proveedores],
+            ignore_index=True
+        )
+        df_proveedores.drop_duplicates(subset=["CodigoCompraAgil", "RutProveedor"], keep="last", inplace=True)
+        
+        ruta_m_proveedores = CARPETA_MAESTROS / "Maestro_Proveedores.csv"
+        df_proveedores.to_csv(ruta_m_proveedores, sep=";", index=False, encoding="utf-8-sig")
+        print(f"   ✅ {ruta_m_proveedores.name}: {len(df_proveedores)} registros")
+    
+    # --- PRODUCTOS COTIZADOS ---
+    archivos_prod_cot = sorted(CARPETA_DIARIO.glob("COMPRA_AGIL_SSO_*_PRODUCTOS_COTIZADOS.csv"))
+    if archivos_prod_cot:
+        print("   🔄 Consolidando PRODUCTOS COTIZADOS...")
+        df_prod_cot = pd.concat(
+            [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_prod_cot],
+            ignore_index=True
+        )
+        df_prod_cot.drop_duplicates(
+            subset=["CodigoCompraAgil", "RutProveedor", "CodigoProducto"],
+            keep="last",
+            inplace=True
+        )
+        
+        ruta_m_prod_cot = CARPETA_MAESTROS / "Maestro_Productos_Cotizados.csv"
+        df_prod_cot.to_csv(ruta_m_prod_cot, sep=";", index=False, encoding="utf-8-sig")
+        print(f"   ✅ {ruta_m_prod_cot.name}: {len(df_prod_cot)} registros")
+    
+    # --- DOCUMENTOS ---
+    archivos_docs = sorted(CARPETA_DIARIO.glob("COMPRA_AGIL_SSO_*_DOCUMENTOS.csv"))
+    if archivos_docs:
+        print("   🔄 Consolidando DOCUMENTOS...")
+        df_docs = pd.concat(
+            [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_docs],
+            ignore_index=True
+        )
+        df_docs.drop_duplicates(subset=["CodigoCompraAgil", "IDDocumento"], keep="last", inplace=True)
+        
+        ruta_m_docs = CARPETA_MAESTROS / "Maestro_Documentos.csv"
+        df_docs.to_csv(ruta_m_docs, sep=";", index=False, encoding="utf-8-sig")
+        print(f"   ✅ {ruta_m_docs.name}: {len(df_docs)} registros")
+    
+    print("\n✨ UNIFICACIÓN COMPLETADA EXITOSAMENTE.")
+
+
+def refresh_base_datos(f_ini: dt.date, f_fin: dt.date):
+    """
+    Descarga rango, lee Maestros, actualiza (Upsert) y guarda.
+    
+    Proceso:
+    1. Descarga días del rango a DIARIO (filtrados por SSO)
+    2. Lee Maestros existentes
+    3. Actualiza con los nuevos datos (Upsert)
+    4. Guarda Maestros actualizados
+    """
+    print(f"\n{'='*60}")
+    print(f"🚀 REFRESH DE BASE DE DATOS ({f_ini.strftime('%d-%m-%Y')} al {f_fin.strftime('%d-%m-%Y')})")
+    print(f"🏥 Solo SSO - Validación doble (Código + RUT)")
+    print(f"{'='*60}")
+    
+    # PASO 1: Descarga a DIARIO
+    d_actual = f_ini
+    dias_descargados = []
+    
+    while d_actual <= f_fin:
+        hubo_datos = procesar_dia(d_actual, modo_actualizar=True)
+        if hubo_datos:
+            dias_descargados.append(d_actual)
+        d_actual += dt.timedelta(days=1)
+    
+    if not dias_descargados:
+        print("\n⚠️  No se encontraron nuevos datos del SSO en el rango seleccionado.")
+        return
+    
+    print(f"\n🔄 INTEGRANDO NUEVOS DATOS A LOS MAESTROS (UPSERT)...")
+    
+    # PASO 2: Actualizar cada tabla
+    
+    # --- RESUMEN ---
+    ruta_m_resumen = CARPETA_MAESTROS / "Maestro_Resumen.csv"
+    if ruta_m_resumen.exists():
+        df_master_res = pd.read_csv(ruta_m_resumen, sep=";", encoding="utf-8-sig", dtype=str)
+    else:
+        df_master_res = pd.DataFrame()
+    
+    archivos_nuevos_res = [
+        CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{d.strftime('%Y%m%d')}_RESUMEN.csv"
+        for d in dias_descargados
+    ]
+    
+    # Filtrar solo archivos que existen
+    archivos_existentes = [f for f in archivos_nuevos_res if f.exists()]
+    
+    if not archivos_existentes:
+        print("\n⚠️  No se encontraron archivos nuevos de RESUMEN para integrar.")
+        return
+    
+    df_nuevos_res = pd.concat(
+        [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_existentes],
+        ignore_index=True
+    )
+    
+    if not df_nuevos_res.empty:
+        df_final_res = pd.concat([df_master_res, df_nuevos_res])
+        df_final_res.drop_duplicates(subset=["CodigoCompraAgil"], keep="last", inplace=True)
+        df_final_res.to_csv(ruta_m_resumen, sep=";", index=False, encoding="utf-8-sig")
+        print(f"   ✅ Maestro Resumen: {len(df_final_res)} registros")
+    
+    # --- PRODUCTOS ---
+    ruta_m_productos = CARPETA_MAESTROS / "Maestro_Productos.csv"
+    if ruta_m_productos.exists():
+        df_master_prod = pd.read_csv(ruta_m_productos, sep=";", encoding="utf-8-sig", dtype=str)
+    else:
+        df_master_prod = pd.DataFrame()
+    
+    archivos_nuevos_prod = [
+        CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{d.strftime('%Y%m%d')}_PRODUCTOS.csv"
+        for d in dias_descargados
+    ]
+    archivos_nuevos_prod = [f for f in archivos_nuevos_prod if f.exists()]
+    
+    if archivos_nuevos_prod:
+        df_nuevos_prod = pd.concat(
+            [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_nuevos_prod],
+            ignore_index=True
+        )
+        
+        # Borrar productos de CAs actualizadas (solo si hay datos nuevos)
+        if not df_nuevos_prod.empty and not df_nuevos_res.empty:
+            cas_actualizadas = df_nuevos_res["CodigoCompraAgil"].unique()
+            if not df_master_prod.empty:
+                df_master_prod = df_master_prod[~df_master_prod["CodigoCompraAgil"].isin(cas_actualizadas)]
+        
+        df_final_prod = pd.concat([df_master_prod, df_nuevos_prod])
+        df_final_prod.to_csv(ruta_m_productos, sep=";", index=False, encoding="utf-8-sig")
+        print(f"   ✅ Maestro Productos: {len(df_final_prod)} registros")
+    
+    # --- PROVEEDORES ---
+    ruta_m_prov = CARPETA_MAESTROS / "Maestro_Proveedores.csv"
+    if ruta_m_prov.exists():
+        df_master_prov = pd.read_csv(ruta_m_prov, sep=";", encoding="utf-8-sig", dtype=str)
+    else:
+        df_master_prov = pd.DataFrame()
+    
+    archivos_nuevos_prov = [
+        CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{d.strftime('%Y%m%d')}_PROVEEDORES.csv"
+        for d in dias_descargados
+    ]
+    archivos_nuevos_prov = [f for f in archivos_nuevos_prov if f.exists()]
+    
+    if archivos_nuevos_prov:
+        df_nuevos_prov = pd.concat(
+            [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_nuevos_prov],
+            ignore_index=True
+        )
+        
+        # Borrar proveedores de CAs actualizadas (solo si hay datos nuevos)
+        if not df_nuevos_prov.empty and not df_nuevos_res.empty:
+            cas_actualizadas = df_nuevos_res["CodigoCompraAgil"].unique()
+            if not df_master_prov.empty:
+                df_master_prov = df_master_prov[~df_master_prov["CodigoCompraAgil"].isin(cas_actualizadas)]
+        
+        df_final_prov = pd.concat([df_master_prov, df_nuevos_prov])
+        df_final_prov.to_csv(ruta_m_prov, sep=";", index=False, encoding="utf-8-sig")
+        print(f"   ✅ Maestro Proveedores: {len(df_final_prov)} registros")
+    
+    # --- PRODUCTOS COTIZADOS ---
+    ruta_m_prod_cot = CARPETA_MAESTROS / "Maestro_Productos_Cotizados.csv"
+    if ruta_m_prod_cot.exists():
+        df_master_pc = pd.read_csv(ruta_m_prod_cot, sep=";", encoding="utf-8-sig", dtype=str)
+    else:
+        df_master_pc = pd.DataFrame()
+    
+    archivos_nuevos_pc = [
+        CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{d.strftime('%Y%m%d')}_PRODUCTOS_COTIZADOS.csv"
+        for d in dias_descargados
+    ]
+    archivos_nuevos_pc = [f for f in archivos_nuevos_pc if f.exists()]
+    
+    if archivos_nuevos_pc:
+        df_nuevos_pc = pd.concat(
+            [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_nuevos_pc],
+            ignore_index=True
+        )
+        
+        # Borrar productos cotizados de CAs actualizadas (solo si hay datos nuevos)
+        if not df_nuevos_pc.empty and not df_nuevos_res.empty:
+            cas_actualizadas = df_nuevos_res["CodigoCompraAgil"].unique()
+            if not df_master_pc.empty:
+                df_master_pc = df_master_pc[~df_master_pc["CodigoCompraAgil"].isin(cas_actualizadas)]
+        
+        df_final_pc = pd.concat([df_master_pc, df_nuevos_pc])
+        df_final_pc.to_csv(ruta_m_prod_cot, sep=";", index=False, encoding="utf-8-sig")
+        print(f"   ✅ Maestro Productos Cotizados: {len(df_final_pc)} registros")
+    
+    # --- DOCUMENTOS ---
+    ruta_m_docs = CARPETA_MAESTROS / "Maestro_Documentos.csv"
+    if ruta_m_docs.exists():
+        df_master_docs = pd.read_csv(ruta_m_docs, sep=";", encoding="utf-8-sig", dtype=str)
+    else:
+        df_master_docs = pd.DataFrame()
+    
+    archivos_nuevos_docs = [
+        CARPETA_DIARIO / f"COMPRA_AGIL_SSO_{d.strftime('%Y%m%d')}_DOCUMENTOS.csv"
+        for d in dias_descargados
+    ]
+    archivos_nuevos_docs = [f for f in archivos_nuevos_docs if f.exists()]
+    
+    if archivos_nuevos_docs:
+        df_nuevos_docs = pd.concat(
+            [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str) for f in archivos_nuevos_docs],
+            ignore_index=True
+        )
+        
+        # Borrar documentos de CAs actualizadas (solo si hay datos nuevos)
+        if not df_nuevos_docs.empty and not df_nuevos_res.empty:
+            cas_actualizadas = df_nuevos_res["CodigoCompraAgil"].unique()
+            if not df_master_docs.empty:
+                df_master_docs = df_master_docs[~df_master_docs["CodigoCompraAgil"].isin(cas_actualizadas)]
+        
+        df_final_docs = pd.concat([df_master_docs, df_nuevos_docs])
+        df_final_docs.to_csv(ruta_m_docs, sep=";", index=False, encoding="utf-8-sig")
+        print(f"   ✅ Maestro Documentos: {len(df_final_docs)} registros")
+    
+    print("\n✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE.")
+
+    # Enlazar códigos OC automáticamente tras cada refresh
+    print("\n" + "─" * 60)
+    print("🔗 Ejecutando enlace de códigos OC (automático post-refresh)...")
+    enlazar_codigos_oc()
+
+
+def enlazar_codigos_oc():
+    """
+    7) Llena la columna OC_Codigo en Maestro_Resumen de Compras Ágiles.
+
+    Solo procesa filas con EstadoCodigo == "proveedor_seleccionado".
+
+    Método 1 (rápido, sin API):
+        Cruza CodigoCompraAgil con OC_DSSO/MAESTROS/OC_Maestro_Resumen.csv.
+        Requiere haber ejecutado Opción 9 en OC_SSO_SERVER.py primero.
+
+    Método 2 (API fallback):
+        Para las que quedan sin código, busca en la API v1 de OC por fecha,
+        RUT del proveedor ganador (de Maestro_Proveedores.csv) y monto total.
+    """
+    ruta_ca_res  = CARPETA_MAESTROS / "Maestro_Resumen.csv"
+    ruta_ca_prov = CARPETA_MAESTROS / "Maestro_Proveedores.csv"
+    ruta_oc_res  = RUTA_API / "OC_DSSO" / "MAESTROS" / "OC_Maestro_Resumen.csv"
+
+    if not ruta_ca_res.exists():
+        print("   ❌ No existe Maestro_Resumen.csv. Ejecute Unificar (5) o Refresh (6) primero.")
+        return
+
+    print("\n🔗 ENLAZANDO CÓDIGOS DE ÓRDENES DE COMPRA A COMPRAS ÁGILES...")
+    df_ca = pd.read_csv(ruta_ca_res, sep=";", encoding="utf-8-sig", dtype=str)
+
+    if "OC_Codigo" not in df_ca.columns:
+        df_ca["OC_Codigo"] = None
+
+    # Solo aplica a CAs con proveedor seleccionado
+    mask_ps = df_ca["EstadoCodigo"].str.strip().str.lower() == "proveedor_seleccionado"
+    total_ps = int(mask_ps.sum())
+    print(f"   📊 CAs con 'proveedor_seleccionado': {total_ps}")
+
+    def _ya_tiene_codigo(val) -> bool:
+        return bool(val and str(val).strip() and str(val).lower() not in ("nan", "none"))
+
+    # ─── MÉTODO 1: Cross-referencia con OC_Maestro_Resumen.csv ───────────────
+    encontrados_m1 = 0
+    if ruta_oc_res.exists():
+        print("\n   🔄 Método 1: Cruzando con OC_Maestro_Resumen.csv...")
+        df_oc = pd.read_csv(ruta_oc_res, sep=";", encoding="utf-8-sig", dtype=str)
+
+        if "CodigoCompraAgil" not in df_oc.columns:
+            print("   ⚠️  OC_Maestro_Resumen.csv no tiene columna 'CodigoCompraAgil'.")
+            print("       → Ejecute Opción 9 en OC_SSO_SERVER.py para generarla.")
+        else:
+            # CodigoCompraAgil → CodigoOC (ignorar nulos)
+            df_mapa = df_oc[
+                df_oc["CodigoCompraAgil"].notna()
+                & (df_oc["CodigoCompraAgil"].str.strip() != "")
+                & (df_oc["CodigoCompraAgil"].str.lower() != "nan")
+            ].copy()
+            mapa = dict(zip(df_mapa["CodigoCompraAgil"].str.strip(), df_mapa["CodigoOC"].str.strip()))
+            print(f"   📋 Entradas en mapa CA→OC: {len(mapa)}")
+
+            for idx in df_ca[mask_ps].index:
+                if _ya_tiene_codigo(df_ca.at[idx, "OC_Codigo"]):
+                    continue
+                ca_code = str(df_ca.at[idx, "CodigoCompraAgil"]).strip()
+                if ca_code in mapa:
+                    df_ca.at[idx, "OC_Codigo"] = mapa[ca_code]
+                    encontrados_m1 += 1
+
+            print(f"   ✅ Método 1: {encontrados_m1} códigos enlazados")
+    else:
+        print("   ⚠️  No se encontró OC_Maestro_Resumen.csv. Saltando Método 1.")
+        print(f"       Ruta esperada: {ruta_oc_res}")
+
+    # ─── MÉTODO 2: API fallback ───────────────────────────────────────────────
+    # CAs con proveedor_seleccionado, OC_ID disponible, aún sin OC_Codigo
+    def _valor_vacio(val) -> bool:
+        return not _ya_tiene_codigo(val)
+
+    sin_codigo_idx = [
+        idx for idx in df_ca[mask_ps].index
+        if _valor_vacio(df_ca.at[idx, "OC_Codigo"])
+        and _ya_tiene_codigo(df_ca.at[idx, "OC_ID"])
+    ]
+
+    encontrados_m2 = 0
+    if sin_codigo_idx:
+        print(f"\n   🔄 Método 2 (API): {len(sin_codigo_idx)} registros sin código. Buscando en API de OC...")
+
+        # Cargar tabla de proveedores para obtener ganador + monto
+        df_prov = None
+        if ruta_ca_prov.exists():
+            df_prov = pd.read_csv(ruta_ca_prov, sep=";", encoding="utf-8-sig", dtype=str)
+        else:
+            print("   ⚠️  Maestro_Proveedores.csv no encontrado. Método 2 omitido.")
+            sin_codigo_idx = []
+
+        for idx in sin_codigo_idx:
+            ca_code = str(df_ca.at[idx, "CodigoCompraAgil"]).strip()
+            fecha_cierre_str = str(df_ca.at[idx, "FechaCierre"]).strip()
+
+            try:
+                fecha_cierre = pd.to_datetime(fecha_cierre_str).date()
+            except Exception:
+                print(f"      ⊗ {ca_code}: Fecha inválida ({fecha_cierre_str!r})")
+                continue
+
+            # Proveedor ganador
+            rut_prov, monto_total = None, 0.0
+            if df_prov is not None:
+                ganad = df_prov[
+                    (df_prov["CodigoCompraAgil"] == ca_code)
+                    & (df_prov["ProveedorSeleccionado"].str.strip().str.lower() == "true")
+                ]
+                if not ganad.empty:
+                    rut_prov   = str(ganad.iloc[0].get("RutProveedor", "")).strip()
+                    monto_total = to_float(ganad.iloc[0].get("MontoTotal", 0))
+
+            if not rut_prov:
+                print(f"      ⊗ {ca_code}: Sin proveedor ganador registrado")
+                continue
+
+            print(f"      🔍 {ca_code} | RUT: {rut_prov} | ${monto_total:,.0f}...", end=" ", flush=True)
+            codigo_oc = _buscar_codigo_oc_api(rut_prov, monto_total, fecha_cierre)
+
+            if codigo_oc:
+                df_ca.at[idx, "OC_Codigo"] = codigo_oc
+                encontrados_m2 += 1
+                print(f"✅ {codigo_oc}")
+            else:
+                print("⊗ No encontrado")
+
+        if sin_codigo_idx:
+            print(f"\n   ✅ Método 2: {encontrados_m2} códigos adicionales encontrados")
+    else:
+        print("\n   ℹ️  No quedan registros pendientes para Método 2.")
+
+    # Guardar
+    df_ca.to_csv(ruta_ca_res, sep=";", index=False, encoding="utf-8-sig")
+
+    # Resumen final
+    df_ca_reload = pd.read_csv(ruta_ca_res, sep=";", encoding="utf-8-sig", dtype=str)
+    mask_ps2 = df_ca_reload["EstadoCodigo"].str.strip().str.lower() == "proveedor_seleccionado"
+    con_codigo = df_ca_reload[mask_ps2]["OC_Codigo"].apply(_ya_tiene_codigo).sum()
+    print(f"\n   📊 RESULTADO FINAL:")
+    print(f"   ✅ CAs con OC_Codigo: {con_codigo}/{total_ps}")
+    print(f"   ⊗ Sin OC_Codigo: {total_ps - con_codigo}/{total_ps}")
+    print(f"   💾 {ruta_ca_res.name} actualizado.")
+
+
+def sincronizar_con_servidor():
+    """
+    Sube los 5 Maestros de Compra Ágil a MariaDB bd_sistema.
+    Cada tabla se reemplaza completamente (DROP + recreación).
+
+    Tablas destino:
+        api_compraagil_Resumen
+        api_compraagil_Productos
+        api_compraagil_Proveedores
+        api_compraagil_Productos_Cotizados
+        api_compraagil_Documentos
+    """
+    try:
+        from sqlalchemy import create_engine, text
+    except ImportError:
+        print("❌ Requiere sqlalchemy: pip install sqlalchemy")
+        return
+
+    print("\n" + "=" * 60)
+    print("🚀 SINCRONIZANDO MAESTROS → bd_sistema")
+    print(f"   Host: {DB_HOST}:{DB_PORT}  /  BD: {DB_NAME}")
+    print("=" * 60)
+
+    # Intentar conexión con mysqldb (mysqlclient) o pymysql como fallback
+    engine = None
+    pwd_enc = urllib.parse.quote_plus(DB_PASSWORD) if DB_PASSWORD else ""
+    auth = f"{DB_USER}:{pwd_enc}@" if DB_PASSWORD else f"{DB_USER}@"
+
+    for dialect in ("mysql+mysqldb", "mysql+pymysql"):
+        try:
+            dsn = f"{dialect}://{auth}{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
+            eng = create_engine(dsn, pool_pre_ping=True)
+            with eng.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            engine = eng
+            break
+        except Exception:
+            continue
+
+    if engine is None:
+        print("❌ No se pudo conectar a MariaDB.")
+        print("   Verifica que mysqlclient o pymysql estén instalados y que el servidor esté activo.")
+        return
+
+    tablas = [
+        (CARPETA_MAESTROS / "Maestro_Resumen.csv",              TABLA_RESUMEN),
+        (CARPETA_MAESTROS / "Maestro_Productos.csv",            TABLA_PRODUCTOS),
+        (CARPETA_MAESTROS / "Maestro_Proveedores.csv",          TABLA_PROVEEDORES),
+        (CARPETA_MAESTROS / "Maestro_Productos_Cotizados.csv",  TABLA_PROD_COTIZADOS),
+        (CARPETA_MAESTROS / "Maestro_Documentos.csv",           TABLA_DOCUMENTOS),
+    ]
+
+    for ruta_csv, nombre_tabla in tablas:
+        if not ruta_csv.exists():
+            print(f"   ⚠️  {ruta_csv.name} no encontrado. Omitiendo {nombre_tabla}.")
+            continue
+        try:
+            df = pd.read_csv(ruta_csv, sep=";", encoding="utf-8-sig", dtype=str)
+            with engine.connect() as conn:
+                conn.execute(text(f"DROP TABLE IF EXISTS `{nombre_tabla}`"))
+                conn.commit()
+            df.to_sql(nombre_tabla, con=engine, if_exists="append", index=False, chunksize=500)
+            print(f"   ✅ {nombre_tabla}: {len(df)} registros")
+        except Exception as e:
+            print(f"   ❌ Error en {nombre_tabla}: {e}")
+
+    engine.dispose()
+    print("\n✨ SINCRONIZACIÓN COMPLETADA.")
+
+
+# =========================
+# MENÚ PRINCIPAL
+# =========================
+
+if __name__ == "__main__":
+    while True:
+        # Obtener fecha actual en formato dd-mm-yyyy
+        fecha_hoy = dt.date.today().strftime("%d-%m-%Y")
+        
+        print("\n" + "="*60)
+        print("   EXTRACTOR COMPRA ÁGIL SSO - V1")
+        print("   (Región Los Lagos - Solo SSO)")
+        print("="*60)
+        print(f"1) Hoy ({fecha_hoy})")
+        print("2) Manual (Un día a DIARIO)")
+        print("3) Rango de fechas (Solo descarga lo nuevo a DIARIO)")
+        print("-" * 60)
+        print("5) UNIFICAR BASE DATOS (Crea Maestros desde DIARIO)")
+        print("6) REFRESH BASE DATOS (Descarga Rango + Actualiza Maestros + Enlaza OC)")
+        print("7) SINCRONIZAR CON SERVIDOR (Sube Maestros a bd_sistema)")
+        print("0) Salir")
+        
+        op = input("\nSeleccione opción: ")
+        
+        try:
+            if op == "0":
+                print("\n👋 Saliendo del programa...")
+                break
+            
+            elif op == "1":
+                procesar_dia(dt.date.today())
+            
+            elif op == "2":
+                f_in = input("Fecha (dd-mm-aaaa): ")
+                procesar_dia(dt.datetime.strptime(f_in, "%d-%m-%Y").date())
+            
+            elif op == "3":
+                ini = input("Desde (dd-mm-aaaa): ")
+                fin = input("Hasta (dd-mm-aaaa): ")
+                d1 = dt.datetime.strptime(ini, "%d-%m-%Y").date()
+                d2 = dt.datetime.strptime(fin, "%d-%m-%Y").date()
+                
+                if d1 > d2:
+                    print("\n⚠️  Error: La fecha inicial no puede ser posterior a la fecha final.")
+                    continue
+                
+                while d1 <= d2:
+                    procesar_dia(d1, modo_actualizar=False)
+                    d1 += dt.timedelta(days=1)
+            
+            elif op == "5":
+                unificar_base_datos()
+            
+            elif op == "6":
+                ini = input("Desde (dd-mm-aaaa): ")
+                fin = input("Hasta (dd-mm-aaaa): ")
+                d_ini = dt.datetime.strptime(ini, "%d-%m-%Y").date()
+                d_fin = dt.datetime.strptime(fin, "%d-%m-%Y").date()
+
+                if d_ini > d_fin:
+                    print("\n⚠️  Error: La fecha inicial no puede ser posterior a la fecha final.")
+                    continue
+
+                refresh_base_datos(d_ini, d_fin)
+
+            elif op == "7":
+                sincronizar_con_servidor()
+
+            else:
+                print("\n⚠️  Opción inválida.")
+        
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
+            import traceback
+            traceback.print_exc()

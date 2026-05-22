@@ -1,0 +1,4 @@
+﻿CodigoOrganismo;NombreOrganismo;CodigoOC;Correlativo;CodigoCategoria;Categoria;CodigoProducto;Producto;EspecificacionComprador;EspecificacionProveedor;Cantidad;Unidad;PrecioNeto;TotalImpuestos;TotalLinea
+7287;Hospital Puerto Octay;2059-158-CC26;1;43231500;Tecnologías de la información, telecomunicaciones y radiodifusión / Software / Software de gestión;43231512;Software de gestión de licencias;Emisión LME Prestador (Full);;3.0;;91.0;0.0;273.0
+7287;Hospital Puerto Octay;2059-158-CC26;2;43231500;Tecnologías de la información, telecomunicaciones y radiodifusión / Software / Software de gestión;43231512;Software de gestión de licencias;Emisión LME No Adscrito (Semi Electrónica-Mixta);;26.0;;80.0;0.0;2080.0
+7287;Hospital Puerto Octay;2059-158-CC26;3;43231500;Tecnologías de la información, telecomunicaciones y radiodifusión / Software / Software de gestión;43231512;Software de gestión de licencias;Emisión LME Si Adscrito (Full);;94.0;;91.0;0.0;8554.0

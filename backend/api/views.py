@@ -148,6 +148,8 @@ def ordenes_compra_raw_all(request):
         'C_Unidad', 'C_CodigoUnidad',
         'P_Nombre', 'P_Rut',
         'LinkMP', 'EnlacePAC',
+        'CodigoLicitacion', 'ID_Proyecto',
+        'TipoCompraInterna', 'TipoOCInterno', 'DescripcionTipoOC',
     )
 
     estado = request.GET.get('estado', '')
@@ -159,6 +161,38 @@ def ordenes_compra_raw_all(request):
         qs = qs.filter(FechaEnvio__year=anio)
 
     return JsonResponse(list(qs[:limit]), safe=False)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def ordenes_compra_proyectos_licitacion(request):
+    """
+    Mapa cross-year: CodigoLicitacion → lista de ID_Proyecto con contador.
+    Usado para sugerir proyectos PAC a OC no enlazadas.
+    """
+    from django.db.models import Count
+    cache_key = 'oc_proyectos_licitacion_v1'
+    cached = cache.get(cache_key)
+    if cached:
+        return Response(cached)
+
+    qs = (
+        OrdenCompra.objects
+        .exclude(CodigoLicitacion__isnull=True).exclude(CodigoLicitacion='')
+        .exclude(ID_Proyecto__isnull=True).exclude(ID_Proyecto='')
+        .values('CodigoLicitacion', 'ID_Proyecto')
+        .annotate(n=Count('codigo_oc'))
+        .order_by('CodigoLicitacion', '-n')
+    )
+    result = {}
+    for r in qs:
+        lic = r['CodigoLicitacion']
+        if lic not in result:
+            result[lic] = []
+        result[lic].append({'id_proyecto': r['ID_Proyecto'], 'n': r['n']})
+
+    cache.set(cache_key, result, timeout=600)
+    return Response(result)
 
 
 @api_view(['GET'])

@@ -354,13 +354,14 @@ def _extraer_tablas_normalizadas(detalle: Dict[str, Any], buscar_codigo_oc: bool
         "ValorCambioMoneda": presupuesto.get("valor_cambio_moneda"),
         "FechaCambioMoneda": presupuesto.get("fecha_cambio_moneda"),
         
-        # Orden de Compra (la API retorna estos campos en la raíz, no en un objeto)
-        # IMPORTANTE: El estado "oc_emitida" NO se usa en la práctica por la API.
-        # Las OCs emitidas mantienen estado "proveedor_seleccionado" pero con id_orden_compra lleno.
-        # Para detectar OCs emitidas: verificar si id_orden_compra is not None
+        # Orden de Compra
+        # IMPORTANTE: id_orden_compra viene en la RAIZ del payload (confirmado JSON real v3.0)
+        # El estado "oc_emitida" NO aparece en la practica; las OC emitidas
+        # mantienen estado "proveedor_seleccionado" con id_orden_compra != null
         "OC_ID": detalle.get("id_orden_compra"),
-        "OC_Codigo": None,  # Se llenará después si buscar_codigo_oc=True
-        # Nota: codigo_orden_compra y estado_orden_compra NO existen en la respuesta real
+        "OC_Codigo": None,   # Se llena por enriquecimiento posterior (opcion 8)
+        "TieneOC": detalle.get("id_orden_compra") is not None,
+        # Nota: codigo_orden_compra y estado_orden_compra retornan null en la practica
         
         # Institución
         "OrganismoComprador": limpiar(institucion.get("organismo_comprador")),
@@ -409,9 +410,7 @@ def _extraer_tablas_normalizadas(detalle: Dict[str, Any], buscar_codigo_oc: bool
     proveedores = []
     for prov in detalle.get("proveedores_cotizando", []):
         # La API retorna campos adicionales no documentados
-        # estado_cotizacion viene como int, no como objeto
-        fechas_prov = prov.get("fechas", {})
-        
+        # estado_cotizacion viene como int (no como objeto) - confirmado JSON real
         proveedores.append({
             "CodigoCompraAgil": codigo,
             "RutProveedor": prov.get("rut_proveedor"),
@@ -423,7 +422,7 @@ def _extraer_tablas_normalizadas(detalle: Dict[str, Any], buscar_codigo_oc: bool
             "JustificacionInadmisibilidad": limpiar(prov.get("justificacion_inadmisibilidad")),
             
             # Selección
-            "ProveedorSeleccionado": prov.get("proveedor_seleccionado"),
+            "ProveedorSeleccionado": bool(prov.get("proveedor_seleccionado")),  # API retorna 1/0
             "EstadoPorComprador": prov.get("estado_por_comprador"),
             
             # OC vinculada al proveedor (campo adicional encontrado)
@@ -1071,7 +1070,7 @@ def enlazar_codigos_oc():
             if df_prov is not None:
                 ganad = df_prov[
                     (df_prov["CodigoCompraAgil"] == ca_code)
-                    & (df_prov["ProveedorSeleccionado"].str.strip().str.lower() == "true")
+                    & (df_prov["ProveedorSeleccionado"].str.strip().str.lower().isin(["true", "1"]))
                 ]
                 if not ganad.empty:
                     rut_prov   = str(ganad.iloc[0].get("RutProveedor", "")).strip()
@@ -1189,7 +1188,7 @@ if __name__ == "__main__":
         fecha_hoy = dt.date.today().strftime("%d-%m-%Y")
         
         print("\n" + "="*60)
-        print("   EXTRACTOR COMPRA ÁGIL SSO - V1")
+        print("   EXTRACTOR COMPRA AGIL SSO - V2 (API v3.0 / Mayo 2026)")
         print("   (Región Los Lagos - Solo SSO)")
         print("="*60)
         print(f"1) Hoy ({fecha_hoy})")
