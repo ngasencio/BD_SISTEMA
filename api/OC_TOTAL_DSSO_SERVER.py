@@ -512,8 +512,8 @@ def procesar_dia_red_completa(
 
 def guardar_en_django(db_resumen, db_detalles):
     """
-    Se conecta al entorno Django del proyecto BD_SISTEMA y realiza inserts/updates (Upsert)
-    en las tablas físicas de la base de datos (api_ordencompra y api_detalleordencompra).
+    Se conecta al entorno Django del proyecto BD_SISTEMA y realiza inserts/updates
+    en las tablas api_ordencompra_total y api_detalleordencompra_total.
     """
     import sys, os
     import dateutil.parser
@@ -522,108 +522,104 @@ def guardar_en_django(db_resumen, db_detalles):
     if backend_path not in sys.path:
         sys.path.append(backend_path)
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
-    
+
     import django
     from django.apps import apps
     if not apps.ready:
         django.setup()
 
-    from api.models import OrdenCompra, DetalleOrdenCompra
+    from api.models import OrdenCompraTot, DetalleOrdenCompraTot
     from django.utils.timezone import make_aware, is_naive
+    from django.db import transaction
 
-    # Parseo de fechas 
     dt_fields = ['FechaCreacion', 'FechaEnvio', 'FechaAceptacion', 'FechaCancelacion', 'FechaUltimaModificacion']
+    campos_num_oc  = ['CodigoEstado', 'CantidadEvaluacion', 'PromedioCalificacion', 'TotalNeto', 'PorcentajeIva', 'Impuestos', 'TotalBruto']
+    campos_num_det = ['Cantidad', 'PrecioNeto', 'TotalImpuestos', 'TotalLinea']
 
-    print("    -> Vaciando la base de datos (Órdenes de Compra) para reemplazo total...")
-    DetalleOrdenCompra.objects.all().delete()
-    OrdenCompra.objects.all().delete()
+    def _parsear_fecha(v):
+        try:
+            val = dateutil.parser.isoparse(v) if (v and str(v).strip() and str(v).lower() != 'none') else None
+            return make_aware(val) if val and is_naive(val) else val
+        except Exception:
+            return None
 
-    # --- Guardar Resumen (Tabla: OrdenCompra) ---
-    print("    -> Preparando Órdenes de Compra para Inserción Masiva...")
-    campos_modelo_oc = [f.name for f in OrdenCompra._meta.get_fields()]
+    def _parsear_num(v):
+        if v == '' or v is None or str(v).lower() == 'none':
+            return None
+        try:
+            return float(str(v).replace(',', '.'))
+        except ValueError:
+            return None
+
+    def _es_nulo(v):
+        return v is None or str(v).lower() == 'none'
+
+    # --- Resumen (api_ordencompra_total) ---
+    print("    -> Preparando Órdenes de Compra Total para Inserción Masiva...")
+    campos_modelo_oc = {f.name for f in OrdenCompraTot._meta.get_fields()}
     ocs_a_crear = []
-    
+
     for r in db_resumen:
         r_copy = r.copy()
         codigo = r_copy.pop("CodigoOC", None)
-        if not codigo: continue
-        
+        if not codigo:
+            continue
+
         defaults = {}
         for k, v in r_copy.items():
             if k in dt_fields:
-                try:
-                    val_dt = dateutil.parser.isoparse(v) if (v and str(v).strip() and str(v).lower() != 'none') else None
-                    if val_dt and is_naive(val_dt):
-                        val_dt = make_aware(val_dt)
-                    defaults[k] = val_dt
-                except:
-                    defaults[k] = None
-            elif k in ['CodigoEstado', 'CantidadEvaluacion', 'PromedioCalificacion', 'TotalNeto', 'PorcentajeIva', 'Impuestos', 'TotalBruto']:
-                if v == '' or v is None or str(v).lower() == 'none' or pd.isna(v):
-                    defaults[k] = None
-                else:
-                    try:
-                        if isinstance(v, str): v = v.replace(',', '.')
-                        defaults[k] = float(v)
-                    except ValueError:
-                        defaults[k] = None
+                defaults[k] = _parsear_fecha(v)
+            elif k in campos_num_oc:
+                defaults[k] = _parsear_num(v)
             else:
-                defaults[k] = v if (v is not None and str(v).lower() != 'none' and not pd.isna(v)) else None
-                
-        # Para que haga macth la columna
-        if "TotalBruto" in defaults and "TotalBruto" not in campos_modelo_oc:
-             defaults["TotalBruto"] = defaults.pop("TotalBruto")
-             
-        # Renombramos el ID proyecto si es necesario para el ORM de ser llamado ID_Proyecto
-        if "ID Proyecto" in defaults and "ID_Proyecto" in campos_modelo_oc:
+                defaults[k] = None if _es_nulo(v) else v
+
+        if "ID Proyecto" in defaults:
             defaults["ID_Proyecto"] = defaults.pop("ID Proyecto")
 
         dict_limpio = {k: v for k, v in defaults.items() if k in campos_modelo_oc}
         dict_limpio['codigo_oc'] = codigo
-        ocs_a_crear.append(OrdenCompra(**dict_limpio))
+        ocs_a_crear.append(OrdenCompraTot(**dict_limpio))
 
-    print(f"    -> Insertando {len(ocs_a_crear)} Órdenes de Compra en BD...")
-    OrdenCompra.objects.bulk_create(ocs_a_crear, batch_size=20)
+    print(f"    -> Vaciando api_ordencompra_total y api_detalleordencompra_total...")
+    with transaction.atomic():
+        DetalleOrdenCompraTot.objects.all().delete()
+        OrdenCompraTot.objects.all().delete()
 
-    # --- Guardar Detalles (Tabla: DetalleOrdenCompra) ---
+        print(f"    -> Insertando {len(ocs_a_crear)} Órdenes de Compra en BD...")
+        OrdenCompraTot.objects.bulk_create(ocs_a_crear, batch_size=500)
+
+    # --- Detalles (api_detalleordencompra_total) ---
     print("    -> Preparando Detalles para Inserción Masiva...")
-    campos_modelo_det = [f.name for f in DetalleOrdenCompra._meta.get_fields()]
+    campos_modelo_det = {f.name for f in DetalleOrdenCompraTot._meta.get_fields()}
     detalles_a_crear = []
-    
-    codigos_validos = {oc.codigo_oc for oc in ocs_a_crear}
-    
+    codigos_validos  = {oc.codigo_oc for oc in ocs_a_crear}
+
     for d in db_detalles:
         d_copy = d.copy()
         codigo_oc = d_copy.pop("CodigoOC", None)
         if not codigo_oc or codigo_oc not in codigos_validos:
             continue
-        
+
         correlativo = d_copy.pop("Correlativo", None)
-        if correlativo is None or str(correlativo).lower() == 'none' or pd.isna(correlativo):
+        if correlativo is None or str(correlativo).lower() == 'none':
             correlativo = d_copy.get("CodigoProducto") or 0
-            
+
         defaults_det = {}
         for k, v in d_copy.items():
-            if k in ['Cantidad', 'PrecioNeto', 'TotalImpuestos', 'TotalLinea']:
-                if v == '' or v is None or str(v).lower() == 'none' or pd.isna(v):
-                    defaults_det[k] = None
-                else:
-                    try:
-                        if isinstance(v, str): v = v.replace(',', '.')
-                        defaults_det[k] = float(v)
-                    except ValueError:
-                        defaults_det[k] = None
+            if k in campos_num_det:
+                defaults_det[k] = _parsear_num(v)
             else:
-                defaults_det[k] = v if (v is not None and str(v).lower() != 'none' and not pd.isna(v)) else None
-                
+                defaults_det[k] = None if _es_nulo(v) else v
+
         dict_limpio_det = {k: v for k, v in defaults_det.items() if k in campos_modelo_det}
         dict_limpio_det['orden_compra_id'] = codigo_oc
-        dict_limpio_det['Correlativo'] = correlativo
-        
-        detalles_a_crear.append(DetalleOrdenCompra(**dict_limpio_det))
+        dict_limpio_det['Correlativo']     = correlativo
+        detalles_a_crear.append(DetalleOrdenCompraTot(**dict_limpio_det))
 
     print(f"    -> Insertando {len(detalles_a_crear)} Detalles en BD...")
-    DetalleOrdenCompra.objects.bulk_create(detalles_a_crear, batch_size=20)
+    with transaction.atomic():
+        DetalleOrdenCompraTot.objects.bulk_create(detalles_a_crear, batch_size=500)
 
     return len(ocs_a_crear), len(detalles_a_crear)
 

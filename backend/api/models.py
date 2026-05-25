@@ -478,6 +478,110 @@ class BoletaGarantiaAudit(models.Model):
         return f"Boleta #{self.boleta_id} — {self.accion} el {self.eliminado_en}"
 
 
+# =============================================================================
+# OC Total — Red SSO Completa (multi-organismo)
+# Tablas: api_ordencompra_total / api_detalleordencompra_total
+# =============================================================================
+
+class OrdenCompraTot(models.Model):
+    """OC Total: consolida toda la Red SSO (todos los organismos)."""
+    codigo_oc = models.CharField(max_length=255, primary_key=True, db_column='CodigoOC')
+
+    # Identificación del organismo (diferenciador multi-establecimiento)
+    CodigoOrganismo = models.CharField(max_length=50, null=True, blank=True)
+    NombreOrganismo = models.CharField(max_length=255, null=True, blank=True)
+
+    NombreOC = models.TextField(null=True, blank=True)
+    CodigoEstado = models.IntegerField(null=True, blank=True)
+    EstadoOC = models.CharField(max_length=255, null=True, blank=True)
+    CodigoLicitacion = models.CharField(max_length=255, null=True, blank=True)
+    TipoOC = models.CharField(max_length=255, null=True, blank=True)
+    TipoMoneda = models.CharField(max_length=50, null=True, blank=True)
+    Financiamiento = models.CharField(max_length=255, null=True, blank=True)
+    FormaPago = models.CharField(max_length=255, null=True, blank=True)
+    TipoDespacho = models.CharField(max_length=255, null=True, blank=True)
+    Pais = models.CharField(max_length=255, null=True, blank=True)
+
+    FechaCreacion = models.DateTimeField(null=True, blank=True)
+    FechaEnvio = models.DateTimeField(null=True, blank=True)
+    FechaAceptacion = models.DateTimeField(null=True, blank=True)
+    FechaCancelacion = models.DateTimeField(null=True, blank=True)
+    FechaUltimaModificacion = models.DateTimeField(null=True, blank=True)
+
+    PromedioCalificacion = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    CantidadEvaluacion = models.IntegerField(null=True, blank=True)
+
+    TotalNeto = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    PorcentajeIva = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    Impuestos = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    TotalBruto = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, db_column='Total')
+
+    C_CodigoUnidad = models.CharField(max_length=255, null=True, blank=True)
+    C_Unidad = models.CharField(max_length=255, null=True, blank=True)
+    C_RutUnidad = models.CharField(max_length=50, null=True, blank=True)
+    C_Actividad = models.CharField(max_length=255, null=True, blank=True)
+    C_Direccion = models.TextField(null=True, blank=True)
+    C_Comuna = models.CharField(max_length=255, null=True, blank=True)
+    C_Region = models.CharField(max_length=255, null=True, blank=True)
+    C_Contacto = models.CharField(max_length=255, null=True, blank=True)
+    C_Cargo = models.CharField(max_length=255, null=True, blank=True)
+    C_Email = models.CharField(max_length=255, null=True, blank=True)
+
+    P_Codigo = models.CharField(max_length=255, null=True, blank=True)
+    P_Nombre = models.CharField(max_length=255, null=True, blank=True)
+    P_Rut = models.CharField(max_length=50, null=True, blank=True)
+    P_Actividad = models.TextField(null=True, blank=True)
+    P_Direccion = models.TextField(null=True, blank=True)
+    P_Comuna = models.CharField(max_length=255, null=True, blank=True)
+    P_Region = models.CharField(max_length=255, null=True, blank=True)
+    P_Contacto = models.CharField(max_length=255, null=True, blank=True)
+    P_Cargo = models.CharField(max_length=255, null=True, blank=True)
+    P_Email = models.CharField(max_length=255, null=True, blank=True)
+
+    DescripcionOC = models.TextField(null=True, blank=True)
+    LinkMP = models.URLField(max_length=500, null=True, blank=True)
+    EnlacePAC = models.CharField(max_length=255, null=True, blank=True)
+    ID_Proyecto = models.CharField(max_length=255, null=True, blank=True, db_column='ID_Proyecto')
+    CodigoCompraAgil = models.CharField(max_length=100, null=True, blank=True)
+    TipoCompraInterna = models.CharField(max_length=100, null=True, blank=True)
+    TipoOCInterno = models.CharField(max_length=100, null=True, blank=True)
+    DescripcionTipoOC = models.CharField(max_length=255, null=True, blank=True)
+    DescripcionMoneda = models.CharField(max_length=100, null=True, blank=True)
+    DescripcionDespacho = models.CharField(max_length=255, null=True, blank=True)
+    DescripcionFormaPago = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        db_table = 'api_ordencompra_total'
+
+    def __str__(self):
+        return f"{self.codigo_oc} - {self.NombreOC}"
+
+
+class DetalleOrdenCompraTot(models.Model):
+    """Detalle de OC Total — líneas de ítems de toda la Red SSO."""
+    orden_compra = models.ForeignKey(OrdenCompraTot, on_delete=models.CASCADE, related_name="detalles", db_column="CodigoOC_id")
+    CodigoOrganismo = models.CharField(max_length=50, null=True, blank=True)
+    NombreOrganismo = models.CharField(max_length=255, null=True, blank=True)
+    Correlativo = models.IntegerField(null=True, blank=True)
+    CodigoCategoria = models.CharField(max_length=255, null=True, blank=True)
+    Categoria = models.TextField(null=True, blank=True)
+    CodigoProducto = models.CharField(max_length=255, null=True, blank=True)
+    Producto = models.TextField(null=True, blank=True)
+    EspecificacionComprador = models.TextField(null=True, blank=True)
+    EspecificacionProveedor = models.TextField(null=True, blank=True)
+    Cantidad = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    Unidad = models.CharField(max_length=255, null=True, blank=True)
+    PrecioNeto = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    TotalImpuestos = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    TotalLinea = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        db_table = 'api_detalleordencompra_total'
+
+    def __str__(self):
+        return f"{self.orden_compra_id} - {self.CodigoProducto}"
+
+
 class Factura(models.Model):
     tipo = models.SmallIntegerField(null=True, blank=True)
     tipo_documento = models.CharField(max_length=60, null=True, blank=True)
