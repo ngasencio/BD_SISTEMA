@@ -1,0 +1,4 @@
+﻿CodigoOrganismo;NombreOrganismo;CodigoOC;Correlativo;CodigoCategoria;Categoria;CodigoProducto;Producto;EspecificacionComprador;EspecificacionProveedor;Cantidad;Unidad;PrecioNeto;TotalImpuestos;TotalLinea
+7287;Hospital Puerto Octay;2059-184-CC24;1;12141900;Productos químicos industriales / Metales y gases / Elementos no metálicos y gases puros;12141904;Oxígeno O;Recarga cilindros de 0,7m3 oxígeno;;1.0;;3110.0;0.0;3110.0
+7287;Hospital Puerto Octay;2059-184-CC24;2;12141900;Productos químicos industriales / Metales y gases / Elementos no metálicos y gases puros;12141904;Oxígeno O;Recarga cilindros de 10m3 oxígeno;;3.0;;31100.0;0.0;93300.0
+7287;Hospital Puerto Octay;2059-184-CC24;3;78121600;Servicios de transporte, almacenaje y correo / Manejo, manipulación y embalaje de material / Servicios de manipulación de materiales;78121601;Servicios de flete;Flete cilindros;;4.0;;8133.0;0.0;32532.0

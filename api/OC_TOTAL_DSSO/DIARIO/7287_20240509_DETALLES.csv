@@ -1,0 +1,5 @@
+﻿CodigoOrganismo;NombreOrganismo;CodigoOC;Correlativo;CodigoCategoria;Categoria;CodigoProducto;Producto;EspecificacionComprador;EspecificacionProveedor;Cantidad;Unidad;PrecioNeto;TotalImpuestos;TotalLinea
+7287;Hospital Puerto Octay;2059-217-SE24;1;50202300;Alimentos, bebidas y tabaco / Bebidas / Bebidas no alcohólicas;50202304;Jugos y néctar envasados;Jugo 1.5 litos;;2.0;;1555.0;0.0;3110.0
+7287;Hospital Puerto Octay;2059-217-SE24;2;50181900;Alimentos, bebidas y tabaco / Productos de panadería / Pan, galletas y pastelitos dulces;50181901;Pan fresco;Pan;;12.0;;210.0;0.0;2520.0
+7287;Hospital Puerto Octay;2059-217-SE24;3;50112000;Alimentos, bebidas y tabaco / Productos de carne y aves de corral / Carnes procesadas y preparadas;50112001;Carnes frescas procesadas y preparadas;Lamina Jamon;;10.0;;420.0;0.0;4200.0
+7287;Hospital Puerto Octay;2059-217-SE24;4;50131800;Alimentos, bebidas y tabaco / Productos lácteos y huevos / Quesos;50131801;Queso natural;Lamina queso;;10.0;;420.0;0.0;4200.0
