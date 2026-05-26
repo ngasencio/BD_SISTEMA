@@ -96,9 +96,59 @@ function SearchTable({ placeholder, value, onChange, count, total }) {
     );
 }
 
+// ─── Paginación ──────────────────────────────────────────────────────────────
+
+function usePagination(total, pageSize) {
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    return totalPages;
+}
+
+function Pagination({ page, setPage, pageSize, setPageSize, total }) {
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+    const end   = Math.min(page * pageSize, total);
+
+    const btnBase = { padding: '3px 9px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, cursor: 'pointer', background: '#fff', color: '#475569', lineHeight: 1.4 };
+    const btnDis  = { ...btnBase, cursor: 'not-allowed', color: '#cbd5e1' };
+    const btnAct  = { ...btnBase, background: '#3b82f6', color: '#fff', fontWeight: 700, border: '1px solid #3b82f6' };
+
+    // Ventana de páginas: hasta 5 botones centrados en la página actual
+    const from  = Math.max(1, Math.min(page - 2, totalPages - 4));
+    const to    = Math.min(totalPages, from + 4);
+    const pages = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
+            background: '#f8fafc', borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: '#64748b', marginRight: 4 }}>Mostrar:</span>
+            {[20, 50, 100].map(s => (
+                <button key={s} onClick={() => { setPageSize(s); setPage(1); }}
+                    style={pageSize === s ? btnAct : btnBase}>{s}</button>
+            ))}
+            <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>
+                {start}–{end} de {total} registros
+            </span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 3 }}>
+                <button onClick={() => setPage(1)}              disabled={page === 1}          style={page === 1 ? btnDis : btnBase}>«</button>
+                <button onClick={() => setPage(p => p - 1)}    disabled={page === 1}          style={page === 1 ? btnDis : btnBase}>‹</button>
+                {pages.map(p => (
+                    <button key={p} onClick={() => setPage(p)} style={p === page ? btnAct : btnBase}>{p}</button>
+                ))}
+                <button onClick={() => setPage(p => p + 1)}    disabled={page === totalPages} style={page === totalPages ? btnDis : btnBase}>›</button>
+                <button onClick={() => setPage(totalPages)}    disabled={page === totalPages} style={page === totalPages ? btnDis : btnBase}>»</button>
+            </div>
+        </div>
+    );
+}
+
 // ─── TAB GENERAL ─────────────────────────────────────────────────────────────
 
 function TabGeneral({ data, searchTerm, setSearchTerm }) {
+    const [pgPage, setPgPage] = useState(1);
+    const [pgSize, setPgSize] = useState(20);
+    useEffect(() => { setPgPage(1); }, [data.length, pgSize]);
+    const pgSlice = data.slice((pgPage - 1) * pgSize, pgPage * pgSize);
+
     const totalOCs = data.length;
     const sumaNetoCLP = data.filter(oc => !oc.TipoMoneda || oc.TipoMoneda === 'CLP')
         .reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
@@ -164,7 +214,7 @@ function TabGeneral({ data, searchTerm, setSearchTerm }) {
 
             <div className="card">
                 <div className="card-header card-header-accent"><span>📋</span><span className="card-title">Tabla Maestra de Órdenes de Compra</span></div>
-                <SearchTable placeholder="🔍 Buscar nombre, código OC o proveedor…" value={searchTerm} onChange={setSearchTerm} count={data.length} />
+                <SearchTable placeholder="🔍 Buscar nombre, código OC o proveedor…" value={searchTerm} onChange={setSearchTerm} count={data.length} total={data.length} />
                 <div className="table-responsive">
                     <table className="table-gob">
                         <thead>
@@ -176,7 +226,7 @@ function TabGeneral({ data, searchTerm, setSearchTerm }) {
                             </tr>
                         </thead>
                         <tbody>
-                            {data.map(oc => (
+                            {pgSlice.map(oc => (
                                 <tr key={oc.codigo_oc}>
                                     <td><strong>{oc.codigo_oc}</strong></td>
                                     <td style={{ maxWidth: 260 }}><div className="truncate-text" title={oc.NombreOC}>{oc.NombreOC}</div></td>
@@ -197,6 +247,7 @@ function TabGeneral({ data, searchTerm, setSearchTerm }) {
                         </tbody>
                     </table>
                 </div>
+                <Pagination page={pgPage} setPage={setPgPage} pageSize={pgSize} setPageSize={setPgSize} total={data.length} />
             </div>
         </div>
     );
@@ -208,6 +259,8 @@ const ESTADOS_CRITICOS = ['enviado a proveedor', 'enviada a proveedor', 'aceptad
 
 function TabEstado({ data }) {
     const [estadoSeleccionado, setEstadoSeleccionado] = useState('');
+    const [pgPage, setPgPage] = useState(1);
+    const [pgSize, setPgSize] = useState(20);
 
     const porEstado = useMemo(() => data.reduce((acc, oc) => {
         const e = oc.EstadoOC || 'Sin estado';
@@ -262,7 +315,7 @@ function TabEstado({ data }) {
                     <KpiCard label="🟢 Normal (≤ 45 días)" value={verdes} color="#22c55e" />
                 </div>
                 <div className="filter-bar">
-                    <select className="filter-input" value={estadoSeleccionado} onChange={e => setEstadoSeleccionado(e.target.value)}>
+                    <select className="filter-input" value={estadoSeleccionado} onChange={e => { setEstadoSeleccionado(e.target.value); setPgPage(1); }}>
                         <option value="">Todos los estados críticos</option>
                         <option value="Enviado a Proveedor">Enviado a Proveedor</option>
                         <option value="Aceptada">Aceptada</option>
@@ -280,7 +333,7 @@ function TabEstado({ data }) {
                             </tr>
                         </thead>
                         <tbody>
-                            {ocsFiltradas.map(oc => (
+                            {ocsFiltradas.slice((pgPage - 1) * pgSize, pgPage * pgSize).map(oc => (
                                 <tr key={oc.codigo_oc} style={{ background: (oc.diasEspera || 0) > 90 ? '#fef2f2' : (oc.diasEspera || 0) > 45 ? '#fffbeb' : '#fff' }}>
                                     <td><strong>{oc.codigo_oc}</strong></td>
                                     <td style={{ maxWidth: 260 }}><div className="truncate-text" title={oc.NombreOC}>{oc.NombreOC}</div></td>
@@ -297,6 +350,7 @@ function TabEstado({ data }) {
                         </tbody>
                     </table>
                 </div>
+                <Pagination page={pgPage} setPage={setPgPage} pageSize={pgSize} setPageSize={setPgSize} total={ocsFiltradas.length} />
             </div>
         </div>
     );
@@ -467,6 +521,8 @@ function TabEnlacePAC({ data }) {
 function TabOCCorregibles({ data, proyectosMap }) {
     const [search, setSearch] = useState('');
     const [soloConSugerencia, setSoloConSugerencia] = useState(false);
+    const [pgPage, setPgPage] = useState(1);
+    const [pgSize, setPgSize] = useState(20);
 
     // OC no enlazadas con CodigoLicitacion
     const candidatas = useMemo(() =>
@@ -525,7 +581,7 @@ function TabOCCorregibles({ data, proyectosMap }) {
                     style={{ minWidth: 300 }}
                 />
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={soloConSugerencia} onChange={e => setSoloConSugerencia(e.target.checked)} />
+                    <input type="checkbox" checked={soloConSugerencia} onChange={e => { setSoloConSugerencia(e.target.checked); setPgPage(1); }} />
                     Solo con sugerencia de proyecto ({conSugerencia.length})
                 </label>
                 <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>{filtradas.length} registros</span>
@@ -549,7 +605,7 @@ function TabOCCorregibles({ data, proyectosMap }) {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtradas.slice(0, 200).map(oc => (
+                            {filtradas.slice((pgPage - 1) * pgSize, pgPage * pgSize).map(oc => (
                                 <tr key={oc.codigo_oc} style={{ background: oc.sugerencias.length > 0 ? '#f0fdf4' : '#fff' }}>
                                     <td><strong style={{ fontFamily: 'monospace', fontSize: 11 }}>{oc.codigo_oc}</strong></td>
                                     <td style={{ maxWidth: 220 }}><div className="truncate-text" title={oc.NombreOC} style={{ fontSize: 12 }}>{oc.NombreOC}</div></td>
@@ -584,6 +640,7 @@ function TabOCCorregibles({ data, proyectosMap }) {
                         </tbody>
                     </table>
                 </div>
+                <Pagination page={pgPage} setPage={setPgPage} pageSize={pgSize} setPageSize={setPgSize} total={filtradas.length} />
             </div>
         </div>
     );
