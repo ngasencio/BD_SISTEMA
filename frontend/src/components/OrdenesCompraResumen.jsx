@@ -589,13 +589,436 @@ function TabOCCorregibles({ data, proyectosMap }) {
     );
 }
 
+// ─── TAB NO ENLAZADAS ─────────────────────────────────────────────────────────
+
+const ESTADOS_NE   = ['Enviada a proveedor', 'Aceptada', 'Recepción Conforme', 'Cancelada'];
+const COLORS_NE    = ['#dc2626','#e0701e','#f59e0b','#6366f1','#3b82f6','#22c55e','#8b5cf6','#ec4899'];
+
+function TabNoEnlazadas({ data }) {
+    const [yearNE,        setYearNE]        = useState('');
+    const [fechaDesde,    setFechaDesde]    = useState('');
+    const [fechaHasta,    setFechaHasta]    = useState('');
+    const [estadosActivos, setEstadosActivos] = useState(new Set(ESTADOS_NE));
+    const [sortCol,       setSortCol]       = useState('TotalBruto');
+    const [sortDir,       setSortDir]       = useState('desc');
+
+    const years = useMemo(() => {
+        const ys = new Set(data.map(oc => oc.FechaEnvio).filter(Boolean).map(d => new Date(d).getFullYear()));
+        return [...ys].sort((a, b) => b - a);
+    }, [data]);
+
+    const toggleEstado = (e) => setEstadosActivos(prev => {
+        const next = new Set(prev);
+        next.has(e) ? next.delete(e) : next.add(e);
+        return next;
+    });
+
+    // OC base con estados seleccionados (para calcular denominador del %)
+    const baseActiva = useMemo(() =>
+        data.filter(oc => estadosActivos.size === 0 || estadosActivos.has(oc.EstadoOC)),
+        [data, estadosActivos]);
+
+    // No Enlazadas con todos los filtros del tab
+    const noEnlazadas = useMemo(() => baseActiva.filter(oc => {
+        if (oc.EnlacePAC === 'Enlazada') return false;
+        const f = oc.FechaEnvio;
+        if (yearNE   && f && new Date(f).getFullYear() !== parseInt(yearNE)) return false;
+        if (fechaDesde && f && f.slice(0, 10) < fechaDesde) return false;
+        if (fechaHasta && f && f.slice(0, 10) > fechaHasta) return false;
+        return true;
+    }), [baseActiva, yearNE, fechaDesde, fechaHasta]);
+
+    // ── KPIs ──────────────────────────────────────────────────────────────────
+    const montoTotal = noEnlazadas
+        .filter(oc => !oc.TipoMoneda || oc.TipoMoneda === 'CLP')
+        .reduce((s, oc) => s + (Number(oc.TotalBruto) || 0), 0);
+
+    const pctCant = baseActiva.length > 0
+        ? ((noEnlazadas.length / baseActiva.length) * 100).toFixed(1) : 0;
+
+    const tipoCountMap = noEnlazadas.reduce((acc, oc) => {
+        const k = oc.DescripcionTipoOC || 'Sin tipo';
+        acc[k] = (acc[k] || 0) + 1;
+        return acc;
+    }, {});
+    const topTipo = Object.entries(tipoCountMap).sort((a, b) => b[1] - a[1])[0] || ['—', 0];
+
+    // ── Sección A: DescripcionTipoOC ──────────────────────────────────────────
+    const tipoOCRows = useMemo(() => {
+        const map = {};
+        noEnlazadas.forEach(oc => {
+            const k = oc.DescripcionTipoOC || 'Sin tipo';
+            if (!map[k]) map[k] = { count: 0, monto: 0 };
+            map[k].count++;
+            if (!oc.TipoMoneda || oc.TipoMoneda === 'CLP') map[k].monto += Number(oc.TotalBruto) || 0;
+        });
+        return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
+    }, [noEnlazadas]);
+
+    const barTipoOC = {
+        labels: tipoOCRows.map(([k]) => k),
+        datasets: [{ label: 'N° OCs', data: tipoOCRows.map(([, v]) => v.count),
+            backgroundColor: COLORS_NE, borderRadius: 4, indexAxis: 'y' }],
+    };
+
+    // ── Sección B: TipoOCInterno ───────────────────────────────────────────────
+    const tipoInternoRows = useMemo(() => {
+        const map = {};
+        noEnlazadas.forEach(oc => {
+            const k = oc.TipoOCInterno || 'Sin clasificar';
+            if (!map[k]) map[k] = { count: 0, monto: 0 };
+            map[k].count++;
+            if (!oc.TipoMoneda || oc.TipoMoneda === 'CLP') map[k].monto += Number(oc.TotalBruto) || 0;
+        });
+        return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
+    }, [noEnlazadas]);
+
+    const donutInterno = {
+        labels: tipoInternoRows.map(([k]) => k),
+        datasets: [{ data: tipoInternoRows.map(([, v]) => v.count),
+            backgroundColor: COLORS_NE, borderWidth: 0 }],
+    };
+
+    // ── Pivot: DescripcionTipoOC × TipoOCInterno ──────────────────────────────
+    const { pivotRows, pivotCols, pivotMatrix, pivotMax } = useMemo(() => {
+        const pivotRows = [...new Set(noEnlazadas.map(oc => oc.DescripcionTipoOC || 'Sin tipo'))].sort();
+        const pivotCols = [...new Set(noEnlazadas.map(oc => oc.TipoOCInterno || 'Sin clasificar'))].sort();
+        const m = {};
+        noEnlazadas.forEach(oc => {
+            const r = oc.DescripcionTipoOC || 'Sin tipo';
+            const c = oc.TipoOCInterno || 'Sin clasificar';
+            if (!m[r]) m[r] = {};
+            m[r][c] = (m[r][c] || 0) + 1;
+        });
+        const pivotMax = Math.max(...Object.values(m).flatMap(row => Object.values(row)), 1);
+        return { pivotRows, pivotCols, pivotMatrix: m, pivotMax };
+    }, [noEnlazadas]);
+
+    // ── Tendencia mensual ──────────────────────────────────────────────────────
+    const tendenciaChart = useMemo(() => {
+        const counts = Array(12).fill(0);
+        noEnlazadas.forEach(oc => {
+            if (oc.FechaEnvio) counts[new Date(oc.FechaEnvio).getMonth()]++;
+        });
+        return {
+            labels: MESES,
+            datasets: [{ label: 'OC No Enlazadas', data: counts,
+                borderColor: '#dc2626', backgroundColor: '#dc262618',
+                fill: true, tension: 0.35, pointBackgroundColor: '#dc2626', pointRadius: 4 }],
+        };
+    }, [noEnlazadas]);
+
+    // ── Tabla detalle (sortable) ───────────────────────────────────────────────
+    const toggleSort = (col) => {
+        if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        else { setSortCol(col); setSortDir('desc'); }
+    };
+
+    const sortedDetail = useMemo(() => [...noEnlazadas].sort((a, b) => {
+        let va = a[sortCol], vb = b[sortCol];
+        if (['TotalBruto', 'TotalNeto'].includes(sortCol)) { va = Number(va) || 0; vb = Number(vb) || 0; }
+        else { va = (va || '').toString().toLowerCase(); vb = (vb || '').toString().toLowerCase(); }
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ?  1 : -1;
+        return 0;
+    }), [noEnlazadas, sortCol, sortDir]);
+
+    // ── Helpers de render ─────────────────────────────────────────────────────
+    const SortTh = ({ col, label, align }) => (
+        <th style={{ cursor: 'pointer', userSelect: 'none', textAlign: align || 'left', whiteSpace: 'nowrap' }}
+            onClick={() => toggleSort(col)}>
+            {label} <span style={{ opacity: 0.5 }}>{sortCol === col ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+        </th>
+    );
+
+    const pctBar = (n, total, color) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ flex: 1, height: 6, background: '#f1f5f9', borderRadius: 3, minWidth: 60 }}>
+                <div style={{ width: `${total > 0 ? (n / total * 100) : 0}%`, height: '100%', background: color, borderRadius: 3 }} />
+            </div>
+            <span style={{ fontSize: 11, minWidth: 36, textAlign: 'right' }}>
+                {total > 0 ? ((n / total) * 100).toFixed(1) : 0}%
+            </span>
+        </div>
+    );
+
+    const compactY = v => new Intl.NumberFormat('es-CL', { notation: 'compact', compactDisplay: 'short' }).format(v);
+    const barOpts  = { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+        plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } } };
+    const lineOpts = { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1, callback: v => Number.isInteger(v) ? v : '' } } } };
+
+    return (
+        <div>
+            {/* ── Filtros del tab ────────────────────────────────────────────── */}
+            <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8,
+                padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: '#9a3412', alignSelf: 'center' }}>Filtros:</span>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Año</label>
+                    <select className="filter-input" value={yearNE} onChange={e => setYearNE(e.target.value)} style={{ minWidth: 110 }}>
+                        <option value="">Todos</option>
+                        {years.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Desde (FechaEnvío)</label>
+                    <input className="filter-input" type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Hasta</label>
+                    <input className="filter-input" type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Estado OC</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {ESTADOS_NE.map(e => (
+                            <label key={e} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
+                                <input type="checkbox" checked={estadosActivos.has(e)} onChange={() => toggleEstado(e)} />
+                                <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                                    background: estadoColor(e) + '20', color: estadoColor(e), border: `1px solid ${estadoColor(e)}40` }}>
+                                    {e}
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#9a3412', alignSelf: 'center' }}>
+                    {noEnlazadas.length} OC fuera PAC
+                </span>
+            </div>
+
+            {/* ── KPIs ────────────────────────────────────────────────────────── */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+                <KpiCard label="OC No Enlazadas" value={noEnlazadas.length} sub={`de ${baseActiva.length} OC activas`} color="#dc2626" />
+                <KpiCard label="% Fuera PAC" value={`${pctCant}%`} sub="por cantidad de OC" color="#e0701e" />
+                <KpiCard label="Monto Fuera PAC (CLP)" value={fmtM(montoTotal)} sub="Suma TotalBruto CLP" color="#f59e0b" />
+                <KpiCard label="Tipo más frecuente" value={topTipo[0]} sub={`${topTipo[1]} OCs`} color="#6366f1" />
+            </div>
+
+            {/* ── Sección A: Por DescripcionTipoOC ──────────────────────────── */}
+            <h3 style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                Por Tipo de Compra (DescripcionTipoOC)
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+                <div className="card" style={{ overflow: 'hidden' }}>
+                    <div className="card-header card-header-accent"><span>📋</span><span className="card-title">Resumen por Tipo OC</span></div>
+                    <table className="table-gob" style={{ width: '100%' }}>
+                        <thead>
+                            <tr>
+                                <th>Tipo de Compra</th>
+                                <th style={{ textAlign: 'center' }}>N° OCs</th>
+                                <th style={{ textAlign: 'right' }}>Monto Bruto</th>
+                                <th>% del total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {tipoOCRows.map(([tipo, v]) => (
+                                <tr key={tipo}>
+                                    <td style={{ fontSize: 12 }}>{tipo}</td>
+                                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>{v.count}</td>
+                                    <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtM(v.monto)}</td>
+                                    <td>{pctBar(v.count, noEnlazadas.length, '#dc2626')}</td>
+                                </tr>
+                            ))}
+                            {tipoOCRows.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>Sin datos</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="card" style={{ padding: 14 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, fontFamily: 'Outfit,sans-serif' }}>OCs Fuera PAC por Tipo</div>
+                    <div style={{ height: Math.max(tipoOCRows.length * 36 + 20, 160) }}>
+                        {tipoOCRows.length > 0
+                            ? <Bar data={barTipoOC} options={barOpts} />
+                            : <p style={{ color: '#94a3b8', textAlign: 'center', paddingTop: 40 }}>Sin datos</p>}
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Sección B: Por TipoOCInterno ──────────────────────────────── */}
+            <h3 style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                Por Tipo OC Interno
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+                <div className="card" style={{ overflow: 'hidden' }}>
+                    <div className="card-header card-header-accent"><span>📋</span><span className="card-title">Resumen por Tipo Interno</span></div>
+                    <table className="table-gob" style={{ width: '100%' }}>
+                        <thead>
+                            <tr>
+                                <th>Tipo Interno</th>
+                                <th style={{ textAlign: 'center' }}>N° OCs</th>
+                                <th style={{ textAlign: 'right' }}>Monto Bruto</th>
+                                <th>% del total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {tipoInternoRows.map(([tipo, v]) => (
+                                <tr key={tipo}>
+                                    <td style={{ fontSize: 12 }}>{tipo}</td>
+                                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>{v.count}</td>
+                                    <td style={{ textAlign: 'right', fontSize: 12 }}>{fmtM(v.monto)}</td>
+                                    <td>{pctBar(v.count, noEnlazadas.length, '#e0701e')}</td>
+                                </tr>
+                            ))}
+                            {tipoInternoRows.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>Sin datos</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="card" style={{ padding: 14 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, fontFamily: 'Outfit,sans-serif' }}>OCs Fuera PAC por Tipo Interno</div>
+                    <div style={{ height: 230 }}>
+                        {tipoInternoRows.length > 0
+                            ? <Doughnut data={donutInterno} options={{ maintainAspectRatio: false,
+                                plugins: { legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12 } } } }} />
+                            : <p style={{ color: '#94a3b8', textAlign: 'center', paddingTop: 60 }}>Sin datos</p>}
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Matriz cruzada ─────────────────────────────────────────────── */}
+            <h3 style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                Matriz Cruzada: Tipo OC × Tipo Interno (N° OCs)
+            </h3>
+            <div className="card" style={{ overflowX: 'auto', marginBottom: 20 }}>
+                {pivotRows.length > 0 ? (
+                    <table className="table-gob" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr>
+                                <th style={{ background: '#f8fafc', minWidth: 160 }}>Tipo de Compra</th>
+                                {pivotCols.map(c => <th key={c} style={{ background: '#f8fafc', textAlign: 'center', fontSize: 11, minWidth: 90 }}>{c}</th>)}
+                                <th style={{ background: '#fef2f2', textAlign: 'center', color: '#dc2626', fontWeight: 700 }}>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {pivotRows.map(r => {
+                                const rowTotal = pivotCols.reduce((s, c) => s + (pivotMatrix[r]?.[c] || 0), 0);
+                                return (
+                                    <tr key={r}>
+                                        <td style={{ fontWeight: 600, fontSize: 12 }}>{r}</td>
+                                        {pivotCols.map(c => {
+                                            const val = pivotMatrix[r]?.[c] || 0;
+                                            const intensity = val / pivotMax;
+                                            const bg = val > 0 ? `rgba(220,38,38,${0.08 + intensity * 0.72})` : 'transparent';
+                                            return (
+                                                <td key={c} style={{ textAlign: 'center', background: bg,
+                                                    color: intensity > 0.55 ? '#fff' : '#1e293b',
+                                                    fontWeight: val > 0 ? 700 : 400, fontSize: 13 }}>
+                                                    {val > 0 ? val : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                </td>
+                                            );
+                                        })}
+                                        <td style={{ textAlign: 'center', fontWeight: 700, background: '#fef2f2', color: '#dc2626' }}>{rowTotal}</td>
+                                    </tr>
+                                );
+                            })}
+                            <tr style={{ background: '#f8fafc' }}>
+                                <td style={{ fontWeight: 700 }}>Total</td>
+                                {pivotCols.map(c => {
+                                    const t = pivotRows.reduce((s, r) => s + (pivotMatrix[r]?.[c] || 0), 0);
+                                    return <td key={c} style={{ textAlign: 'center', fontWeight: 700, color: '#dc2626' }}>{t}</td>;
+                                })}
+                                <td style={{ textAlign: 'center', fontWeight: 700, color: '#dc2626', background: '#fef2f2' }}>{noEnlazadas.length}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                ) : (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>Sin datos para la matriz</p>
+                )}
+            </div>
+
+            {/* ── Tendencia mensual ──────────────────────────────────────────── */}
+            <h3 style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                Tendencia Mensual (FechaEnvío)
+            </h3>
+            <div className="card" style={{ padding: 16, marginBottom: 20 }}>
+                <div style={{ height: 220 }}>
+                    <Line data={tendenciaChart} options={lineOpts} />
+                </div>
+            </div>
+
+            {/* ── Tabla detalle sortable ─────────────────────────────────────── */}
+            <h3 style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                Detalle — {noEnlazadas.length} OC Fuera PAC
+            </h3>
+            <div className="card">
+                <div className="table-responsive">
+                    <table className="table-gob">
+                        <thead>
+                            <tr>
+                                <SortTh col="codigo_oc"       label="Código OC" />
+                                <SortTh col="FechaEnvio"      label="F. Envío" />
+                                <SortTh col="EstadoOC"        label="Estado" />
+                                <SortTh col="C_Unidad"        label="Unidad" />
+                                <SortTh col="P_Nombre"        label="Proveedor" />
+                                <SortTh col="TotalBruto"      label="Monto Bruto" align="right" />
+                                <SortTh col="DescripcionTipoOC" label="Tipo Compra" />
+                                <SortTh col="TipoOCInterno"   label="Tipo Interno" />
+                                <th>Link</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sortedDetail.map(oc => (
+                                <tr key={oc.codigo_oc}>
+                                    <td><strong style={{ fontFamily: 'monospace', fontSize: 11 }}>{oc.codigo_oc}</strong></td>
+                                    <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{fmtDate(oc.FechaEnvio)}</td>
+                                    <td>
+                                        <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+                                            background: estadoColor(oc.EstadoOC) + '20', color: estadoColor(oc.EstadoOC),
+                                            border: `1px solid ${estadoColor(oc.EstadoOC)}40` }}>
+                                            {oc.EstadoOC || 'N/A'}
+                                        </span>
+                                    </td>
+                                    <td style={{ maxWidth: 140 }}>
+                                        <div className="truncate-text" title={oc.C_Unidad} style={{ fontSize: 11 }}>{oc.C_Unidad || '—'}</div>
+                                    </td>
+                                    <td style={{ maxWidth: 160 }}>
+                                        <div className="truncate-text" title={oc.P_Nombre} style={{ fontSize: 12 }}>{oc.P_Nombre || '—'}</div>
+                                    </td>
+                                    <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap' }}>
+                                        {oc.TotalBruto ? fmt(Number(oc.TotalBruto), oc.TipoMoneda || 'CLP') : '—'}
+                                    </td>
+                                    <td style={{ fontSize: 11 }}>{oc.DescripcionTipoOC || oc.TipoOC || '—'}</td>
+                                    <td>
+                                        <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600,
+                                            background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0' }}>
+                                            {oc.TipoOCInterno || 'Sin clasificar'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {oc.LinkMP
+                                            ? <a href={oc.LinkMP} target="_blank" rel="noreferrer"
+                                                style={{ color: '#10b981', fontWeight: 700, textDecoration: 'none' }}>🔗 MP</a>
+                                            : <span style={{ color: '#94a3b8' }}>—</span>}
+                                    </td>
+                                </tr>
+                            ))}
+                            {sortedDetail.length === 0 && (
+                                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 30, color: '#94a3b8' }}>
+                                    No hay OC fuera PAC con los filtros seleccionados
+                                </td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 
 const TABS = [
-    { id: 'General',      icon: '📊' },
-    { id: 'Estado',       icon: '⚠️' },
-    { id: 'Enlace PAC',   icon: '🔗' },
+    { id: 'General',        icon: '📊' },
+    { id: 'Estado',         icon: '⚠️' },
+    { id: 'Enlace PAC',     icon: '🔗' },
     { id: 'OC Corregibles', icon: '🛠️' },
+    { id: 'No Enlazadas',   icon: '🔴' },
 ];
 
 export function OrdenesCompraResumen() {
@@ -674,6 +1097,7 @@ export function OrdenesCompraResumen() {
             {activeTab === 'Estado'         && <TabEstado data={filtered} />}
             {activeTab === 'Enlace PAC'     && <TabEnlacePAC data={filtered} />}
             {activeTab === 'OC Corregibles' && <TabOCCorregibles data={filtered} proyectosMap={proyectosMap} />}
+            {activeTab === 'No Enlazadas'   && <TabNoEnlazadas data={ordenes} />}
         </div>
     );
 }
