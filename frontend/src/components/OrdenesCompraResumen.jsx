@@ -98,11 +98,6 @@ function SearchTable({ placeholder, value, onChange, count, total }) {
 
 // ─── Paginación ──────────────────────────────────────────────────────────────
 
-function usePagination(total, pageSize) {
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    return totalPages;
-}
-
 function Pagination({ page, setPage, pageSize, setPageSize, total }) {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
