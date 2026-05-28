@@ -762,3 +762,37 @@ class CompraAgilProveedor(models.Model):
 
     def __str__(self):
         return f"{self.codigocompraagil} — {self.razonsocial}"
+
+
+# =============================================================================
+# Módulo de Revisión OC Corregibles
+# =============================================================================
+
+class RevisionOCCorregible(models.Model):
+    RESULTADO_CHOICES = [
+        ('Enlazada',    'Enlazada'),
+        ('No Enlazada', 'No Enlazada'),
+        ('Pendiente',   'Pendiente'),
+    ]
+    MOTIVO_CHOICES = [
+        ('Planificación no informada en el Plan de Compras',             'Planificación no informada en el Plan de Compras'),
+        ('Emergencia o Urgencia Sanitaria Imprevista',                   'Emergencia o Urgencia Sanitaria Imprevista'),
+        ('Asignación Extraordinaria de Fondos o Ajuste Presupuestario',  'Asignación Extraordinaria de Fondos o Ajuste Presupuestario'),
+        ('Cambio en las Prioridades del Plan Estratégico Institucional', 'Cambio en las Prioridades del Plan Estratégico Institucional'),
+        ('Quiebre de Stock por Factores de Mercado Externos',            'Quiebre de Stock por Factores de Mercado Externos'),
+    ]
+
+    codigo_oc            = models.CharField(max_length=255)
+    revisado_por         = models.CharField(max_length=150)
+    fecha_revision       = models.DateTimeField(auto_now_add=True)
+    resultado            = models.CharField(max_length=20, choices=RESULTADO_CHOICES)
+    id_proyecto_asignado = models.CharField(max_length=255, null=True, blank=True)
+    motivo_no_enlace     = models.CharField(max_length=255, null=True, blank=True, choices=MOTIVO_CHOICES)
+    observaciones        = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'revision_oc_corregible'
+        ordering = ['-fecha_revision']
+
+    def __str__(self):
+        return f"{self.codigo_oc} — {self.resultado} ({self.revisado_por})"

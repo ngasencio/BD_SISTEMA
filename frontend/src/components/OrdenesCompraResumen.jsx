@@ -512,6 +512,207 @@ function TabEnlacePAC({ data }) {
     );
 }
 
+// ─── TAB OC CORREGIBLES — helpers ─────────────────────────────────────────────
+
+const RESULTADO_COLORS = {
+    'Enlazada':    { bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', icon: '🟢' },
+    'No Enlazada': { bg: '#fee2e2', color: '#dc2626', border: '#fca5a5', icon: '🔴' },
+    'Pendiente':   { bg: '#fef9c3', color: '#b45309', border: '#fde047', icon: '🟡' },
+};
+
+const MOTIVO_OPCIONES = [
+    'Planificación no informada en el Plan de Compras',
+    'Emergencia o Urgencia Sanitaria Imprevista',
+    'Asignación Extraordinaria de Fondos o Ajuste Presupuestario',
+    'Cambio en las Prioridades del Plan Estratégico Institucional',
+    'Quiebre de Stock por Factores de Mercado Externos',
+];
+
+function RevisionBadge({ revision }) {
+    if (!revision) return (
+        <span style={{ fontSize: 10, color: '#94a3b8', fontStyle: 'italic' }}>Sin revisar</span>
+    );
+    const c = RESULTADO_COLORS[revision.resultado] || RESULTADO_COLORS['Pendiente'];
+    return (
+        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 10,
+            fontWeight: 700, background: c.bg, color: c.color, border: `1px solid ${c.border}` }}>
+            {c.icon} {revision.resultado}
+        </span>
+    );
+}
+
+function RevisionModal({ oc, historial, sugerencias, onClose, onSaved }) {
+    const [resultado,    setResultado]    = useState('Pendiente');
+    const [idProyecto,   setIdProyecto]   = useState('');
+    const [motivo,       setMotivo]       = useState('');
+    const [observaciones, setObservaciones] = useState('');
+    const [saving,       setSaving]       = useState(false);
+    const [error,        setError]        = useState('');
+
+    const handleSave = async () => {
+        if (!resultado) { setError('Selecciona un resultado.'); return; }
+        if (resultado === 'No Enlazada' && !motivo) { setError('Indica el motivo de no enlace.'); return; }
+        setSaving(true);
+        setError('');
+        try {
+            await api.post('revisiones-oc/', {
+                codigo_oc: oc.codigo_oc,
+                resultado,
+                id_proyecto_asignado: resultado === 'Enlazada' ? idProyecto : null,
+                motivo_no_enlace:     resultado === 'No Enlazada' ? motivo : null,
+                observaciones:        observaciones || null,
+            });
+            onSaved();
+        } catch (e) {
+            setError(e.response?.data?.detail || 'Error al guardar.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 };
+    const box = { background: '#fff', borderRadius: 12, width: '100%', maxWidth: 620,
+        maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' };
+    const hdr = { padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex',
+        justifyContent: 'space-between', alignItems: 'flex-start' };
+    const lbl = { fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4, display: 'block' };
+
+    return (
+        <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+            <div style={box}>
+                {/* Header */}
+                <div style={hdr}>
+                    <div>
+                        <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b' }}>📋 Revisión de OC</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#64748b', marginTop: 2 }}>{oc.codigo_oc}</div>
+                        <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2, maxWidth: 440 }}>{oc.NombreOC}</div>
+                    </div>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
+                </div>
+
+                {/* Historial */}
+                {historial.length > 0 && (
+                    <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
+                            Historial de revisiones ({historial.length})
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {historial.map(r => {
+                                const c = RESULTADO_COLORS[r.resultado] || RESULTADO_COLORS['Pendiente'];
+                                return (
+                                    <div key={r.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+                                        padding: '8px 12px', display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                        <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700,
+                                            background: c.bg, color: c.color, border: `1px solid ${c.border}`, whiteSpace: 'nowrap' }}>
+                                            {c.icon} {r.resultado}
+                                        </span>
+                                        <span style={{ fontSize: 11, color: '#475569' }}>
+                                            {new Date(r.fecha_revision).toLocaleString('es-CL')} · <strong>{r.revisado_por}</strong>
+                                        </span>
+                                        {r.id_proyecto_asignado && (
+                                            <span style={{ fontSize: 11, color: '#15803d', fontFamily: 'monospace' }}>
+                                                Proyecto: {r.id_proyecto_asignado}
+                                            </span>
+                                        )}
+                                        {r.motivo_no_enlace && (
+                                            <span style={{ fontSize: 11, color: '#dc2626', fontStyle: 'italic' }}>{r.motivo_no_enlace}</span>
+                                        )}
+                                        {r.observaciones && (
+                                            <span style={{ fontSize: 11, color: '#64748b', width: '100%' }}>💬 {r.observaciones}</span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Formulario nueva revisión */}
+                <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Nueva revisión</div>
+
+                    {/* Resultado */}
+                    <div>
+                        <label style={lbl}>Resultado *</label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            {['Pendiente', 'Enlazada', 'No Enlazada'].map(r => {
+                                const c = RESULTADO_COLORS[r];
+                                const sel = resultado === r;
+                                return (
+                                    <button key={r} onClick={() => setResultado(r)} style={{
+                                        flex: 1, padding: '8px 4px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                                        border: `2px solid ${sel ? c.color : '#e2e8f0'}`,
+                                        background: sel ? c.bg : '#f8fafc', color: sel ? c.color : '#64748b',
+                                    }}>
+                                        {c.icon} {r}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* ID Proyecto (solo si Enlazada) */}
+                    {resultado === 'Enlazada' && (
+                        <div>
+                            <label style={lbl}>ID Proyecto asignado</label>
+                            <input
+                                className="filter-input"
+                                list="proyectos-list"
+                                value={idProyecto}
+                                onChange={e => setIdProyecto(e.target.value)}
+                                placeholder="Escribe o selecciona un proyecto…"
+                                style={{ width: '100%' }}
+                            />
+                            <datalist id="proyectos-list">
+                                {(sugerencias || []).map((s, i) => (
+                                    <option key={i} value={s.id_proyecto}>{s.id_proyecto} ({s.n} OC)</option>
+                                ))}
+                            </datalist>
+                        </div>
+                    )}
+
+                    {/* Motivo (solo si No Enlazada) */}
+                    {resultado === 'No Enlazada' && (
+                        <div>
+                            <label style={lbl}>Motivo de no enlace *</label>
+                            <select className="filter-input" value={motivo} onChange={e => setMotivo(e.target.value)} style={{ width: '100%' }}>
+                                <option value="">— Seleccionar motivo —</option>
+                                {MOTIVO_OPCIONES.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Observaciones */}
+                    <div>
+                        <label style={lbl}>Observaciones (opcional)</label>
+                        <textarea
+                            className="filter-input"
+                            value={observaciones}
+                            onChange={e => setObservaciones(e.target.value)}
+                            placeholder="Notas adicionales para el reporte…"
+                            rows={3}
+                            style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
+                        />
+                    </div>
+
+                    {error && <div style={{ fontSize: 12, color: '#dc2626', background: '#fef2f2', padding: '8px 12px', borderRadius: 6, border: '1px solid #fca5a5' }}>{error}</div>}
+
+                    {/* Acciones */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', cursor: 'pointer', fontSize: 13 }}>
+                            Cancelar
+                        </button>
+                        <button onClick={handleSave} disabled={saving} style={{ padding: '8px 18px', borderRadius: 7, border: 'none', background: saving ? '#94a3b8' : '#3b82f6', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13 }}>
+                            {saving ? 'Guardando…' : 'Guardar revisión'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── TAB OC CORREGIBLES ───────────────────────────────────────────────────────
 
 function TabOCCorregibles({ data, proyectosMap }) {
@@ -519,13 +720,28 @@ function TabOCCorregibles({ data, proyectosMap }) {
     const [soloConSugerencia, setSoloConSugerencia] = useState(false);
     const [pgPage, setPgPage] = useState(1);
     const [pgSize, setPgSize] = useState(20);
+    const [revisiones, setRevisiones] = useState({});   // { codigo_oc: [rev,...] }
+    const [modalOC, setModalOC] = useState(null);
+
+    const cargarRevisiones = async () => {
+        try {
+            const { data: res } = await api.get('revisiones-oc/');
+            const map = {};
+            (res || []).forEach(r => {
+                if (!map[r.codigo_oc]) map[r.codigo_oc] = [];
+                map[r.codigo_oc].push(r);
+            });
+            setRevisiones(map);
+        } catch (_) {}
+    };
+
+    useEffect(() => { cargarRevisiones(); }, []);
 
     // OC no enlazadas con CodigoLicitacion
     const candidatas = useMemo(() =>
         data.filter(oc => oc.EnlacePAC !== 'Enlazada' && oc.CodigoLicitacion),
         [data]);
 
-    // Enriquecer con sugerencias del mapa cross-year
     const enriquecidas = useMemo(() =>
         candidatas.map(oc => ({
             ...oc,
@@ -537,6 +753,16 @@ function TabOCCorregibles({ data, proyectosMap }) {
     const sinSugerencia   = enriquecidas.filter(oc => oc.sugerencias.length === 0);
     const montoCorregible = enriquecidas.filter(oc => !oc.TipoMoneda || oc.TipoMoneda === 'CLP')
         .reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
+
+    const revisadas   = enriquecidas.filter(oc => revisiones[oc.codigo_oc]?.length > 0).length;
+    const pendientes  = enriquecidas.filter(oc => {
+        const last = revisiones[oc.codigo_oc]?.[0];
+        return last?.resultado === 'Pendiente';
+    }).length;
+    const justificadas = enriquecidas.filter(oc => {
+        const last = revisiones[oc.codigo_oc]?.[0];
+        return last?.resultado === 'No Enlazada';
+    }).length;
 
     const fuente = soloConSugerencia ? conSugerencia : enriquecidas;
     const filtradas = useMemo(() => {
@@ -553,29 +779,23 @@ function TabOCCorregibles({ data, proyectosMap }) {
         <div>
             {/* KPIs */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-                <KpiCard label="No Enlazadas con Licitación" value={enriquecidas.length} sub="Candidatas a corrección" color="#E0701E" />
-                <KpiCard label="Con ID Proyecto sugerido" value={conSugerencia.length} sub="Pueden enlazarse ahora" color="#22c55e" />
-                <KpiCard label="Sin sugerencia" value={sinSugerencia.length} sub="Revisión manual necesaria" color="#94a3b8" />
-                <KpiCard label="Monto corregible" value={fmtM(montoCorregible)} sub="CLP, excluye canceladas" color="#006FB3" />
+                <KpiCard label="Candidatas a corrección" value={enriquecidas.length} sub="No Enlazadas con Licitación" color="#E0701E" />
+                <KpiCard label="Con proyecto sugerido"   value={conSugerencia.length} sub="Pueden enlazarse ahora" color="#22c55e" />
+                <KpiCard label="Revisadas"               value={revisadas} sub={`${enriquecidas.length - revisadas} sin revisar`} color="#3b82f6" />
+                <KpiCard label="Justificadas"            value={justificadas} sub="No Enlazadas con motivo" color="#8b5cf6" />
+                <KpiCard label="Pendientes"              value={pendientes} sub="Marcadas para seguimiento" color="#f59e0b" />
+                <KpiCard label="Monto corregible"        value={fmtM(montoCorregible)} sub="CLP" color="#006FB3" />
             </div>
 
             {/* Info box */}
             <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 12, color: '#92400e' }}>
-                <strong>¿Cómo funciona?</strong> Se muestran las OC "No Enlazadas" que tienen <code>CodigoLicitacion</code> registrado.
-                Para cada una se busca en <strong>todos los años</strong> si otra OC con el mismo código de licitación ya tiene un <code>ID_Proyecto</code> asignado —
-                ese proyecto se sugiere como candidato para el enlace. El número entre paréntesis <strong>(n)</strong> indica cuántas OC ya usan ese proyecto con esa licitación.
+                <strong>¿Cómo funciona?</strong> OC "No Enlazadas" con <code>CodigoLicitacion</code> registrado. Haz clic en <strong>Revisión</strong> para registrar el trabajo realizado — el registro queda guardado aunque la OC desaparezca tras el próximo sync.
             </div>
 
             {/* Controles */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-                <input
-                    className="filter-input"
-                    type="text"
-                    placeholder="🔍 Buscar OC, nombre, licitación, proveedor…"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    style={{ minWidth: 300 }}
-                />
+                <input className="filter-input" type="text" placeholder="🔍 Buscar OC, nombre, licitación, proveedor…"
+                    value={search} onChange={e => setSearch(e.target.value)} style={{ minWidth: 300 }} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', cursor: 'pointer' }}>
                     <input type="checkbox" checked={soloConSugerencia} onChange={e => { setSoloConSugerencia(e.target.checked); setPgPage(1); }} />
                     Solo con sugerencia de proyecto ({conSugerencia.length})
@@ -589,55 +809,83 @@ function TabOCCorregibles({ data, proyectosMap }) {
                     <table className="table-gob">
                         <thead>
                             <tr>
+                                <th>Estado</th>
                                 <th>Código OC</th>
                                 <th>Nombre OC</th>
                                 <th>Tipo OC Interno</th>
-                                <th>Tipo Compra Interna</th>
                                 <th>CodigoLicitacion</th>
                                 <th>Proveedor</th>
                                 <th style={{ textAlign: 'right' }}>Monto Neto</th>
                                 <th>ID Proyecto sugerido</th>
                                 <th>Link MP</th>
+                                <th>Acción</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filtradas.slice((pgPage - 1) * pgSize, pgPage * pgSize).map(oc => (
-                                <tr key={oc.codigo_oc} style={{ background: oc.sugerencias.length > 0 ? '#f0fdf4' : '#fff' }}>
-                                    <td><strong style={{ fontFamily: 'monospace', fontSize: 11 }}>{oc.codigo_oc}</strong></td>
-                                    <td style={{ maxWidth: 220 }}><div className="truncate-text" title={oc.NombreOC} style={{ fontSize: 12 }}>{oc.NombreOC}</div></td>
-                                    <td style={{ fontSize: 11 }}>{oc.TipoOCInterno || '—'}</td>
-                                    <td style={{ fontSize: 11 }}>{oc.TipoCompraInterna || '—'}</td>
-                                    <td>
-                                        <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 6px', borderRadius: 6, border: '1px solid #bfdbfe' }}>
-                                            {oc.CodigoLicitacion}
-                                        </span>
-                                    </td>
-                                    <td style={{ fontSize: 11 }}><div className="truncate-text" title={oc.P_Nombre}>{oc.P_Nombre}</div></td>
-                                    <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 12 }}>{fmt(Number(oc.TotalNeto), oc.TipoMoneda || 'CLP')}</td>
-                                    <td>
-                                        {oc.sugerencias.length > 0
-                                            ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                                {oc.sugerencias.map((s, i) => (
-                                                    <span key={i} style={{
-                                                        display: 'inline-block', padding: '2px 7px', borderRadius: 10, fontSize: 10,
-                                                        fontWeight: 700, background: '#dcfce7', color: '#15803d',
-                                                        border: '1px solid #bbf7d0', whiteSpace: 'nowrap',
-                                                    }}>
-                                                        {s.id_proyecto} <span style={{ opacity: 0.7 }}>({s.n})</span>
-                                                    </span>
-                                                ))}
-                                              </div>
-                                            : <span style={{ color: '#94a3b8', fontSize: 11 }}>Sin sugerencia</span>}
-                                    </td>
-                                    <td>{oc.LinkMP ? <a href={oc.LinkMP} target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>🔗 MP</a> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
-                                </tr>
-                            ))}
-                            {filtradas.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>Sin resultados</td></tr>}
+                            {filtradas.slice((pgPage - 1) * pgSize, pgPage * pgSize).map(oc => {
+                                const historial = revisiones[oc.codigo_oc] || [];
+                                const ultimaRev = historial[0] || null;
+                                const rowBg = ultimaRev?.resultado === 'No Enlazada' ? '#fef2f2'
+                                    : ultimaRev?.resultado === 'Enlazada'    ? '#f0fdf4'
+                                    : ultimaRev?.resultado === 'Pendiente'   ? '#fefce8'
+                                    : oc.sugerencias.length > 0             ? '#f0fdf4'
+                                    : '#fff';
+                                return (
+                                    <tr key={oc.codigo_oc} style={{ background: rowBg }}>
+                                        <td><RevisionBadge revision={ultimaRev} /></td>
+                                        <td><strong style={{ fontFamily: 'monospace', fontSize: 11 }}>{oc.codigo_oc}</strong></td>
+                                        <td style={{ maxWidth: 200 }}><div className="truncate-text" title={oc.NombreOC} style={{ fontSize: 12 }}>{oc.NombreOC}</div></td>
+                                        <td style={{ fontSize: 11 }}>{oc.TipoOCInterno || '—'}</td>
+                                        <td>
+                                            <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 6px', borderRadius: 6, border: '1px solid #bfdbfe' }}>
+                                                {oc.CodigoLicitacion}
+                                            </span>
+                                        </td>
+                                        <td style={{ fontSize: 11 }}><div className="truncate-text" title={oc.P_Nombre}>{oc.P_Nombre}</div></td>
+                                        <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 12 }}>{fmt(Number(oc.TotalNeto), oc.TipoMoneda || 'CLP')}</td>
+                                        <td>
+                                            {oc.sugerencias.length > 0
+                                                ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                                    {oc.sugerencias.map((s, i) => (
+                                                        <span key={i} style={{ display: 'inline-block', padding: '2px 7px', borderRadius: 10, fontSize: 10,
+                                                            fontWeight: 700, background: '#dcfce7', color: '#15803d',
+                                                            border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
+                                                            {s.id_proyecto} <span style={{ opacity: 0.7 }}>({s.n})</span>
+                                                        </span>
+                                                    ))}
+                                                  </div>
+                                                : <span style={{ color: '#94a3b8', fontSize: 11 }}>Sin sugerencia</span>}
+                                        </td>
+                                        <td>{oc.LinkMP ? <a href={oc.LinkMP} target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>🔗 MP</a> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                                        <td>
+                                            <button onClick={() => setModalOC(oc)} style={{
+                                                padding: '4px 12px', borderRadius: 6, border: '1px solid #3b82f6',
+                                                background: '#eff6ff', color: '#1d4ed8', fontSize: 11, fontWeight: 600,
+                                                cursor: 'pointer', whiteSpace: 'nowrap',
+                                            }}>
+                                                {historial.length > 0 ? `📋 Ver (${historial.length})` : '+ Revisión'}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {filtradas.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>Sin resultados</td></tr>}
                         </tbody>
                     </table>
                 </div>
                 <Pagination page={pgPage} setPage={setPgPage} pageSize={pgSize} setPageSize={setPgSize} total={filtradas.length} />
             </div>
+
+            {/* Modal */}
+            {modalOC && (
+                <RevisionModal
+                    oc={modalOC}
+                    historial={revisiones[modalOC.codigo_oc] || []}
+                    sugerencias={proyectosMap[modalOC.CodigoLicitacion] || []}
+                    onClose={() => setModalOC(null)}
+                    onSaved={() => { cargarRevisiones(); setModalOC(null); }}
+                />
+            )}
         </div>
     );
 }

@@ -8,6 +8,7 @@ from .models import (
     Proveedor, Comprador, BoletaGarantia, BoletaGarantiaAudit, Factura,
     PlanerPAC, CompraAgilResumen, CompraAgilDocumento,
     CompraAgilProducto, CompraAgilProductoCotizado, CompraAgilProveedor,
+    RevisionOCCorregible,
 )
 
 ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
@@ -285,3 +286,14 @@ class CompraAgilProveedorSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompraAgilProveedor
         fields = '__all__'
+
+
+# =============================================================================
+# Revisión OC Corregibles
+# =============================================================================
+
+class RevisionOCCorregibleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RevisionOCCorregible
+        fields = '__all__'
+        read_only_fields = ['revisado_por', 'fecha_revision']

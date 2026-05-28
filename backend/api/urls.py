@@ -11,6 +11,7 @@ from .views import (
     PlanerPACViewSet, CompraAgilResumenViewSet, CompraAgilProductoViewSet,
     CompraAgilProveedorViewSet, pac_indicadores_view, pac_oc_stats_view,
     pac_oc_productos_view,
+    RevisionOCCorregibleViewSet,
 )
 
 router = DefaultRouter()
@@ -31,6 +32,9 @@ router.register(r'planer-pac', PlanerPACViewSet)
 router.register(r'compraagil-resumen', CompraAgilResumenViewSet)
 router.register(r'compraagil-productos', CompraAgilProductoViewSet)
 router.register(r'compraagil-proveedores', CompraAgilProveedorViewSet)
+
+# Módulo Revisión OC Corregibles
+router.register(r'revisiones-oc', RevisionOCCorregibleViewSet)
 
 urlpatterns = [
     # Autenticación JWT

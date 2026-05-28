@@ -14,6 +14,7 @@ from .models import (
     DetalleLicitacion, DetalleOrdenCompra, Devengo,
     Factura, Licitacion, OrdenCompra, Proveedor,
     PlanerPAC, CompraAgilResumen, CompraAgilProducto, CompraAgilProveedor,
+    RevisionOCCorregible,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
@@ -22,6 +23,7 @@ from .serializers import (
     FacturaSerializer, LicitacionSerializer, OrdenCompraSerializer, ProveedorSerializer,
     PlanerPACSerializer, CompraAgilResumenSerializer,
     CompraAgilProductoSerializer, CompraAgilProveedorSerializer,
+    RevisionOCCorregibleSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -446,3 +448,22 @@ def pac_oc_productos_view(request):
         data = calcular_oc_productos(anio)
         cache.set(cache_key, data, timeout=300)
     return Response(data)
+
+
+# =============================================================================
+# Revisión OC Corregibles
+# =============================================================================
+
+class RevisionOCCorregibleViewSet(viewsets.ModelViewSet):
+    """CRUD de revisiones de OC corregibles. revisado_por se asigna del JWT."""
+    queryset = RevisionOCCorregible.objects.all()
+    serializer_class = RevisionOCCorregibleSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
+    filterset_fields = ['codigo_oc', 'resultado', 'revisado_por']
+    ordering_fields = ['fecha_revision', 'resultado']
+    ordering = ['-fecha_revision']
+
+    def perform_create(self, serializer):
+        serializer.save(revisado_por=self.request.user.username)

@@ -20,7 +20,6 @@ export default function Sidebar() {
         garantias: path.startsWith('/abastecimiento/boletas'),
         finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas'),
     });
-    const isOCv2 = path.startsWith('/ordenes-compra-v2');
     const pacTab = path === '/pac' ? (new URLSearchParams(location.search).get('tab') || 'indicadores') : null;
 
     const handleLogout = () => {
@@ -78,13 +77,7 @@ export default function Sidebar() {
                                     <span>🛍️</span>
                                     <span className="nav-item-text">Órdenes de Compra</span>
                                 </div>
-                                <div
-                                    className={`nav-item ${isOCv2 ? 'active' : ''}`}
-                                    onClick={() => goTo('/ordenes-compra-v2', 'abast', 'mp')}
-                                >
-                                    <span>📊</span>
-                                    <span className="nav-item-text">OC Análisis</span>
-                                </div>
+
                             </div>
                         </div>
 
