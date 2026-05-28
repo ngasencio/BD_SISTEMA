@@ -1,19 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getOCRawAll, getFacturasRawAll } from '../api/ocApi';
+import { getOCRawAll } from '../api/ocApi';
 
 export function useOCDashboard() {
     const [rawOC, setRawOC] = useState([]);
-    const [rawFacturas, setRawFacturas] = useState([]);
     const [loadingOC, setLoadingOC] = useState(false);
-    const [loadingFact, setLoadingFact] = useState(false);
     const [errorOC, setErrorOC] = useState(null);
-    const [errorFact, setErrorFact] = useState(null);
 
     // Filters
     const [anio, setAnio] = useState('');
     const [unidad, setUnidad] = useState('Todas');
 
-    // Derived years list from OC data
     const years = useMemo(() => {
         if (!rawOC.length) return [];
         const set = new Set(rawOC.map(r => {
@@ -28,7 +24,6 @@ export function useOCDashboard() {
         return [...new Set(rawOC.map(r => r.C_Unidad).filter(Boolean))].sort();
     }, [rawOC]);
 
-    // Filtered OC data
     const ocData = useMemo(() => {
         let d = rawOC;
         if (anio) {
@@ -56,36 +51,16 @@ export function useOCDashboard() {
         }
     }, []);
 
-    const fetchFacturas = useCallback(async () => {
-        setLoadingFact(true);
-        setErrorFact(null);
-        try {
-            const { data } = await getFacturasRawAll();
-            setRawFacturas(Array.isArray(data) ? data : (data.results ?? []));
-        } catch (err) {
-            setErrorFact(err.response?.data?.detail || 'Error al cargar facturas.');
-        } finally {
-            setLoadingFact(false);
-        }
-    }, []);
+    useEffect(() => { fetchOC(); }, [fetchOC]);
 
-    useEffect(() => {
-        fetchOC();
-        fetchFacturas();
-    }, [fetchOC, fetchFacturas]);
-
-    // Set default year once data loads
     useEffect(() => {
         if (years.length && !anio) setAnio(years[0]);
     }, [years, anio]);
 
     return {
         ocData,
-        rawFacturas,
         loadingOC,
-        loadingFact,
         errorOC,
-        errorFact,
         anio, setAnio,
         unidad, setUnidad,
         years,

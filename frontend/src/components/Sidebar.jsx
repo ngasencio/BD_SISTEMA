@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../store/authStore';
-import { useAlertCount } from '../store/alertStore';
-
 export default function Sidebar() {
     const { user, role, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const path = location.pathname;
-    const { sinRC } = useAlertCount();
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
@@ -86,11 +83,7 @@ export default function Sidebar() {
                                     onClick={() => goTo('/ordenes-compra-v2', 'abast', 'mp')}
                                 >
                                     <span>📊</span>
-                                    <span className="nav-item-text">OC + Facturas</span>
-                                    {sinRC > 0
-                                        ? <span className="nav-badge nav-badge-alert">{sinRC}</span>
-                                        : <span className="nav-badge">Nuevo</span>
-                                    }
+                                    <span className="nav-item-text">OC Análisis</span>
                                 </div>
                             </div>
                         </div>

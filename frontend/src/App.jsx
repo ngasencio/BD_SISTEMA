@@ -18,8 +18,6 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 
 // Store
 import { AuthProvider, useAuth } from './store/authStore';
-import { AlertProvider } from './store/alertStore';
-
 // Layout compartido
 import { AppLayout } from './components/ui/AppLayout';
 
@@ -61,8 +59,6 @@ function AppRoutes() {
 
       {/* Rutas protegidas: requieren autenticación */}
       <Route element={<RequireAuth />}>
-        {/* AlertProvider envuelve todo lo autenticado para compartir el badge */}
-        <Route element={<AlertProvider><Outlet /></AlertProvider>}>
           {/* Layout principal con Sidebar */}
           <Route element={<AppLayout />}>
 
@@ -87,7 +83,6 @@ function AppRoutes() {
             </Route>
 
           </Route>
-        </Route>
       </Route>
 
       {/* Fallback: redirige cualquier ruta no encontrada al inicio */}

@@ -138,7 +138,8 @@ function Pagination({ page, setPage, pageSize, setPageSize, total }) {
 
 // ─── TAB GENERAL ─────────────────────────────────────────────────────────────
 
-function TabGeneral({ data, searchTerm, setSearchTerm }) {
+function TabGeneral({ data }) {
+    const [searchTerm, setSearchTerm] = useState('');
     const [pgPage, setPgPage] = useState(1);
     const [pgSize, setPgSize] = useState(20);
     useEffect(() => { setPgPage(1); }, [data.length, pgSize]);
@@ -647,53 +648,21 @@ const ESTADOS_NE   = ['Enviada a proveedor', 'Aceptada', 'Recepción Conforme', 
 const COLORS_NE    = ['#dc2626','#e0701e','#f59e0b','#6366f1','#3b82f6','#22c55e','#8b5cf6','#ec4899'];
 
 function TabNoEnlazadas({ data }) {
-    const [yearNE,        setYearNE]        = useState('');
-    const [fechaDesde,    setFechaDesde]    = useState('');
-    const [fechaHasta,    setFechaHasta]    = useState('');
-    const [estadosActivos, setEstadosActivos] = useState(new Set(ESTADOS_NE));
-    const [sortCol,       setSortCol]       = useState('TotalBruto');
-    const [sortDir,       setSortDir]       = useState('desc');
+    const [sortCol, setSortCol] = useState('TotalBruto');
+    const [sortDir, setSortDir] = useState('desc');
 
-    const years = useMemo(() => {
-        const ys = new Set(data.map(oc => oc.FechaEnvio).filter(Boolean).map(d => new Date(d).getFullYear()));
-        return [...ys].sort((a, b) => b - a);
-    }, [data]);
-
-    const toggleEstado = (e) => setEstadosActivos(prev => {
-        const next = new Set(prev);
-        next.has(e) ? next.delete(e) : next.add(e);
-        return next;
-    });
-
-    // OC base: mismos filtros de año/fecha/estado que noEnlazadas (denominador correcto del %)
-    const baseActiva = useMemo(() =>
-        data.filter(oc => {
-            if (estadosActivos.size > 0 && !estadosActivos.has(oc.EstadoOC)) return false;
-            const f = oc.FechaEnvio;
-            if (yearNE     && f && new Date(f).getFullYear() !== parseInt(yearNE)) return false;
-            if (fechaDesde && f && f.slice(0, 10) < fechaDesde) return false;
-            if (fechaHasta && f && f.slice(0, 10) > fechaHasta) return false;
-            return true;
-        }),
-        [data, estadosActivos, yearNE, fechaDesde, fechaHasta]);
-
-    // No Enlazadas con todos los filtros del tab
-    const noEnlazadas = useMemo(() => baseActiva.filter(oc => {
-        if (oc.EnlacePAC === 'Enlazada') return false;
-        const f = oc.FechaEnvio;
-        if (yearNE   && f && new Date(f).getFullYear() !== parseInt(yearNE)) return false;
-        if (fechaDesde && f && f.slice(0, 10) < fechaDesde) return false;
-        if (fechaHasta && f && f.slice(0, 10) > fechaHasta) return false;
-        return true;
-    }), [baseActiva, yearNE, fechaDesde, fechaHasta]);
+    // data ya viene filtrado por el filtro global — solo separamos enlazadas/no enlazadas
+    const noEnlazadas = useMemo(() =>
+        data.filter(oc => oc.EnlacePAC !== 'Enlazada'),
+        [data]);
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
     const montoTotal = noEnlazadas
         .filter(oc => !oc.TipoMoneda || oc.TipoMoneda === 'CLP')
         .reduce((s, oc) => s + (Number(oc.TotalBruto) || 0), 0);
 
-    const pctCant = baseActiva.length > 0
-        ? ((noEnlazadas.length / baseActiva.length) * 100).toFixed(1) : 0;
+    const pctCant = data.length > 0
+        ? ((noEnlazadas.length / data.length) * 100).toFixed(1) : 0;
 
     const tipoCountMap = noEnlazadas.reduce((acc, oc) => {
         const k = oc.DescripcionTipoOC || 'Sin tipo';
@@ -810,52 +779,9 @@ function TabNoEnlazadas({ data }) {
 
     return (
         <div>
-            {/* ── Filtros del tab ────────────────────────────────────────────── */}
-            <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8,
-                padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <span style={{ fontWeight: 700, fontSize: 13, color: '#9a3412', alignSelf: 'center' }}>Filtros:</span>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Año</label>
-                    <select className="filter-input" value={yearNE} onChange={e => setYearNE(e.target.value)} style={{ minWidth: 110 }}>
-                        <option value="">Todos</option>
-                        {years.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Desde (FechaEnvío)</label>
-                    <input className="filter-input" type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Hasta</label>
-                    <input className="filter-input" type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Estado OC</label>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {ESTADOS_NE.map(e => (
-                            <label key={e} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
-                                <input type="checkbox" checked={estadosActivos.has(e)} onChange={() => toggleEstado(e)} />
-                                <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                                    background: estadoColor(e) + '20', color: estadoColor(e), border: `1px solid ${estadoColor(e)}40` }}>
-                                    {e}
-                                </span>
-                            </label>
-                        ))}
-                    </div>
-                </div>
-
-                <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#9a3412', alignSelf: 'center' }}>
-                    {noEnlazadas.length} OC fuera PAC
-                </span>
-            </div>
-
             {/* ── KPIs ────────────────────────────────────────────────────────── */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-                <KpiCard label="OC No Enlazadas" value={noEnlazadas.length} sub={`de ${baseActiva.length} OC activas`} color="#dc2626" />
+                <KpiCard label="OC No Enlazadas" value={noEnlazadas.length} sub={`de ${data.length} OC activas`} color="#dc2626" />
                 <KpiCard label="% Fuera PAC" value={`${pctCant}%`} sub="por cantidad de OC" color="#e0701e" />
                 <KpiCard label="Monto Fuera PAC (CLP)" value={fmtM(montoTotal)} sub="Suma TotalBruto CLP" color="#f59e0b" />
                 <KpiCard label="Tipo más frecuente" value={topTipo[0]} sub={`${topTipo[1]} OCs`} color="#6366f1" />
@@ -1086,8 +1012,18 @@ export function OrdenesCompraResumen() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState('General');
-    const [yearFilter, setYearFilter] = useState('');
-    const [searchTerm, setSearchTerm] = useState('');
+
+    // ── Filtro global ─────────────────────────────────────────────────────────
+    const [yearFilter,     setYearFilter]     = useState('');
+    const [fechaDesde,     setFechaDesde]     = useState('');
+    const [fechaHasta,     setFechaHasta]     = useState('');
+    const [estadosActivos, setEstadosActivos] = useState(new Set(ESTADOS_NE));
+
+    const toggleEstado = (e) => setEstadosActivos(prev => {
+        const next = new Set(prev);
+        next.has(e) ? next.delete(e) : next.add(e);
+        return next;
+    });
 
     useEffect(() => {
         Promise.all([
@@ -1103,40 +1039,68 @@ export function OrdenesCompraResumen() {
     }, []);
 
     const years = useMemo(() => {
-        const ys = new Set(ordenes.map(oc => oc.FechaEnvio || oc.FechaCreacion).filter(Boolean).map(d => new Date(d).getFullYear()));
+        const ys = new Set(ordenes.map(oc => oc.FechaEnvio).filter(Boolean).map(d => new Date(d).getFullYear()));
         return [...ys].sort((a, b) => b - a);
     }, [ordenes]);
 
     const filtered = useMemo(() => ordenes.filter(oc => {
-        if (yearFilter) {
-            const fecha = oc.FechaEnvio || oc.FechaCreacion;
-            if (!fecha) return false;
-            if (new Date(fecha).getFullYear() !== parseInt(yearFilter)) return false;
-        }
-        if (searchTerm) {
-            const q = searchTerm.toLowerCase();
-            return oc.NombreOC?.toLowerCase().includes(q) || oc.codigo_oc?.toLowerCase().includes(q) || oc.P_Nombre?.toLowerCase().includes(q);
-        }
+        if (estadosActivos.size > 0 && !estadosActivos.has(oc.EstadoOC)) return false;
+        const f = oc.FechaEnvio;
+        if (yearFilter && f && new Date(f).getFullYear() !== parseInt(yearFilter)) return false;
+        if (fechaDesde && f && f.slice(0, 10) < fechaDesde) return false;
+        if (fechaHasta && f && f.slice(0, 10) > fechaHasta) return false;
         return true;
-    }), [ordenes, yearFilter, searchTerm]);
+    }), [ordenes, estadosActivos, yearFilter, fechaDesde, fechaHasta]);
 
     if (loading) return <div style={{ padding: 30, textAlign: 'center' }}>Cargando datos...</div>;
     if (error)   return <div style={{ padding: 30, color: '#ef4444' }}>Error: {error}</div>;
 
     return (
         <div className="tab-view active" id="tab-resumen-oc">
-            {/* Filtros globales */}
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 16px' }}>
-                <span style={{ fontWeight: 600, fontSize: 13, color: '#475569' }}>Filtros:</span>
-                <select className="filter-input" value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ minWidth: 130 }}>
-                    <option value="">Todos los años</option>
-                    {years.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-                <input className="filter-input" type="text" placeholder="🔍 Nombre, código OC o proveedor…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ minWidth: 240 }} />
-                <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>{filtered.length} de {ordenes.length} OC(s)</span>
+            {/* ── Filtro global ─────────────────────────────────────────────── */}
+            <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8,
+                padding: '12px 16px', marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: '#9a3412', alignSelf: 'center' }}>Filtros:</span>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Año</label>
+                    <select className="filter-input" value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ minWidth: 110 }}>
+                        <option value="">Todos</option>
+                        {years.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Desde (FechaEnvío)</label>
+                    <input className="filter-input" type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Hasta</label>
+                    <input className="filter-input" type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Estado OC</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {ESTADOS_NE.map(e => (
+                            <label key={e} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
+                                <input type="checkbox" checked={estadosActivos.has(e)} onChange={() => toggleEstado(e)} />
+                                <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                                    background: estadoColor(e) + '20', color: estadoColor(e), border: `1px solid ${estadoColor(e)}40` }}>
+                                    {e}
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>
+                    {filtered.length} de {ordenes.length} OC(s)
+                </span>
             </div>
 
-            {/* Tabs */}
+            {/* ── Tabs ──────────────────────────────────────────────────────── */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid #e2e8f0' }}>
                 {TABS.map(({ id, icon }) => (
                     <button key={id} onClick={() => setActiveTab(id)} style={{
@@ -1152,11 +1116,11 @@ export function OrdenesCompraResumen() {
                 ))}
             </div>
 
-            {activeTab === 'General'        && <TabGeneral data={filtered} searchTerm={searchTerm} setSearchTerm={setSearchTerm} />}
+            {activeTab === 'General'        && <TabGeneral data={filtered} />}
             {activeTab === 'Estado'         && <TabEstado data={filtered} />}
             {activeTab === 'Enlace PAC'     && <TabEnlacePAC data={filtered} />}
             {activeTab === 'OC Corregibles' && <TabOCCorregibles data={filtered} proyectosMap={proyectosMap} />}
-            {activeTab === 'No Enlazadas'   && <TabNoEnlazadas data={ordenes} />}
+            {activeTab === 'No Enlazadas'   && <TabNoEnlazadas data={filtered} />}
         </div>
     );
 }
