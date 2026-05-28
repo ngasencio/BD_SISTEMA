@@ -665,10 +665,17 @@ function TabNoEnlazadas({ data }) {
         return next;
     });
 
-    // OC base con estados seleccionados (para calcular denominador del %)
+    // OC base: mismos filtros de año/fecha/estado que noEnlazadas (denominador correcto del %)
     const baseActiva = useMemo(() =>
-        data.filter(oc => estadosActivos.size === 0 || estadosActivos.has(oc.EstadoOC)),
-        [data, estadosActivos]);
+        data.filter(oc => {
+            if (estadosActivos.size > 0 && !estadosActivos.has(oc.EstadoOC)) return false;
+            const f = oc.FechaEnvio;
+            if (yearNE     && f && new Date(f).getFullYear() !== parseInt(yearNE)) return false;
+            if (fechaDesde && f && f.slice(0, 10) < fechaDesde) return false;
+            if (fechaHasta && f && f.slice(0, 10) > fechaHasta) return false;
+            return true;
+        }),
+        [data, estadosActivos, yearNE, fechaDesde, fechaHasta]);
 
     // No Enlazadas con todos los filtros del tab
     const noEnlazadas = useMemo(() => baseActiva.filter(oc => {
