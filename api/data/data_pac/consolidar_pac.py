@@ -21,6 +21,7 @@ def consolidar_excels_a_maestro():
     
     lista_dfs = []
     COL_ID = "ID Proyecto"
+    COL_NOMBRE = "Nombre Proyecto"
     # Nombre que le daremos a la columna unificada en el CSV final
     COL_OC_ESTANDAR = "OC Asociada PAC"
 
@@ -29,19 +30,25 @@ def consolidar_excels_a_maestro():
             # Determinar motor según extensión
             ext = os.path.splitext(archivo)[1].lower()
             motor = 'xlrd' if ext == '.xls' else 'openpyxl'
-            
+
             df_temp = pd.read_excel(archivo, engine=motor)
             df_temp.columns = df_temp.columns.str.strip() # Limpiar espacios en nombres
-            
+
             # --- BÚSQUEDA DINÁMICA DE LA COLUMNA OC ---
             # Buscamos una columna que empiece con "OC Asociada Item"
             col_oc_encontrada = [c for c in df_temp.columns if c.startswith("OC Asociada Item")]
-            
+
+            tiene_nombre = COL_NOMBRE in df_temp.columns
+
             if COL_ID in df_temp.columns and col_oc_encontrada:
                 nombre_col_original = col_oc_encontrada[0] # Tomamos la primera coincidencia
-                
-                # Seleccionar solo las dos columnas
-                df_filtrado = df_temp[[COL_ID, nombre_col_original]].copy()
+
+                # Seleccionar columnas base; agregar Nombre Proyecto si existe
+                cols_seleccion = [COL_ID, nombre_col_original]
+                if tiene_nombre:
+                    cols_seleccion = [COL_ID, COL_NOMBRE, nombre_col_original]
+
+                df_filtrado = df_temp[cols_seleccion].copy()
                 
                 # Renombrar la columna del año (2022, 2023...) a un nombre común
                 df_filtrado.rename(columns={nombre_col_original: COL_OC_ESTANDAR}, inplace=True)
@@ -58,7 +65,8 @@ def consolidar_excels_a_maestro():
                 df_filtrado = df_filtrado[~df_filtrado[COL_OC_ESTANDAR].isin(invalidos)]
                 
                 lista_dfs.append(df_filtrado)
-                print(f"✅ Procesado: {os.path.basename(archivo)} (Columna detectada: {nombre_col_original})")
+                extra = f" + {COL_NOMBRE}" if tiene_nombre else ""
+                print(f"✅ Procesado: {os.path.basename(archivo)} (Columna detectada: {nombre_col_original}{extra})")
             else:
                 print(f"⚠️ Saltado: {os.path.basename(archivo)} (No se encontró la columna ID o OC)")
                 
@@ -72,9 +80,10 @@ def consolidar_excels_a_maestro():
     # Unificar todos los dataframes
     df_maestro = pd.concat(lista_dfs, ignore_index=True)
     
-    # Eliminar duplicados considerando ambas columnas (ID Proyecto + OC)
+    # Eliminar duplicados considerando ID Proyecto + OC (+ Nombre si existe)
     total_antes = len(df_maestro)
-    df_maestro = df_maestro.drop_duplicates(subset=[COL_ID, COL_OC_ESTANDAR])
+    cols_dedup = [c for c in [COL_ID, COL_NOMBRE, COL_OC_ESTANDAR] if c in df_maestro.columns]
+    df_maestro = df_maestro.drop_duplicates(subset=cols_dedup)
     
     # Guardar maestro
     output_path = os.path.join(folder_path, "OCPAC_Maestro.csv")

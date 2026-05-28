@@ -486,9 +486,11 @@ def guardar_en_django(db_resumen, db_detalles):
         if "TotalBruto" in defaults and "TotalBruto" not in campos_modelo_oc:
              defaults["TotalBruto"] = defaults.pop("TotalBruto")
              
-        # Renombramos el ID proyecto si es necesario para el ORM de ser llamado ID_Proyecto
+        # Renombramos columnas con espacio al nombre de campo del ORM (con guión bajo)
         if "ID Proyecto" in defaults and "ID_Proyecto" in campos_modelo_oc:
             defaults["ID_Proyecto"] = defaults.pop("ID Proyecto")
+        if "Nombre Proyecto" in defaults and "Nombre_Proyecto" in campos_modelo_oc:
+            defaults["Nombre_Proyecto"] = defaults.pop("Nombre Proyecto")
 
         dict_limpio = {k: v for k, v in defaults.items() if k in campos_modelo_oc}
         dict_limpio['codigo_oc'] = codigo
@@ -734,12 +736,15 @@ def enlazar_con_pac():
         return
 
     # Limpiar columnas previas si existían en el Maestro para que no haya duplicación
-    columnas_a_borrar = [col for col in ["EnlacePAC", "ID Proyecto"] if col in df_res.columns]
+    columnas_a_borrar = [col for col in ["EnlacePAC", "ID Proyecto", "Nombre Proyecto"] if col in df_res.columns]
     if columnas_a_borrar:
         df_res.drop(columns=columnas_a_borrar, inplace=True)
 
     # Dejamos solo valores únicos de OC en PAC para evitar multiplicar filas en Resumen
-    df_pac_reducido = df_pac[["OC Asociada PAC", "ID Proyecto"]].dropna(subset=["OC Asociada PAC"])
+    cols_pac = ["OC Asociada PAC", "ID Proyecto"]
+    if "Nombre Proyecto" in df_pac.columns:
+        cols_pac.append("Nombre Proyecto")
+    df_pac_reducido = df_pac[cols_pac].dropna(subset=["OC Asociada PAC"])
     df_pac_reducido = df_pac_reducido[df_pac_reducido["OC Asociada PAC"].str.strip() != ""]
     df_pac_reducido.drop_duplicates(subset=["OC Asociada PAC"], keep="first", inplace=True)
     

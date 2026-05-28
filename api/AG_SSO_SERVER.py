@@ -241,39 +241,6 @@ def to_float(val):
         return 0.0
 
 
-def _buscar_codigo_oc_api(rut_proveedor: str, monto_total: float, fecha_cierre: dt.date) -> Optional[str]:
-    """
-    Busca el código alfanumérico de una OC en la API v1 de Mercado Público.
-    Cruza por fecha (rango 12 días post-cierre), RUT proveedor, monto y TipoOC == AG.
-    """
-    ctx = ssl._create_unverified_context()
-    rut_normalizado = normalizar_rut(rut_proveedor)
-    url_base = "https://api.mercadopublico.cl/servicios/v1/publico/ordenesdecompra.json"
-
-    for dias in range(12):
-        fecha_busqueda = fecha_cierre + dt.timedelta(days=dias)
-        params = {
-            "fecha": fecha_busqueda.strftime("%d%m%Y"),
-            "CodigoOrganismo": CODIGO_ORGANISMO,
-            "ticket": TICKET,
-        }
-        url = url_base + "?" + urllib.parse.urlencode(params)
-        try:
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
-                data = json.load(resp)
-            for oc in data.get("Listado", []):
-                rut_oc = normalizar_rut(oc.get("RutProveedor", ""))
-                monto_oc = to_float(oc.get("Total", 0))
-                tipo_oc = str(oc.get("Tipo", "")).strip().upper()
-                if rut_oc == rut_normalizado and abs(monto_oc - monto_total) < 1000 and tipo_oc == "AG":
-                    return oc.get("Codigo")
-        except Exception:
-            continue
-        time.sleep(0.3)
-
-    return None
-
 
 def _write_csv_dicts(path: pathlib.Path, rows: List[Dict[str, Any]], delimiter: str = ";") -> None:
     """Escritura CSV consistente y rápida para lista de dicts."""
@@ -970,17 +937,11 @@ def enlazar_codigos_oc():
 
     Solo procesa filas con EstadoCodigo == "proveedor_seleccionado".
 
-    Método 1 (rápido, sin API):
-        Cruza CodigoCompraAgil con OC_DSSO/MAESTROS/OC_Maestro_Resumen.csv.
-        Requiere haber ejecutado Opción 9 en OC_SSO_SERVER.py primero.
-
-    Método 2 (API fallback):
-        Para las que quedan sin código, busca en la API v1 de OC por fecha,
-        RUT del proveedor ganador (de Maestro_Proveedores.csv) y monto total.
+    Cruza CodigoCompraAgil con OC_DSSO/MAESTROS/OC_Maestro_Resumen.csv.
+    Requiere haber ejecutado Opción 9 en OC_SSO_SERVER.py primero.
     """
-    ruta_ca_res  = CARPETA_MAESTROS / "Maestro_Resumen.csv"
-    ruta_ca_prov = CARPETA_MAESTROS / "Maestro_Proveedores.csv"
-    ruta_oc_res  = RUTA_API / "OC_DSSO" / "MAESTROS" / "OC_Maestro_Resumen.csv"
+    ruta_ca_res = CARPETA_MAESTROS / "Maestro_Resumen.csv"
+    ruta_oc_res = RUTA_API / "OC_DSSO" / "MAESTROS" / "OC_Maestro_Resumen.csv"
 
     if not ruta_ca_res.exists():
         print("   ❌ No existe Maestro_Resumen.csv. Ejecute Unificar (5) o Refresh (6) primero.")
@@ -1031,69 +992,6 @@ def enlazar_codigos_oc():
     else:
         print("   ⚠️  No se encontró OC_Maestro_Resumen.csv. Saltando Método 1.")
         print(f"       Ruta esperada: {ruta_oc_res}")
-
-    # ─── MÉTODO 2: API fallback ───────────────────────────────────────────────
-    # CAs con proveedor_seleccionado, OC_ID disponible, aún sin OC_Codigo
-    def _valor_vacio(val) -> bool:
-        return not _ya_tiene_codigo(val)
-
-    sin_codigo_idx = [
-        idx for idx in df_ca[mask_ps].index
-        if _valor_vacio(df_ca.at[idx, "OC_Codigo"])
-        and _ya_tiene_codigo(df_ca.at[idx, "OC_ID"])
-    ]
-
-    encontrados_m2 = 0
-    if sin_codigo_idx:
-        print(f"\n   🔄 Método 2 (API): {len(sin_codigo_idx)} registros sin código. Buscando en API de OC...")
-
-        # Cargar tabla de proveedores para obtener ganador + monto
-        df_prov = None
-        if ruta_ca_prov.exists():
-            df_prov = pd.read_csv(ruta_ca_prov, sep=";", encoding="utf-8-sig", dtype=str)
-        else:
-            print("   ⚠️  Maestro_Proveedores.csv no encontrado. Método 2 omitido.")
-            sin_codigo_idx = []
-
-        for idx in sin_codigo_idx:
-            ca_code = str(df_ca.at[idx, "CodigoCompraAgil"]).strip()
-            fecha_cierre_str = str(df_ca.at[idx, "FechaCierre"]).strip()
-
-            try:
-                fecha_cierre = pd.to_datetime(fecha_cierre_str).date()
-            except Exception:
-                print(f"      ⊗ {ca_code}: Fecha inválida ({fecha_cierre_str!r})")
-                continue
-
-            # Proveedor ganador
-            rut_prov, monto_total = None, 0.0
-            if df_prov is not None:
-                ganad = df_prov[
-                    (df_prov["CodigoCompraAgil"] == ca_code)
-                    & (df_prov["ProveedorSeleccionado"].str.strip().str.lower().isin(["true", "1"]))
-                ]
-                if not ganad.empty:
-                    rut_prov   = str(ganad.iloc[0].get("RutProveedor", "")).strip()
-                    monto_total = to_float(ganad.iloc[0].get("MontoTotal", 0))
-
-            if not rut_prov:
-                print(f"      ⊗ {ca_code}: Sin proveedor ganador registrado")
-                continue
-
-            print(f"      🔍 {ca_code} | RUT: {rut_prov} | ${monto_total:,.0f}...", end=" ", flush=True)
-            codigo_oc = _buscar_codigo_oc_api(rut_prov, monto_total, fecha_cierre)
-
-            if codigo_oc:
-                df_ca.at[idx, "OC_Codigo"] = codigo_oc
-                encontrados_m2 += 1
-                print(f"✅ {codigo_oc}")
-            else:
-                print("⊗ No encontrado")
-
-        if sin_codigo_idx:
-            print(f"\n   ✅ Método 2: {encontrados_m2} códigos adicionales encontrados")
-    else:
-        print("\n   ℹ️  No quedan registros pendientes para Método 2.")
 
     # Guardar
     df_ca.to_csv(ruta_ca_res, sep=";", index=False, encoding="utf-8-sig")
