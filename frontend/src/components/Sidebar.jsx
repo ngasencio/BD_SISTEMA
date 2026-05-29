@@ -9,12 +9,12 @@ export default function Sidebar() {
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
-        abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac'),
+        abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac') || path.startsWith('/compra-agil'),
         finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas'),
         admin: false,
     });
     const [openMods, setOpenMods] = useState({
-        mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra'),
+        mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra') || path.startsWith('/compra-agil'),
         pac: path.startsWith('/pac'),
         inventario: false,
         garantias: path.startsWith('/abastecimiento/boletas'),
@@ -76,6 +76,13 @@ export default function Sidebar() {
                                 >
                                     <span>🛍️</span>
                                     <span className="nav-item-text">Órdenes de Compra</span>
+                                </div>
+                                <div
+                                    className={`nav-item ${isActive('/compra-agil') ? 'active' : ''}`}
+                                    onClick={() => goTo('/compra-agil', 'abast', 'mp')}
+                                >
+                                    <span>⚡</span>
+                                    <span className="nav-item-text">Compra Ágil</span>
                                 </div>
 
                             </div>

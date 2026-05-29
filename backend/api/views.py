@@ -369,12 +369,23 @@ class PlanerPACViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class CompraAgilResumenViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = CompraAgilResumen.objects.all()
     serializer_class = CompraAgilResumenSerializer
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['estadoglosa', 'unidadcompra']
     search_fields = ['codigocompraagil', 'nombre']
+    ordering_fields = ['codigocompraagil', 'nombre', 'estadoglosa', 'unidadcompra', 'fechapublicacion', 'presupuestoestimado']
+    ordering = ['-fechapublicacion']
+
+    def get_queryset(self):
+        qs = CompraAgilResumen.objects.all()
+        fecha_desde = self.request.query_params.get('fecha_desde')
+        fecha_hasta = self.request.query_params.get('fecha_hasta')
+        if fecha_desde:
+            qs = qs.filter(fechapublicacion__gte=fecha_desde)
+        if fecha_hasta:
+            qs = qs.filter(fechapublicacion__lte=fecha_hasta)
+        return qs
 
 
 class CompraAgilProductoViewSet(viewsets.ReadOnlyModelViewSet):
@@ -391,6 +402,25 @@ class CompraAgilProveedorViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigocompraagil', 'proveedorseleccionado']
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def compraagil_ahorro_stats_view(request):
+    """KPIs y desglose de ahorro para el módulo Compra Ágil. Cache 5min por rango de fechas."""
+    from .services import calcular_compraagil_ahorro_stats
+
+    fecha_desde = request.GET.get('fecha_desde', '')
+    fecha_hasta = request.GET.get('fecha_hasta', '')
+    cache_key = f'compraagil_ahorro_{fecha_desde}_{fecha_hasta}'
+    data = cache.get(cache_key)
+    if not data:
+        data = calcular_compraagil_ahorro_stats(
+            fecha_desde=fecha_desde or None,
+            fecha_hasta=fecha_hasta or None,
+        )
+        cache.set(cache_key, data, timeout=300)
+    return Response(data)
 
 
 @api_view(['GET'])

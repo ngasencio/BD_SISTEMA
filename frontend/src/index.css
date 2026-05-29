@@ -4995,3 +4995,121 @@ select.boleta-input {
   .pac-ind-grid { grid-template-columns: 1fr; }
   .pac-tab-bar { flex-direction: column; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MÓDULO COMPRA ÁGIL
+   ═══════════════════════════════════════════════════════════ */
+
+/* Filtro global */
+.filtro-global-bar { margin-bottom: 12px; padding: 12px 16px; }
+.filtro-global-inner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.filtro-label { font-size: 13px; font-weight: 600; color: var(--gob-azul); }
+.filtro-group { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6b7280; }
+.filtro-group label { font-size: 12px; color: #6b7280; white-space: nowrap; }
+.filtro-input { padding: 5px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; color: #1f2937; background: #fff; }
+.btn-limpiar { padding: 5px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; background: #fff; cursor: pointer; color: #6b7280; transition: all .15s; }
+.btn-limpiar:hover { background: #f3f4f6; color: #111827; }
+.filtro-activo-badge { font-size: 11px; padding: 3px 10px; background: #dbeafe; color: #1d4ed8; border-radius: 20px; font-weight: 500; }
+
+/* Botón PDF */
+.btn-pdf {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 8px;
+  background: var(--gob-azul); color: #fff;
+  border: none; cursor: pointer; font-size: 13px; font-weight: 600;
+  transition: background .15s; white-space: nowrap;
+}
+.btn-pdf:hover { background: var(--gob-azul-dark); }
+.btn-pdf:disabled { background: #9ca3af; cursor: not-allowed; }
+
+/* Botón Excel */
+.btn-excel {
+  padding: 6px 14px; border-radius: 6px;
+  background: #16a34a; color: #fff;
+  border: none; cursor: pointer; font-size: 12px; font-weight: 600;
+  transition: background .15s;
+}
+.btn-excel:hover { background: #15803d; }
+
+/* Charts */
+.charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.chart-card { flex: 1; }
+.chart-container-sm { height: 220px; position: relative; }
+.chart-container-md { height: 280px; position: relative; }
+
+/* Tabla */
+.table-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.toolbar-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.search-input { padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; min-width: 240px; color: #1f2937; }
+.filtro-select { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; color: #1f2937; background: #fff; }
+.result-count { font-size: 12px; color: #6b7280; white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+.sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.sortable-th:hover { background: #f3f4f6; }
+.data-table.sortable th { cursor: default; }
+.data-table.sortable .sortable-th { cursor: pointer; }
+
+/* Filas expandibles */
+.main-row { cursor: pointer; }
+.main-row:hover { background: #f0f7ff !important; }
+.main-row.expanded { background: #eff6ff !important; }
+.expand-btn { color: #6b7280; font-size: 11px; width: 24px; text-align: center; }
+.expanded-section-row { background: #f8fafc !important; }
+.expanded-section { padding: 12px 24px; border-left: 3px solid #3b82f6; margin: 4px 0; }
+.expanded-section-title { font-size: 12px; font-weight: 700; color: #1d4ed8; margin-bottom: 8px; }
+.expanded-empty { font-size: 12px; color: #9ca3af; font-style: italic; }
+.data-table-sm { font-size: 12px; }
+.data-table-sm td, .data-table-sm th { padding: 4px 8px; }
+.row-ganador { background: #f0fdf4 !important; }
+.badge-ganador { font-size: 11px; background: #dcfce7; color: #16a34a; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+.loading-spinner-sm { font-size: 12px; color: #6b7280; padding: 8px; text-align: center; }
+
+/* Paginación */
+.pagination-bar { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 0 4px; }
+.page-btn { padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 5px; background: #fff; cursor: pointer; font-size: 13px; color: #374151; transition: all .15s; }
+.page-btn:hover:not(:disabled) { background: #f3f4f6; }
+.page-btn:disabled { color: #d1d5db; cursor: default; }
+.page-info { font-size: 12px; color: #6b7280; padding: 0 8px; }
+
+/* Badges de estado */
+.estado-badge { font-size: 11px; padding: 2px 10px; border-radius: 20px; color: #fff; font-weight: 600; white-space: nowrap; }
+.codigo-badge { font-size: 11px; font-family: 'Courier New', monospace; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; color: #374151; }
+.oc-link { font-size: 11px; color: #2563eb; font-family: monospace; }
+.estado-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+/* Colores de texto */
+.text-success { color: #16a34a; font-weight: 600; }
+.text-danger { color: #dc2626; font-weight: 600; }
+
+/* Card subtitle */
+.card-subtitle { font-size: 12px; color: #9ca3af; margin: -8px 0 12px; }
+
+/* Panel Res.188 */
+.res188-panel { border-left: 4px solid #1d4ed8; }
+.res188-body { display: flex; flex-direction: column; gap: 12px; }
+.res188-body p { font-size: 13px; color: #374151; line-height: 1.6; margin: 0; }
+.res188-formula-block { background: #f0f7ff; border-radius: 8px; padding: 12px 16px; }
+.formula-title { font-weight: 700; color: #1d4ed8; font-size: 12px; margin-bottom: 6px !important; }
+.formula-box { font-size: 12px; color: #1f2937; line-height: 1.8; font-family: 'Courier New', monospace; background: #fff; padding: 10px 14px; border-radius: 6px; border: 1px solid #bfdbfe; }
+.formula-box p { margin: 0; }
+.formula-indent { padding-left: 20px; }
+.res188-aclaraciones { display: flex; flex-direction: column; gap: 6px; }
+.aclaracion-item { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: #374151; }
+.aclaracion-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.res188-resultado { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0; }
+.resultado-label { font-size: 12px; color: #166534; font-weight: 600; }
+.resultado-valor { font-size: 28px; font-weight: 800; color: #16a34a; line-height: 1; }
+.resultado-adj { font-size: 12px; color: #4b5563; }
+
+/* Tab proveedores */
+.tasa-badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+.tasa-alta { background: #dcfce7; color: #16a34a; }
+.tasa-media { background: #fef9c3; color: #b45309; }
+.tasa-baja { background: #f3f4f6; color: #6b7280; }
+.mini-bar-wrap { height: 8px; background: #f3f4f6; border-radius: 4px; min-width: 80px; overflow: hidden; }
+.mini-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #1d4ed8); border-radius: 4px; transition: width .3s; }
+
+@media (max-width: 900px) {
+  .charts-row { grid-template-columns: 1fr; }
+  .filtro-global-inner { flex-direction: column; align-items: flex-start; }
+}

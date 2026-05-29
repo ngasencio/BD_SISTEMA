@@ -730,3 +730,251 @@ def calcular_oc_productos(anio=2026):
         ],
         'por_categoria_modalidad': por_categoria_modalidad,
     }
+
+
+# =============================================================================
+# Módulo Compra Ágil — Estadísticas de Ahorro
+# =============================================================================
+
+def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
+    """
+    Calcula KPIs de ahorro para el módulo Compra Ágil.
+    - Ahorro simple: PresupuestoEstimado - TotalBruto(OC)
+    - % Ahorro Res.188/2026: metodología por ítem (promedio ofertas vs adjudicado)
+    Los campos monetarios están almacenados como TextField → conversión explícita.
+    """
+    from .models import (
+        CompraAgilResumen, CompraAgilProveedor,
+        CompraAgilProductoCotizado, OrdenCompra,
+    )
+
+    def _f(val):
+        try:
+            return float(val or 0)
+        except (ValueError, TypeError):
+            return 0.0
+
+    # ── 1. Base queryset ──────────────────────────────────────────────────────
+    qs = CompraAgilResumen.objects.all()
+    if fecha_desde:
+        qs = qs.filter(fechapublicacion__gte=fecha_desde)
+    if fecha_hasta:
+        qs = qs.filter(fechapublicacion__lte=fecha_hasta)
+
+    all_ca = list(qs.values(
+        'codigocompraagil', 'nombre', 'estadoglosa', 'unidadcompra',
+        'presupuestoestimado', 'oc_codigo', 'fechapublicacion', 'fechacierre',
+        'totalofertasrecibidas', 'totalproveedorescotizando',
+    ))
+
+    # ── 2. OCs asociadas ─────────────────────────────────────────────────────
+    oc_codigos = [ca['oc_codigo'] for ca in all_ca if ca.get('oc_codigo')]
+    oc_map = {}
+    if oc_codigos:
+        for oc in OrdenCompra.objects.filter(codigo_oc__in=oc_codigos).values(
+            'codigo_oc', 'TotalBruto', 'TotalNeto', 'EstadoOC', 'FechaEnvio',
+        ):
+            oc_map[oc['codigo_oc']] = oc
+
+    # ── 3. Proveedores por CA ─────────────────────────────────────────────────
+    prov_by_ca = defaultdict(list)
+    for p in CompraAgilProveedor.objects.values(
+        'codigocompraagil', 'rutproveedor', 'razonsocial',
+        'proveedorseleccionado', 'valorneto', 'montototal', 'totalproductoscotizados',
+    ):
+        if p['codigocompraagil']:
+            prov_by_ca[p['codigocompraagil']].append(p)
+
+    # ── 4. Cotizaciones por ítem ──────────────────────────────────────────────
+    cot_by_ca = defaultdict(list)
+    for c in CompraAgilProductoCotizado.objects.values(
+        'codigocompraagil', 'rutproveedor', 'codigoproducto',
+        'nombreproducto', 'cantidad', 'preciounitario',
+    ):
+        if c['codigocompraagil']:
+            cot_by_ca[c['codigocompraagil']].append(c)
+
+    # ── 5. Acumuladores ──────────────────────────────────────────────────────
+    total_presupuesto = 0.0
+    total_monto_oc = 0.0
+    ahorro_simple_total = 0.0
+    ahorro_res188_total = 0.0
+    adjudicado_res188_total = 0.0
+
+    por_unidad = defaultdict(lambda: {
+        'presupuesto': 0.0, 'monto_oc': 0.0, 'ahorro': 0.0,
+        'adjudicadas': 0, 'total': 0,
+    })
+    por_estado = defaultdict(lambda: {'cantidad': 0, 'presupuesto': 0.0})
+    por_mes = defaultdict(lambda: {'cantidad': 0, 'presupuesto': 0.0, 'monto_oc': 0.0})
+    top_ahorro_items = []
+    mejora_items = []
+
+    for ca in all_ca:
+        codigo = ca['codigocompraagil'] or ''
+        estado = ca.get('estadoglosa') or ''
+        unidad = ca.get('unidadcompra') or 'Sin unidad'
+        presupuesto = _f(ca.get('presupuestoestimado'))
+        fecha = (ca.get('fechapublicacion') or '')[:7]   # "YYYY-MM"
+
+        total_presupuesto += presupuesto
+        por_estado[estado]['cantidad'] += 1
+        por_estado[estado]['presupuesto'] += presupuesto
+        por_unidad[unidad]['presupuesto'] += presupuesto
+        por_unidad[unidad]['total'] += 1
+        por_mes[fecha]['cantidad'] += 1
+        por_mes[fecha]['presupuesto'] += presupuesto
+
+        # Ahorro simple (solo si tiene OC)
+        oc = oc_map.get(ca.get('oc_codigo') or '')
+        monto_oc = _f(oc.get('TotalBruto')) if oc else 0.0
+        if monto_oc > 0:
+            total_monto_oc += monto_oc
+            por_unidad[unidad]['monto_oc'] += monto_oc
+            por_mes[fecha]['monto_oc'] += monto_oc
+            if presupuesto > 0:
+                ahorro = presupuesto - monto_oc
+                ahorro_simple_total += ahorro
+                por_unidad[unidad]['ahorro'] += ahorro
+        if estado == 'Proveedor seleccionado':
+            por_unidad[unidad]['adjudicadas'] += 1
+
+        # Ahorro Res.188 por ítem
+        proveedores_ca = prov_by_ca.get(codigo, [])
+        ganador = next(
+            (p for p in proveedores_ca
+             if str(p.get('proveedorseleccionado', '')) in ('1', 'Si', 'si', 'True', 'true')),
+            None,
+        )
+        cotizaciones_ca = cot_by_ca.get(codigo, [])
+        if ganador and cotizaciones_ca:
+            rut_ganador = ganador.get('rutproveedor', '')
+            by_product = defaultdict(list)
+            for c in cotizaciones_ca:
+                if c.get('codigoproducto'):
+                    by_product[c['codigoproducto']].append(c)
+
+            for prod_code, cots in by_product.items():
+                precios, precio_ganador, cantidad_adj, nombre_prod = [], None, 0.0, ''
+                for cot in cots:
+                    precio = _f(cot.get('preciounitario'))
+                    if precio > 0:
+                        precios.append(precio)
+                    if cot.get('rutproveedor') == rut_ganador:
+                        precio_ganador = precio
+                        cantidad_adj = _f(cot.get('cantidad'))
+                        nombre_prod = cot.get('nombreproducto', '')
+
+                if len(precios) >= 2 and precio_ganador is not None:
+                    avg = sum(precios) / len(precios)
+                    ahorro_item = (avg - precio_ganador) * cantidad_adj
+                    adj_item = precio_ganador * cantidad_adj
+                    ahorro_res188_total += ahorro_item
+                    adjudicado_res188_total += adj_item
+                    entry = {
+                        'codigo_ca': codigo,
+                        'nombre_ca': ca.get('nombre', ''),
+                        'codigo_producto': prod_code,
+                        'nombre_producto': nombre_prod,
+                        'precio_promedio': round(avg, 0),
+                        'precio_adjudicado': round(precio_ganador, 0),
+                        'cantidad': cantidad_adj,
+                        'ahorro': round(ahorro_item, 0),
+                    }
+                    if ahorro_item > 0:
+                        top_ahorro_items.append(entry)
+                    elif ahorro_item < 0:
+                        mejora_items.append({**entry, 'diferencia': round(abs(ahorro_item), 0)})
+
+    pct_res188 = (ahorro_res188_total / adjudicado_res188_total * 100) if adjudicado_res188_total > 0 else 0.0
+
+    # ── 6. Top proveedores ────────────────────────────────────────────────────
+    prov_stats = defaultdict(lambda: {'razonsocial': '', 'ganadas': 0, 'participadas': 0, 'monto': 0.0})
+    for p in CompraAgilProveedor.objects.values(
+        'rutproveedor', 'razonsocial', 'proveedorseleccionado', 'montototal',
+    ):
+        rut = p['rutproveedor'] or 'SIN_RUT'
+        prov_stats[rut]['razonsocial'] = p.get('razonsocial', '')
+        prov_stats[rut]['participadas'] += 1
+        if str(p.get('proveedorseleccionado', '')) in ('1', 'Si', 'si', 'True', 'true'):
+            prov_stats[rut]['ganadas'] += 1
+            prov_stats[rut]['monto'] += _f(p.get('montototal'))
+
+    top_proveedores = sorted(
+        [
+            {
+                'rut': k, 'razonsocial': v['razonsocial'],
+                'ganadas': v['ganadas'], 'participadas': v['participadas'],
+                'monto_total': round(v['monto'], 0),
+                'tasa': round(v['ganadas'] / v['participadas'] * 100, 1) if v['participadas'] > 0 else 0,
+            }
+            for k, v in prov_stats.items() if v['ganadas'] > 0
+        ],
+        key=lambda x: x['monto_total'], reverse=True,
+    )[:20]
+
+    # ── 7. Listas de salida ───────────────────────────────────────────────────
+    top_ahorro_items.sort(key=lambda x: x['ahorro'], reverse=True)
+    mejora_items.sort(key=lambda x: x['diferencia'], reverse=True)
+
+    por_unidad_list = sorted(
+        [
+            {
+                'unidad': k,
+                'presupuesto': round(v['presupuesto'], 0),
+                'monto_oc': round(v['monto_oc'], 0),
+                'ahorro': round(v['ahorro'], 0),
+                'adjudicadas': v['adjudicadas'],
+                'total': v['total'],
+                'pct_ahorro': round(v['ahorro'] / v['presupuesto'] * 100, 1) if v['presupuesto'] > 0 else 0,
+            }
+            for k, v in por_unidad.items()
+        ],
+        key=lambda x: x['ahorro'], reverse=True,
+    )
+
+    por_estado_list = [
+        {'estado': k, 'cantidad': v['cantidad'], 'presupuesto': round(v['presupuesto'], 0)}
+        for k, v in por_estado.items()
+    ]
+
+    por_mes_list = sorted(
+        [
+            {
+                'mes': k,
+                'cantidad': v['cantidad'],
+                'presupuesto': round(v['presupuesto'], 0),
+                'monto_oc': round(v['monto_oc'], 0),
+            }
+            for k, v in por_mes.items() if k
+        ],
+        key=lambda x: x['mes'],
+    )
+
+    estados = {e['estado']: e['cantidad'] for e in por_estado_list}
+
+    return {
+        'kpis': {
+            'total_ca': len(all_ca),
+            'adjudicadas': estados.get('Proveedor seleccionado', 0),
+            'desiertas': estados.get('Desierta', 0),
+            'canceladas': estados.get('Cancelada', 0),
+            'publicadas': estados.get('Publicada', 0),
+            'cerradas': estados.get('Cerrada', 0),
+            'total_presupuesto': round(total_presupuesto, 0),
+            'total_monto_oc': round(total_monto_oc, 0),
+            'ahorro_simple': round(ahorro_simple_total, 0),
+            'pct_ahorro_simple': round(
+                ahorro_simple_total / total_presupuesto * 100, 1
+            ) if total_presupuesto > 0 else 0,
+            'ahorro_res188': round(ahorro_res188_total, 0),
+            'adjudicado_res188': round(adjudicado_res188_total, 0),
+            'pct_ahorro_res188': round(pct_res188, 2),
+        },
+        'por_estado': por_estado_list,
+        'por_unidad': por_unidad_list,
+        'por_mes': por_mes_list,
+        'top_proveedores': top_proveedores,
+        'top_ahorro_items': top_ahorro_items[:10],
+        'mejora_items': mejora_items[:10],
+    }

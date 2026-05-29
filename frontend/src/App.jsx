@@ -33,6 +33,7 @@ import { abastecimientoRoutes } from './features/abastecimiento/routes';
 import { finanzasRoutes } from './features/finanzas/routes';
 
 import { pacRoutes } from './features/pac/routes';
+import { compraAgilRoutes } from './features/compra-agil/routes';
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,8 @@ function AppRoutes() {
             <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
             {/* Módulo PAC (todos los autenticados) */}
             {pacRoutes}
+            {/* Módulo Compra Ágil (todos los autenticados) */}
+            {compraAgilRoutes}
 
             {/* Módulo Abastecimiento (admin + abastecimiento + viewer) */}
             <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'viewer']} />}>

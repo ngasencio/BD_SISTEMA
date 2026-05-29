@@ -10,7 +10,7 @@ from .views import (
     ordenes_compra_raw_all, ordenes_compra_proyectos_licitacion,
     PlanerPACViewSet, CompraAgilResumenViewSet, CompraAgilProductoViewSet,
     CompraAgilProveedorViewSet, pac_indicadores_view, pac_oc_stats_view,
-    pac_oc_productos_view,
+    pac_oc_productos_view, compraagil_ahorro_stats_view,
     RevisionOCCorregibleViewSet,
 )
 
@@ -51,6 +51,7 @@ urlpatterns = [
     path('pac/indicadores-res188/', pac_indicadores_view, name='pac_indicadores'),
     path('pac/oc-stats/', pac_oc_stats_view, name='pac_oc_stats'),
     path('pac/oc-productos/', pac_oc_productos_view, name='pac_oc_productos'),
+    path('compraagil/ahorro-stats/', compraagil_ahorro_stats_view, name='compraagil_ahorro_stats'),
 
     # Router ViewSets
     path('', include(router.urls)),
