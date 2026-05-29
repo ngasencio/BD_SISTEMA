@@ -369,6 +369,7 @@ class PlanerPACViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class CompraAgilResumenViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CompraAgilResumen.objects.all()
     serializer_class = CompraAgilResumenSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
