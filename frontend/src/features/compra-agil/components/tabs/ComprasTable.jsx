@@ -14,6 +14,47 @@ const ESTADO_COLORS = {
 
 const ESTADO_OPCIONES = ['Todos', 'Proveedor seleccionado', 'Publicada', 'Cerrada', 'Desierta', 'Cancelada'];
 
+function EstadoBadge({ estado }) {
+    const color = ESTADO_COLORS[estado] || '#9ca3af';
+    return (
+        <span style={{
+            display: 'inline-block', padding: '2px 10px', borderRadius: 20,
+            fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+            background: color + '20', color, border: `1px solid ${color}50`,
+        }}>
+            {estado}
+        </span>
+    );
+}
+
+function Pagination({ page, setPage, pageSize, setPageSize, total }) {
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+    const end = Math.min(page * pageSize, total);
+    const btnBase = { padding: '3px 9px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, cursor: 'pointer', background: '#fff', color: '#475569', lineHeight: 1.4 };
+    const btnDis = { ...btnBase, cursor: 'not-allowed', color: '#cbd5e1' };
+    const btnAct = { ...btnBase, background: '#3b82f6', color: '#fff', fontWeight: 700, border: '1px solid #3b82f6' };
+    const from = Math.max(1, Math.min(page - 2, totalPages - 4));
+    const to = Math.min(totalPages, from + 4);
+    const pages = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: '#64748b', marginRight: 4 }}>Mostrar:</span>
+            {[20, 50, 100].map(s => (
+                <button key={s} onClick={() => { setPageSize(s); setPage(1); }} style={pageSize === s ? btnAct : btnBase}>{s}</button>
+            ))}
+            <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>{start}–{end} de {total} registros</span>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 3 }}>
+                <button onClick={() => setPage(1)} disabled={page === 1} style={page === 1 ? btnDis : btnBase}>«</button>
+                <button onClick={() => setPage(p => p - 1)} disabled={page === 1} style={page === 1 ? btnDis : btnBase}>‹</button>
+                {pages.map(p => <button key={p} onClick={() => setPage(p)} style={p === page ? btnAct : btnBase}>{p}</button>)}
+                <button onClick={() => setPage(p => p + 1)} disabled={page === totalPages} style={page === totalPages ? btnDis : btnBase}>›</button>
+                <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={page === totalPages ? btnDis : btnBase}>»</button>
+            </div>
+        </div>
+    );
+}
+
 function ExpandedRow({ codigo }) {
     const [productos, setProductos] = useState(null);
     const [proveedores, setProveedores] = useState(null);
@@ -40,40 +81,44 @@ function ExpandedRow({ codigo }) {
         cargar();
     }
 
-    if (loading) return <tr><td colSpan={8}><div className="loading-spinner-sm">Cargando detalle...</div></td></tr>;
+    if (loading) return <tr><td colSpan={8}><div style={{ padding: '10px 24px', fontSize: 12, color: '#64748b' }}>Cargando detalle...</div></td></tr>;
 
     return (
         <>
             {/* Proveedores */}
-            <tr className="expanded-section-row">
+            <tr style={{ background: '#f8fafc' }}>
                 <td colSpan={8}>
-                    <div className="expanded-section">
-                        <p className="expanded-section-title">🏢 Proveedores que cotizaron</p>
+                    <div style={{ padding: '10px 24px', borderLeft: '3px solid #3b82f6', margin: '4px 0' }}>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 8 }}>🏢 Proveedores que cotizaron</p>
                         {!proveedores?.length ? (
-                            <p className="expanded-empty">Sin proveedores registrados.</p>
+                            <p style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>Sin proveedores registrados.</p>
                         ) : (
-                            <table className="data-table data-table-sm">
+                            <table className="table-gob" style={{ fontSize: 12 }}>
                                 <thead>
                                     <tr>
                                         <th>Razón Social</th>
                                         <th>RUT</th>
-                                        <th>Valor Neto</th>
-                                        <th>Monto Total</th>
+                                        <th style={{ textAlign: 'right' }}>Valor Neto</th>
+                                        <th style={{ textAlign: 'right' }}>Monto Total</th>
                                         <th>EMT</th>
-                                        <th>Ganador</th>
+                                        <th>Estado</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {proveedores.map((p, i) => {
                                         const esGanador = ['1', 'Si', 'si', 'True', 'true'].includes(String(p.proveedorseleccionado));
                                         return (
-                                            <tr key={i} className={esGanador ? 'row-ganador' : ''}>
+                                            <tr key={i} style={{ background: esGanador ? '#f0fdf4' : undefined }}>
                                                 <td>{p.razonsocial}</td>
-                                                <td>{p.rutproveedor}</td>
-                                                <td>{p.valorneto ? fmt(p.valorneto) : '—'}</td>
-                                                <td>{p.montototal ? fmt(p.montototal) : '—'}</td>
+                                                <td style={{ fontFamily: 'monospace', fontSize: 11, color: '#64748b' }}>{p.rutproveedor}</td>
+                                                <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{p.valorneto ? fmt(p.valorneto) : '—'}</td>
+                                                <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 11 }}>{p.montototal ? fmt(p.montototal) : '—'}</td>
                                                 <td>{p.esemt || '—'}</td>
-                                                <td>{esGanador ? <span className="badge-ganador">✅ Seleccionado</span> : '—'}</td>
+                                                <td>
+                                                    {esGanador
+                                                        ? <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, background: '#dcfce7', color: '#16a34a', border: '1px solid #bbf7d0' }}>✅ Seleccionado</span>
+                                                        : <span style={{ color: '#94a3b8' }}>—</span>}
+                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -84,28 +129,28 @@ function ExpandedRow({ codigo }) {
                 </td>
             </tr>
             {/* Productos */}
-            <tr className="expanded-section-row">
+            <tr style={{ background: '#f8fafc' }}>
                 <td colSpan={8}>
-                    <div className="expanded-section">
-                        <p className="expanded-section-title">📦 Productos solicitados</p>
+                    <div style={{ padding: '10px 24px', borderLeft: '3px solid #8b5cf6', margin: '4px 0' }}>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: '#6d28d9', marginBottom: 8 }}>📦 Productos solicitados</p>
                         {!productos?.length ? (
-                            <p className="expanded-empty">Sin productos registrados.</p>
+                            <p style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>Sin productos registrados.</p>
                         ) : (
-                            <table className="data-table data-table-sm">
+                            <table className="table-gob" style={{ fontSize: 12 }}>
                                 <thead>
                                     <tr>
                                         <th>Código</th>
                                         <th>Nombre</th>
-                                        <th>Cantidad</th>
+                                        <th style={{ textAlign: 'center' }}>Cantidad</th>
                                         <th>Unidad de Medida</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {productos.map((p, i) => (
                                         <tr key={i}>
-                                            <td>{p.codigoproducto}</td>
+                                            <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{p.codigoproducto}</td>
                                             <td>{p.nombre}</td>
-                                            <td>{p.cantidad}</td>
+                                            <td style={{ textAlign: 'center' }}>{p.cantidad}</td>
                                             <td>{p.unidadmedida}</td>
                                         </tr>
                                     ))}
@@ -127,7 +172,7 @@ export default function ComprasTable({ compras, loading }) {
     const [sortDir, setSortDir] = useState('desc');
     const [expanded, setExpanded] = useState({});
     const [pagina, setPagina] = useState(1);
-    const POR_PAGINA = 25;
+    const [porPagina, setPorPagina] = useState(25);
 
     const unidades = useMemo(() => {
         const set = new Set((compras || []).map(c => c.unidadcompra).filter(Boolean));
@@ -159,8 +204,7 @@ export default function ComprasTable({ compras, loading }) {
         });
     }, [filtrados, sortKey, sortDir]);
 
-    const totalPaginas = Math.max(1, Math.ceil(ordenados.length / POR_PAGINA));
-    const paginados = ordenados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+    const paginados = ordenados.slice((pagina - 1) * porPagina, pagina * porPagina);
 
     const toggleSort = key => {
         if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -170,9 +214,7 @@ export default function ComprasTable({ compras, loading }) {
 
     const arrow = key => sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ' ↕';
 
-    const toggleExpand = id => {
-        setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
-    };
+    const toggleExpand = id => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
     const exportarExcel = () => {
         const rows = ordenados.map(c => ({
@@ -196,97 +238,105 @@ export default function ComprasTable({ compras, loading }) {
     if (loading) return <div className="loading-spinner">Cargando compras ágiles...</div>;
 
     return (
-        <div>
-            {/* Toolbar */}
-            <div className="card">
-                <div className="table-toolbar">
-                    <div className="toolbar-filters">
-                        <input
-                            className="search-input"
-                            placeholder="🔍 Buscar por código, nombre, unidad u OC..."
-                            value={busqueda}
-                            onChange={e => { setBusqueda(e.target.value); setPagina(1); }}
-                        />
-                        <select
-                            className="filtro-select"
-                            value={estadoFiltro}
-                            onChange={e => { setEstadoFiltro(e.target.value); setPagina(1); }}
-                        >
-                            {ESTADO_OPCIONES.map(e => <option key={e}>{e}</option>)}
-                        </select>
-                        <select
-                            className="filtro-select"
-                            value={unidadFiltro}
-                            onChange={e => { setUnidadFiltro(e.target.value); setPagina(1); }}
-                        >
-                            {unidades.map(u => <option key={u}>{u}</option>)}
-                        </select>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <span className="result-count">{filtrados.length} resultados</span>
-                        <button className="btn-excel" onClick={exportarExcel}>
-                            📥 Excel
-                        </button>
-                    </div>
-                </div>
-
-                <div className="table-scroll">
-                    <table className="data-table sortable">
-                        <thead>
-                            <tr>
-                                <th style={{ width: 32 }}></th>
-                                <th onClick={() => toggleSort('codigocompraagil')} className="sortable-th">Código{arrow('codigocompraagil')}</th>
-                                <th onClick={() => toggleSort('nombre')} className="sortable-th">Nombre{arrow('nombre')}</th>
-                                <th onClick={() => toggleSort('estadoglosa')} className="sortable-th">Estado{arrow('estadoglosa')}</th>
-                                <th onClick={() => toggleSort('unidadcompra')} className="sortable-th">Unidad{arrow('unidadcompra')}</th>
-                                <th onClick={() => toggleSort('presupuestoestimado')} className="sortable-th">Presupuesto{arrow('presupuestoestimado')}</th>
-                                <th onClick={() => toggleSort('oc_codigo')} className="sortable-th">OC{arrow('oc_codigo')}</th>
-                                <th onClick={() => toggleSort('fechapublicacion')} className="sortable-th">Publicación{arrow('fechapublicacion')}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {paginados.length === 0 && (
-                                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#9ca3af', padding: 24 }}>Sin resultados para los filtros aplicados.</td></tr>
-                            )}
-                            {paginados.map(c => (
-                                <React.Fragment key={c.codigocompraagil || c.id}>
-                                    <tr
-                                        className={`main-row${expanded[c.codigocompraagil] ? ' expanded' : ''}`}
-                                        onClick={() => toggleExpand(c.codigocompraagil)}
-                                    >
-                                        <td className="expand-btn">{expanded[c.codigocompraagil] ? '▼' : '▶'}</td>
-                                        <td><span className="codigo-badge">{c.codigocompraagil}</span></td>
-                                        <td title={c.nombre} style={{ maxWidth: 220 }}>
-                                            {c.nombre?.slice(0, 60)}{c.nombre?.length > 60 ? '…' : ''}
-                                        </td>
-                                        <td>
-                                            <span className="estado-badge" style={{ background: ESTADO_COLORS[c.estadoglosa] || '#9ca3af' }}>
-                                                {c.estadoglosa}
-                                            </span>
-                                        </td>
-                                        <td>{c.unidadcompra}</td>
-                                        <td>{c.presupuestoestimado ? fmt(c.presupuestoestimado) : '—'}</td>
-                                        <td>{c.oc_codigo ? <span className="oc-link">{c.oc_codigo}</span> : '—'}</td>
-                                        <td>{c.fechapublicacion ? c.fechapublicacion.slice(0, 10) : '—'}</td>
-                                    </tr>
-                                    {expanded[c.codigocompraagil] && (
-                                        <ExpandedRow codigo={c.codigocompraagil} />
-                                    )}
-                                </React.Fragment>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Paginación */}
-                <div className="pagination-bar">
-                    <button className="page-btn" onClick={() => setPagina(1)} disabled={pagina === 1}>««</button>
-                    <button className="page-btn" onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina === 1}>‹</button>
-                    <span className="page-info">Pág {pagina} de {totalPaginas} · {ordenados.length} total</span>
-                    <button className="page-btn" onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))} disabled={pagina === totalPaginas}>›</button>
-                    <button className="page-btn" onClick={() => setPagina(totalPaginas)} disabled={pagina === totalPaginas}>»»</button>
-                </div>
+        <div className="card">
+            {/* ── Encabezado de tarjeta ── */}
+            <div className="card-header card-header-accent">
+                <span>🛒</span>
+                <span className="card-title">Listado de Compras Ágiles</span>
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>{filtrados.length} resultados</span>
             </div>
+
+            {/* ── Barra de filtros ── */}
+            <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                    className="filter-input"
+                    placeholder="🔍 Buscar por código, nombre, unidad u OC..."
+                    value={busqueda}
+                    onChange={e => { setBusqueda(e.target.value); setPagina(1); }}
+                    style={{ minWidth: 260, flex: '1 1 260px' }}
+                />
+                <select
+                    className="filter-input"
+                    value={estadoFiltro}
+                    onChange={e => { setEstadoFiltro(e.target.value); setPagina(1); }}
+                >
+                    {ESTADO_OPCIONES.map(e => <option key={e}>{e}</option>)}
+                </select>
+                <select
+                    className="filter-input"
+                    value={unidadFiltro}
+                    onChange={e => { setUnidadFiltro(e.target.value); setPagina(1); }}
+                >
+                    {unidades.map(u => <option key={u}>{u}</option>)}
+                </select>
+                <button className="btn-excel" onClick={exportarExcel}>📥 Excel</button>
+            </div>
+
+            {/* ── Tabla ── */}
+            <div className="table-responsive">
+                <table className="table-gob">
+                    <thead>
+                        <tr>
+                            <th style={{ width: 32 }}></th>
+                            <th onClick={() => toggleSort('codigocompraagil')} style={{ cursor: 'pointer', userSelect: 'none' }}>Código{arrow('codigocompraagil')}</th>
+                            <th onClick={() => toggleSort('nombre')} style={{ cursor: 'pointer', userSelect: 'none' }}>Nombre{arrow('nombre')}</th>
+                            <th onClick={() => toggleSort('estadoglosa')} style={{ cursor: 'pointer', userSelect: 'none' }}>Estado{arrow('estadoglosa')}</th>
+                            <th onClick={() => toggleSort('unidadcompra')} style={{ cursor: 'pointer', userSelect: 'none' }}>Unidad{arrow('unidadcompra')}</th>
+                            <th onClick={() => toggleSort('presupuestoestimado')} style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'right' }}>Presupuesto{arrow('presupuestoestimado')}</th>
+                            <th onClick={() => toggleSort('oc_codigo')} style={{ cursor: 'pointer', userSelect: 'none' }}>OC{arrow('oc_codigo')}</th>
+                            <th onClick={() => toggleSort('fechapublicacion')} style={{ cursor: 'pointer', userSelect: 'none' }}>Publicación{arrow('fechapublicacion')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {paginados.length === 0 && (
+                            <tr><td colSpan={8} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>Sin resultados para los filtros aplicados.</td></tr>
+                        )}
+                        {paginados.map(c => (
+                            <React.Fragment key={c.codigocompraagil || c.id}>
+                                <tr
+                                    style={{ cursor: 'pointer', background: expanded[c.codigocompraagil] ? '#eff6ff' : undefined }}
+                                    onClick={() => toggleExpand(c.codigocompraagil)}
+                                >
+                                    <td style={{ color: '#6b7280', fontSize: 11, width: 24, textAlign: 'center' }}>
+                                        {expanded[c.codigocompraagil] ? '▼' : '▶'}
+                                    </td>
+                                    <td>
+                                        <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#f3f4f6', padding: '2px 6px', borderRadius: 4, color: '#374151' }}>
+                                            {c.codigocompraagil}
+                                        </span>
+                                    </td>
+                                    <td title={c.nombre} style={{ maxWidth: 220 }}>
+                                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {c.nombre}
+                                        </div>
+                                    </td>
+                                    <td><EstadoBadge estado={c.estadoglosa} /></td>
+                                    <td style={{ fontSize: 12, color: '#475569' }}>{c.unidadcompra}</td>
+                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{c.presupuestoestimado ? fmt(c.presupuestoestimado) : '—'}</td>
+                                    <td>
+                                        {c.oc_codigo
+                                            ? <span style={{ fontSize: 11, color: '#2563eb', fontFamily: 'monospace' }}>{c.oc_codigo}</span>
+                                            : <span style={{ color: '#94a3b8' }}>—</span>}
+                                    </td>
+                                    <td style={{ fontSize: 12, color: '#64748b' }}>{c.fechapublicacion ? c.fechapublicacion.slice(0, 10) : '—'}</td>
+                                </tr>
+                                {expanded[c.codigocompraagil] && (
+                                    <ExpandedRow codigo={c.codigocompraagil} />
+                                )}
+                            </React.Fragment>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* ── Paginación OC-style ── */}
+            <Pagination
+                page={pagina}
+                setPage={setPagina}
+                pageSize={porPagina}
+                setPageSize={setPorPagina}
+                total={ordenados.length}
+            />
         </div>
     );
 }
