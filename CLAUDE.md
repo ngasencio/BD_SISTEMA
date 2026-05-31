@@ -2,14 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Specialized agent files in `.claude/`** — read before starting any task:
-> - `agent-arquitectura.md` — module patterns, where each piece goes, what NOT to do
-> - `agent-datos.md` — full DB schema, relations, data sources, known data-quality bugs
-> - `agent-seguridad.md` — known vulnerabilities, fixes, per-commit checklist
-> - `agent-testing.md` — test strategy, pytest/Vitest patterns, priorities P1–P5
-> - `agent-devops.md` — Nginx+Gunicorn deploy, systemd, ETL cron, backup, rollback
-> - `django_mysql_expert.md` — Django/MySQL conventions (Clean Architecture, SOLID)
-> - `react_expert.md` — React conventions (SOLID, Feature-Sliced Design)
+> **Agentes especializados en `.claude/`** — leer antes de cada tarea:
+>
+> | Agente | Cuándo leerlo |
+> |---|---|
+> | `agent-arquitectura.md` | Antes de agregar módulo, decidir estructura, o tocar routing |
+> | `agent-datos.md` | Antes de consultar, modificar o crear modelos y relaciones DB |
+> | `agent-codigo.md` | Antes de escribir código backend o frontend nuevo |
+> | `agent-seguridad.md` | Antes de cada commit o deploy |
+> | `agent-testing.md` | Antes de escribir cualquier test |
+> | `agent-devops.md` | Para deploy, Nginx, ETL cron, backups, troubleshooting |
 
 ---
 
@@ -36,7 +38,7 @@ python LI_SSO_SERVER.py        # Licitaciones ETL
 python OC_SSO_SERVER.py        # Órdenes de Compra ETL
 ```
 
-No linting or test commands are configured yet (`backend/api/tests.py` is empty, no Vitest config).
+No linting configured. Tests aún no implementados — ver `agent-testing.md` para la estrategia y los comandos (pytest + Vitest).
 
 ---
 
