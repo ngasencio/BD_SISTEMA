@@ -1,10 +1,10 @@
 import logging
 
 from django.core.cache import cache
-from django.http import JsonResponse
+from django.db.models import Count, Sum
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters as drf_filters, serializers as drf_serializers, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework import filters as drf_filters, viewsets
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -20,10 +20,17 @@ from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
     CompradorSerializer, DetalleLicitacionSerializer,
     DetalleOrdenCompraSerializer, DevengoSerializer,
-    FacturaSerializer, LicitacionSerializer, OrdenCompraSerializer, ProveedorSerializer,
+    LicitacionSerializer, OrdenCompraSerializer, ProveedorSerializer,
     PlanerPACSerializer, CompraAgilResumenSerializer,
     CompraAgilProductoSerializer, CompraAgilProveedorSerializer,
     RevisionOCCorregibleSerializer,
+)
+from .services import (
+    obtener_kpis_devengo,
+    calcular_indicadores_res188,
+    calcular_oc_stats,
+    calcular_oc_productos,
+    calcular_compraagil_ahorro_stats,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,26 +57,6 @@ class DetalleLicitacionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 # =============================================================================
-# Órdenes de Compra
-# =============================================================================
-
-class OrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = OrdenCompra.objects.prefetch_related('detalles').all()
-    serializer_class = OrdenCompraSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['EstadoOC', 'C_Unidad', 'TipoOC']
-
-
-class DetalleOrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = DetalleOrdenCompra.objects.all()
-    serializer_class = DetalleOrdenCompraSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['orden_compra', 'CodigoProducto', 'Categoria']
-
-
-# =============================================================================
 # Dashboard stats (licitaciones)
 # =============================================================================
 
@@ -81,7 +68,6 @@ def dashboard_stats(request):
     if cached_data:
         return Response(cached_data)
 
-    from django.db.models import Sum
     total = Licitacion.objects.count()
     cerradas = Licitacion.objects.filter(Estado='Cerrada').count()
     publicadas = Licitacion.objects.filter(Estado='Publicada').count()
@@ -92,7 +78,7 @@ def dashboard_stats(request):
         'total': total,
         'cerradas': cerradas,
         'publicadas': publicadas,
-        'monto_total': monto_total,
+        'monto_total': float(monto_total),
         'compradores': compradores,
     }
     cache.set(cache_key, response_data, timeout=300)
@@ -122,16 +108,62 @@ def devengo_stats(request):
     ue = request.GET.get('ue', '')
     solo_deuda = request.GET.get('solo_deuda', '1') == '1'
     ue_safe = ue[:50].replace(' ', '_')
-    cache_key = f'devengo_stats_ue_{ue_safe}_sd_{solo_deuda}'
+    cache_key = f'devengo_stats_ue_{ue_safe}_sd_{int(solo_deuda)}'
     cached_data = cache.get(cache_key)
     if cached_data:
         return Response(cached_data)
 
-    from .services import obtener_kpis_devengo
     qs = Devengo.objects.all()
     response_data = obtener_kpis_devengo(qs, codigo_ue=ue, solo_deuda=solo_deuda)
     cache.set(cache_key, response_data, timeout=300)
     return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def devengo_raw_all(request):
+    """Devuelve toda la data de devengo sin paginación para el dashboard."""
+    ue = request.GET.get('ue', '')
+    desde = request.GET.get('desde', '')
+    hasta = request.GET.get('hasta', '')
+    try:
+        limit = min(int(request.GET.get('limit', 5000)), 10000)
+    except (ValueError, TypeError):
+        limit = 5000
+
+    qs = Devengo.objects.values(
+        'codigo_ue', 'principal', 'tipo_documento', 'fecha_conforme',
+        'id_chile_compra', 'catalogo_01', 'catalogo_02', 'catalogo_04',
+        'concepto_presupuestario', 'monto_vigente', 'monto_disponible', 'monto_consumido',
+    )
+    if ue:
+        qs = qs.filter(codigo_ue=ue)
+    if desde:
+        qs = qs.filter(fecha_conforme__gte=desde)
+    if hasta:
+        qs = qs.filter(fecha_conforme__lte=hasta)
+
+    return Response(list(qs[:limit]))
+
+
+# =============================================================================
+# Órdenes de Compra
+# =============================================================================
+
+class OrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = OrdenCompra.objects.prefetch_related('detalles').all()
+    serializer_class = OrdenCompraSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['EstadoOC', 'C_Unidad', 'TipoOC']
+
+
+class DetalleOrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = DetalleOrdenCompra.objects.all()
+    serializer_class = DetalleOrdenCompraSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['orden_compra', 'CodigoProducto', 'Categoria']
 
 
 @api_view(['GET'])
@@ -160,9 +192,12 @@ def ordenes_compra_raw_all(request):
     if estado:
         qs = qs.filter(EstadoOC__iexact=estado)
     if anio:
-        qs = qs.filter(FechaEnvio__year=anio)
+        try:
+            qs = qs.filter(FechaEnvio__year=int(anio))
+        except (ValueError, TypeError):
+            pass
 
-    return JsonResponse(list(qs[:limit]), safe=False)
+    return Response(list(qs[:limit]))
 
 
 @api_view(['GET'])
@@ -172,7 +207,6 @@ def ordenes_compra_proyectos_licitacion(request):
     Mapa cross-year: CodigoLicitacion → lista de ID_Proyecto con contador.
     Usado para sugerir proyectos PAC a OC no enlazadas.
     """
-    from django.db.models import Count
     cache_key = 'oc_proyectos_licitacion_v1'
     cached = cache.get(cache_key)
     if cached:
@@ -199,36 +233,9 @@ def ordenes_compra_proyectos_licitacion(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def devengo_raw_all(request):
-    """Devuelve toda la data de devengo sin paginación para el dashboard."""
-    ue = request.GET.get('ue', '')
-    desde = request.GET.get('desde', '')
-    hasta = request.GET.get('hasta', '')
-    try:
-        limit = min(int(request.GET.get('limit', 5000)), 10000)
-    except (ValueError, TypeError):
-        limit = 5000
-
-    qs = Devengo.objects.values(
-        'codigo_ue', 'principal', 'tipo_documento', 'fecha_conforme',
-        'id_chile_compra', 'catalogo_01', 'catalogo_02', 'catalogo_04',
-        'concepto_presupuestario', 'monto_vigente', 'monto_disponible', 'monto_consumido',
-    )
-    if ue:
-        qs = qs.filter(codigo_ue=ue)
-    if desde:
-        qs = qs.filter(fecha_conforme__gte=desde)
-    if hasta:
-        qs = qs.filter(fecha_conforme__lte=hasta)
-
-    return JsonResponse(list(qs[:limit]), safe=False)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
 def facturas_raw_all(request):
-    """Devuelve todas las facturas sin paginación para el dashboard OC."""
-    anio = request.GET.get('anio', '')
+    """Devuelve facturas sin paginación. Filtro de año a nivel DB usando __endswith (formato DD-MM-YYYY)."""
+    anio = request.GET.get('anio', '').strip()
     qs = Factura.objects.values(
         'id', 'tipo_documento', 'folio', 'emisor', 'razon_social_emisor',
         'emision', 'monto_neto', 'monto_exento', 'monto_iva', 'monto_total',
@@ -237,11 +244,11 @@ def facturas_raw_all(request):
         'folio_rc', 'fecha_ingreso_rc', 'ticket_devengo', 'folio_sigfe',
         'tarea_actual', 'fecha_ingreso', 'fecha_aceptacion', 'fecha_devengo',
     )
-    if anio:
-        # emision tiene formato DD-MM-YYYY — filtramos el año en posición 6..9
-        qs = [r for r in qs if (r['emision'] or '')[-4:] == anio]
-        return JsonResponse(list(qs), safe=False)
-    return JsonResponse(list(qs), safe=False)
+    if anio and anio.isdigit() and len(anio) == 4:
+        # emision almacenado como DD-MM-YYYY → filtrar por sufijo en DB
+        qs = qs.filter(emision__endswith=anio)
+
+    return Response(list(qs))
 
 
 # =============================================================================
@@ -280,7 +287,10 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['tipo_documento', 'formato_documento', 'banco', 'proveedor', 'comprador']
     search_fields = ['numero_documento', 'nombre_licitacion', 'id_licitacion', 'proveedor__nombre']
-    ordering_fields = ['vigencia_garantia', 'fecha_emision', 'mes_anio', 'monto', 'created_at', 'numero_documento', 'tipo_documento', 'proveedor__nombre', 'estado_trazabilidad']
+    ordering_fields = [
+        'vigencia_garantia', 'fecha_emision', 'mes_anio', 'monto', 'created_at',
+        'numero_documento', 'tipo_documento', 'proveedor__nombre', 'estado_trazabilidad',
+    ]
     ordering = ['-vigencia_garantia']
 
     def _snapshot(self, instance):
@@ -293,8 +303,6 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-
-        # Capturar estado ANTES de guardar cambios
         snapshot_antes = self._snapshot(instance)
 
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
@@ -304,14 +312,12 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
 
         self.perform_update(serializer)
 
-        # Registrar en auditoría
-        snapshot_despues = self._snapshot(serializer.instance)
         BoletaGarantiaAudit.objects.create(
             accion='MODIFICAR',
             boleta_id=instance.pk,
             numero_documento=instance.numero_documento,
             snapshot_antes=snapshot_antes,
-            snapshot=snapshot_despues,
+            snapshot=self._snapshot(serializer.instance),
             eliminado_por=request.user,
             razon='',
         )
@@ -324,12 +330,11 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         razon = self.request.data.get('razon', '')
-        snapshot = self._snapshot(instance)
         BoletaGarantiaAudit.objects.create(
             accion='ELIMINAR',
             boleta_id=instance.pk,
             numero_documento=instance.numero_documento,
-            snapshot=snapshot,
+            snapshot=self._snapshot(instance),
             eliminado_por=self.request.user,
             razon=razon,
         )
@@ -346,7 +351,7 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
 
 
 class BoletaGarantiaAuditViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
-    """Historial de auditoría de boletas eliminadas (solo lectura)."""
+    """Historial de auditoría de boletas (solo lectura)."""
     queryset = BoletaGarantiaAudit.objects.select_related('eliminado_por').all()
     serializer_class = BoletaGarantiaAuditSerializer
     permission_classes = [IsAuthenticated]
@@ -369,12 +374,15 @@ class PlanerPACViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class CompraAgilResumenViewSet(viewsets.ReadOnlyModelViewSet):
+    # queryset como atributo de clase es obligatorio en DRF 3.16+ para que el router
+    # pueda inferir el basename. get_queryset() lo sobreescribe en runtime.
+    queryset = CompraAgilResumen.objects.none()
     serializer_class = CompraAgilResumenSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['estadoglosa', 'unidadcompra']
     search_fields = ['codigocompraagil', 'nombre']
-    ordering_fields = ['codigocompraagil', 'nombre', 'estadoglosa', 'unidadcompra', 'fechapublicacion', 'presupuestoestimado']
+    ordering_fields = ['codigocompraagil', 'nombre', 'estadoglosa', 'unidadcompra', 'fechapublicacion']
     ordering = ['-fechapublicacion']
 
     def get_queryset(self):
@@ -408,8 +416,6 @@ class CompraAgilProveedorViewSet(viewsets.ReadOnlyModelViewSet):
 @permission_classes([IsAuthenticated])
 def compraagil_ahorro_stats_view(request):
     """KPIs y desglose de ahorro para el módulo Compra Ágil. Cache 5min por rango de fechas."""
-    from .services import calcular_compraagil_ahorro_stats
-
     fecha_desde = request.GET.get('fecha_desde', '')
     fecha_hasta = request.GET.get('fecha_hasta', '')
     cache_key = f'compraagil_ahorro_{fecha_desde}_{fecha_hasta}'
@@ -427,8 +433,6 @@ def compraagil_ahorro_stats_view(request):
 @permission_classes([IsAuthenticated])
 def pac_indicadores_view(request):
     """Indicadores Res.188 calculados desde la BD. Cache 5min."""
-    from .services import calcular_indicadores_res188
-
     try:
         anio = int(request.GET.get('anio', 2026))
     except (ValueError, TypeError):
@@ -446,8 +450,6 @@ def pac_indicadores_view(request):
 @permission_classes([IsAuthenticated])
 def pac_oc_stats_view(request):
     """Estadísticas de OC para los 8 paneles del tab Órdenes de Compra. Cache 5min."""
-    from .services import calcular_oc_stats
-
     try:
         anio = int(request.GET.get('anio', 2026))
     except (ValueError, TypeError):
@@ -465,8 +467,6 @@ def pac_oc_stats_view(request):
 @permission_classes([IsAuthenticated])
 def pac_oc_productos_view(request):
     """Estadísticas de DetalleOrdenCompra para el tab Análisis Productos. Cache 5min."""
-    from .services import calcular_oc_productos
-
     try:
         anio = int(request.GET.get('anio', 2026))
     except (ValueError, TypeError):
@@ -491,7 +491,7 @@ class RevisionOCCorregibleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = None
     filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
-    filterset_fields = ['codigo_oc', 'resultado', 'revisado_por']
+    filterset_fields = ['codigo_oc', 'resultado']
     ordering_fields = ['fecha_revision', 'resultado']
     ordering = ['-fecha_revision']
 

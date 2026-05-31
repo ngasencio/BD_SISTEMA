@@ -131,6 +131,14 @@ class Licitacion(models.Model):
     EsBaseTipo_Desc         = models.CharField(max_length=10, null=True, blank=True)
     EsRenovable_Desc        = models.CharField(max_length=10, null=True, blank=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['Estado'],           name='idx_li_estado'),
+            models.Index(fields=['Tipo'],             name='idx_li_tipo'),
+            models.Index(fields=['FechaPublicacion'], name='idx_li_fecha_pub'),
+            models.Index(fields=['C_NombreOrganismo'],name='idx_li_organismo'),
+        ]
+
     def __str__(self):
         return f"{self.codigo_licitacion} - {self.Nombre}"
 
@@ -273,6 +281,14 @@ class OrdenCompra(models.Model):
 
     class Meta:
         db_table = 'api_ordencompra'
+        indexes = [
+            models.Index(fields=['EstadoOC'],          name='idx_oc_estado'),
+            models.Index(fields=['FechaEnvio'],         name='idx_oc_fecha_envio'),
+            models.Index(fields=['C_Unidad'],           name='idx_oc_unidad'),
+            models.Index(fields=['EnlacePAC'],          name='idx_oc_enlace_pac'),
+            models.Index(fields=['CodigoLicitacion'],   name='idx_oc_cod_licitacion'),
+            models.Index(fields=['EstadoOC', 'FechaEnvio'], name='idx_oc_estado_fecha'),
+        ]
 
     def __str__(self):
         return f"{self.codigo_oc} - {self.NombreOC}"
