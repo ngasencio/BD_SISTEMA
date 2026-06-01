@@ -4,6 +4,7 @@ import ResumenTab from './tabs/ResumenTab';
 import AhorroTab from './tabs/AhorroTab';
 import ComprasTable from './tabs/ComprasTable';
 import ProveedoresTab from './tabs/ProveedoresTab';
+import ComparativaTab from './tabs/ComparativaTab';
 import { generarPDFCompraAgil } from '../utils/pdfExport';
 import { getCompraAgilAnios } from '../api/compraAgilApi';
 
@@ -12,6 +13,7 @@ const TABS = [
     { id: 'ahorro', label: '💰 Ahorro' },
     { id: 'compras', label: '🛒 Compras Ágiles' },
     { id: 'proveedores', label: '🏢 Proveedores' },
+    { id: 'comparativa', label: '📈 Comparativa' },
 ];
 
 export default function CompraAgilPage() {
@@ -200,6 +202,9 @@ export default function CompraAgilPage() {
                     stats={stats}
                     loading={loadingStats || loadingProveedores}
                 />
+            )}
+            {tab === 'comparativa' && (
+                <ComparativaTab />
             )}
         </div>
     );

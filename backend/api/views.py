@@ -427,6 +427,48 @@ def compraagil_ahorro_stats_view(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def compraagil_comparativa_view(request):
+    """Estadísticas comparativas año a año para el tab Comparativa."""
+    from .ml_services import calcular_comparativa_stats
+    data = cache.get('compraagil_comparativa')
+    if not data:
+        data = calcular_comparativa_stats()
+        cache.set('compraagil_comparativa', data, timeout=600)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def compraagil_patrones_view(request):
+    """Patrones ML: clusters, Apriori proveedor/comprador y candidatos convenio."""
+    from .ml_services import (
+        calcular_clusters_productos,
+        calcular_asociaciones_proveedor,
+        calcular_apriori_comprador,
+        calcular_candidatos_convenio,
+    )
+    try:
+        umbral_monto = int(request.GET.get('umbral_monto', 300000))
+        umbral_freq  = int(request.GET.get('umbral_frecuencia', 3))
+        min_support  = float(request.GET.get('min_support', 0.05))
+    except (ValueError, TypeError):
+        umbral_monto, umbral_freq, min_support = 300000, 3, 0.05
+
+    cache_key = f'compraagil_patrones_{umbral_monto}_{umbral_freq}_{min_support}'
+    data = cache.get(cache_key)
+    if not data:
+        data = {
+            'clusters': calcular_clusters_productos(),
+            'asociaciones_proveedor': calcular_asociaciones_proveedor(min_support),
+            'asociaciones_comprador': calcular_apriori_comprador(min_support),
+            'candidatos_convenio': calcular_candidatos_convenio(umbral_monto, umbral_freq),
+        }
+        cache.set(cache_key, data, timeout=600)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def compraagil_anios_view(request):
     """Años distintos disponibles en fechapublicacion de CompraAgilResumen."""
     from django.db.models.functions import Substr

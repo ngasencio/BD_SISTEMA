@@ -6,6 +6,12 @@ export const getCompraAgilAhorroStats = (params = {}) =>
 export const getCompraAgilAnios = () =>
     apiClient.get('compraagil/anios/');
 
+export const getCompraAgilComparativa = () =>
+    apiClient.get('compraagil/comparativa/');
+
+export const getCompraAgilPatrones = (params = {}) =>
+    apiClient.get('compraagil/patrones/', { params });
+
 export const getCompraAgilResumen = (params = {}) =>
     apiClient.get('compraagil-resumen/', { params });
 
