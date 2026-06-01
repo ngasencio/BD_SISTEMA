@@ -164,7 +164,7 @@ function ExpandedRow({ codigo }) {
     );
 }
 
-export default function ComprasTable({ compras, loading }) {
+export default function ComprasTable({ compras, loading, error }) {
     const [busqueda, setBusqueda] = useState('');
     const [estadoFiltro, setEstadoFiltro] = useState('Todos');
     const [unidadFiltro, setUnidadFiltro] = useState('');
@@ -236,6 +236,16 @@ export default function ComprasTable({ compras, loading }) {
     };
 
     if (loading) return <div className="loading-spinner">Cargando compras ágiles...</div>;
+
+    if (error) return (
+        <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+            <p style={{ fontSize: 15, color: '#dc2626', marginBottom: 8 }}>⚠️ Error al cargar los datos</p>
+            <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>{error}</p>
+            <p style={{ fontSize: 12, color: '#9ca3af' }}>
+                Verifica que el servidor backend esté corriendo y vuelve a intentarlo.
+            </p>
+        </div>
+    );
 
     return (
         <div className="card">

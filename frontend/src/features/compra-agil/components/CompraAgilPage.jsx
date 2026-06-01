@@ -20,7 +20,7 @@ export default function CompraAgilPage() {
     const [generandoPDF, setGenerandoPDF] = useState(false);
 
     const filtros = { fechaDesde, fechaHasta };
-    const { stats, loadingStats, errorStats, compras, loadingCompras, proveedores, loadingProveedores } =
+    const { stats, loadingStats, errorStats, compras, loadingCompras, errorCompras, proveedores, loadingProveedores } =
         useCompraAgil(filtros);
 
     const chartsRef = useRef({});
@@ -131,6 +131,7 @@ export default function CompraAgilPage() {
                 <ComprasTable
                     compras={compras}
                     loading={loadingCompras}
+                    error={errorCompras}
                     filtros={filtros}
                 />
             )}

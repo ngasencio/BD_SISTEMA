@@ -9,7 +9,8 @@ export function useCompraAgil(filtros = {}) {
     const [errorStats, setErrorStats] = useState(null);
 
     const [compras, setCompras] = useState([]);
-    const [loadingCompras, setLoadingCompras] = useState(false);
+    const [loadingCompras, setLoadingCompras] = useState(true);
+    const [errorCompras, setErrorCompras] = useState(null);
     const [comprasCount, setComprasCount] = useState(0);
 
     const [proveedores, setProveedores] = useState([]);
@@ -35,17 +36,35 @@ export function useCompraAgil(filtros = {}) {
 
     const fetchCompras = useCallback(async (extraParams = {}) => {
         setLoadingCompras(true);
+        setErrorCompras(null);
         try {
-            const { data } = await getCompraAgilResumen({ ...params, page_size: 1000, ...extraParams });
-            const items = data.results ?? data;
-            setCompras(items);
-            setComprasCount(data.count ?? items.length);
-        } catch {
+            const p = {};
+            if (fechaDesde) p.fecha_desde = fechaDesde;
+            if (fechaHasta) p.fecha_hasta = fechaHasta;
+            // Traemos todas las páginas concatenando resultados
+            let allItems = [];
+            let nextUrl = null;
+            let firstResp = await getCompraAgilResumen({ ...p, page_size: 200, ...extraParams });
+            let d = firstResp.data;
+            allItems = d.results ?? d;
+            setComprasCount(d.count ?? allItems.length);
+            nextUrl = d.next ?? null;
+            // Si hay más páginas, seguimos cargando
+            while (nextUrl) {
+                const pageNum = new URL(nextUrl).searchParams.get('page');
+                const resp = await getCompraAgilResumen({ ...p, page_size: 200, page: pageNum, ...extraParams });
+                const rd = resp.data;
+                allItems = allItems.concat(rd.results ?? []);
+                nextUrl = rd.next ?? null;
+            }
+            setCompras(allItems);
+        } catch (err) {
+            const msg = err.response?.data?.detail || err.message || 'Error al cargar compras ágiles.';
+            setErrorCompras(msg);
             setCompras([]);
         } finally {
             setLoadingCompras(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fechaDesde, fechaHasta]);
 
     const fetchProveedores = useCallback(async () => {
@@ -71,7 +90,7 @@ export function useCompraAgil(filtros = {}) {
 
     return {
         stats, loadingStats, errorStats,
-        compras, loadingCompras, comprasCount,
+        compras, loadingCompras, errorCompras, comprasCount,
         proveedores, loadingProveedores,
         refresh: () => { fetchStats(); fetchCompras(); fetchProveedores(); },
         fetchCompras,

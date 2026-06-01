@@ -374,20 +374,12 @@ class PlanerPACViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class CompraAgilResumenViewSet(viewsets.ReadOnlyModelViewSet):
-<<<<<<< HEAD
     queryset = CompraAgilResumen.objects.all()
-=======
-    # queryset como atributo de clase es obligatorio en DRF 3.16+ para que el router
-    # pueda inferir el basename. get_queryset() lo sobreescribe en runtime.
-    queryset = CompraAgilResumen.objects.none()
->>>>>>> e5084377d6173cacae9cc7d6b2570f9b6422e2d1
     serializer_class = CompraAgilResumenSerializer
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
     filterset_fields = ['estadoglosa', 'unidadcompra']
     search_fields = ['codigocompraagil', 'nombre']
-    ordering_fields = ['codigocompraagil', 'nombre', 'estadoglosa', 'unidadcompra', 'fechapublicacion']
-    ordering = ['-fechapublicacion']
 
     def get_queryset(self):
         qs = CompraAgilResumen.objects.all()
