@@ -854,18 +854,21 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
                     by_product[c['codigoproducto']].append(c)
 
             for prod_code, cots in by_product.items():
-                precios, precio_ganador, cantidad_adj, nombre_prod = [], None, 0.0, ''
+                precios_competidores, precio_ganador, cantidad_adj, nombre_prod = [], None, 0.0, ''
                 for cot in cots:
                     precio = _f(cot.get('preciounitario'))
-                    if precio > 0:
-                        precios.append(precio)
                     if cot.get('rutproveedor') == rut_ganador:
-                        precio_ganador = precio
+                        # Precio del ganador: se guarda separado, no entra al promedio
+                        if precio > 0:
+                            precio_ganador = precio
                         cantidad_adj = _f(cot.get('cantidad'))
                         nombre_prod = cot.get('nombreproducto', '')
+                    elif precio > 0:
+                        # Solo competidores van al promedio
+                        precios_competidores.append(precio)
 
-                if len(precios) >= 2 and precio_ganador is not None:
-                    avg = sum(precios) / len(precios)
+                if len(precios_competidores) >= 1 and precio_ganador is not None:
+                    avg = sum(precios_competidores) / len(precios_competidores)
                     ahorro_item = (avg - precio_ganador) * cantidad_adj
                     adj_item = precio_ganador * cantidad_adj
                     ahorro_res188_total += ahorro_item
@@ -925,7 +928,7 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
                 'ahorro': round(v['ahorro'], 0),
                 'adjudicadas': v['adjudicadas'],
                 'total': v['total'],
-                'pct_ahorro': round(v['ahorro'] / v['presupuesto'] * 100, 1) if v['presupuesto'] > 0 else 0,
+                'pct_ahorro': round(v['ahorro'] / v['monto_oc'] * 100, 1) if v['monto_oc'] > 0 else 0,
             }
             for k, v in por_unidad.items()
         ],
@@ -964,8 +967,8 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
             'total_monto_oc': round(total_monto_oc, 0),
             'ahorro_simple': round(ahorro_simple_total, 0),
             'pct_ahorro_simple': round(
-                ahorro_simple_total / total_presupuesto * 100, 1
-            ) if total_presupuesto > 0 else 0,
+                ahorro_simple_total / total_monto_oc * 100, 1
+            ) if total_monto_oc > 0 else 0,
             'ahorro_res188': round(ahorro_res188_total, 0),
             'adjudicado_res188': round(adjudicado_res188_total, 0),
             'pct_ahorro_res188': round(pct_res188, 2),
