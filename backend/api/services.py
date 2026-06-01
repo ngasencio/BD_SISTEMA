@@ -1,6 +1,16 @@
 from collections import defaultdict
 
-from django.db.models import Sum, Count, Q, Avg
+from django.db.models import Sum, Count, Q
+
+from .models import (
+    OrdenCompra, DetalleOrdenCompra, PlanerPAC,
+    CompraAgilResumen, CompraAgilProveedor,
+    CompraAgilProductoCotizado,
+)
+
+# Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
+_GANADOR_FLAGS = frozenset(['1', 'Si', 'si', 'True', 'true'])
+
 
 def obtener_kpis_devengo(devengo_qs, codigo_ue=None, solo_deuda=True):
     """
@@ -83,8 +93,6 @@ def calcular_indicadores_res188(anio=2026):
     Ind 3 y 6 requieren entrada manual.
     Ind 4 requiere tabla de contratos (no disponible en BD).
     """
-    from .models import OrdenCompra, PlanerPAC, CompraAgilProveedor
-
     # OC válidas del año (excluye canceladas)
     oc_qs = OrdenCompra.objects.filter(
         FechaEnvio__year=anio
@@ -130,7 +138,7 @@ def calcular_indicadores_res188(anio=2026):
     ahorrado = 0.0
     adjudicado = 0.0
     for rows in by_ca.values():
-        sel = next((r for r in rows if str(r['proveedorseleccionado']) == '1'), None)
+        sel = next((r for r in rows if str(r.get('proveedorseleccionado', '')) in _GANADOR_FLAGS), None)
         if not sel:
             continue
         p_sel = float(sel['valorneto'] or 0)
@@ -177,8 +185,6 @@ def calcular_oc_stats(anio=2026):
     Cubre: Resumen, Estado, PAC, Enlace, LeadTime, Monetario, Histórico.
     Usa .extra() para extracciones de fecha (compatibilidad MariaDB/Django).
     """
-    from .models import OrdenCompra
-
     oc_qs = OrdenCompra.objects.filter(FechaEnvio__year=anio)
     oc_nc = oc_qs.exclude(EstadoOC='Cancelada')  # no canceladas
 
@@ -661,8 +667,6 @@ def calcular_oc_productos(anio=2026):
     """
     Estadísticas de productos (DetalleOrdenCompra) para el tab Análisis Productos.
     """
-    from .models import DetalleOrdenCompra, OrdenCompra
-
     oc_ids = list(OrdenCompra.objects.filter(FechaEnvio__year=anio).values_list('codigo_oc', flat=True))
     det_qs = DetalleOrdenCompra.objects.filter(orden_compra_id__in=oc_ids)
 
@@ -743,11 +747,6 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
     - % Ahorro Res.188/2026: metodología por ítem (promedio ofertas vs adjudicado)
     Los campos monetarios están almacenados como TextField → conversión explícita.
     """
-    from .models import (
-        CompraAgilResumen, CompraAgilProveedor,
-        CompraAgilProductoCotizado, OrdenCompra,
-    )
-
     def _f(val):
         try:
             return float(val or 0)

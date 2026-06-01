@@ -1,9 +1,38 @@
 import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { KpiCard } from '../../../abastecimiento/components/KpiCard';
 
 const fmt = n => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n || 0);
 const fmtN = n => new Intl.NumberFormat('es-CL').format(n || 0);
+
+function KpiCard({ label, value, sub, color = '#3b82f6' }) {
+    return (
+        <div style={{
+            background: '#fff', borderRadius: 10, padding: '16px 20px',
+            border: '1px solid #e2e8f0', flex: '1 1 160px', minWidth: 150,
+            borderTop: `4px solid ${color}`,
+        }}>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#1e293b' }}>{value}</div>
+            {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
+        </div>
+    );
+}
+
+function TasaBadge({ tasa }) {
+    const esAlta = tasa >= 50;
+    const esMedia = tasa >= 25 && tasa < 50;
+    const bg = esAlta ? '#dcfce7' : esMedia ? '#fef9c3' : '#fee2e2';
+    const color = esAlta ? '#16a34a' : esMedia ? '#b45309' : '#dc2626';
+    const border = esAlta ? '#bbf7d0' : esMedia ? '#fde68a' : '#fca5a5';
+    return (
+        <span style={{
+            display: 'inline-block', padding: '2px 9px', borderRadius: 20,
+            fontSize: 11, fontWeight: 700, background: bg, color, border: `1px solid ${border}`,
+        }}>
+            {tasa}%
+        </span>
+    );
+}
 
 export default function ProveedoresTab({ stats, loading }) {
     const [busqueda, setBusqueda] = useState('');
@@ -12,10 +41,7 @@ export default function ProveedoresTab({ stats, loading }) {
 
     const proveedores = stats?.top_proveedores || [];
 
-    const totalGanadores = useMemo(() => {
-        const set = new Set(proveedores.map(p => p.rut));
-        return set.size;
-    }, [proveedores]);
+    const totalGanadores = useMemo(() => new Set(proveedores.map(p => p.rut)).size, [proveedores]);
 
     const totalParticipantes = useMemo(() =>
         proveedores.reduce((acc, p) => acc + (p.participadas || 0), 0),
@@ -28,6 +54,10 @@ export default function ProveedoresTab({ stats, loading }) {
 
     const montoMaximo = useMemo(() =>
         Math.max(...proveedores.map(p => p.monto_total || 0), 0),
+    [proveedores]);
+
+    const montoTotal = useMemo(() =>
+        proveedores.reduce((acc, p) => acc + (p.monto_total || 0), 0),
     [proveedores]);
 
     const filtrados = useMemo(() => {
@@ -76,62 +106,62 @@ export default function ProveedoresTab({ stats, loading }) {
 
     return (
         <div>
-            <section className="kpi-grid">
-                <KpiCard title="Proveedores Adjudicados" value={fmtN(totalGanadores)} icon="🏆" colorVar="--color-success" />
-                <KpiCard title="Participaciones Totales" value={fmtN(totalParticipantes)} icon="🤝" colorVar="--color-primary" />
-                <KpiCard title="Tasa Promedio Adjudicación" value={`${promedioTasa}%`} icon="📈" colorVar="--color-accent" />
-                <KpiCard title="Mayor Adjudicación" value={fmt(montoMaximo)} icon="🥇" colorVar="--color-warning" />
-            </section>
+            {/* ── KPIs ── */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+                <KpiCard label="Proveedores Adjudicados" value={fmtN(totalGanadores)} sub="empresas únicas" color="#22c55e" />
+                <KpiCard label="Participaciones Totales" value={fmtN(totalParticipantes)} sub="en Compras Ágiles" color="#3b82f6" />
+                <KpiCard label="Tasa Promedio Adj." value={`${promedioTasa}%`} sub="entre proveedores" color="#f59e0b" />
+                <KpiCard label="Monto Adjudicado Total" value={fmt(montoTotal)} color="#8b5cf6" />
+            </div>
 
+            {/* ── Ranking ── */}
             <div className="card">
-                <div className="table-toolbar">
-                    <h3 className="card-title">Ranking de Proveedores por Adjudicación</h3>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                <div className="card-header card-header-accent">
+                    <span>🏆</span>
+                    <span className="card-title">Ranking de Proveedores por Adjudicación</span>
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
                         <input
-                            className="search-input"
+                            className="filter-input"
                             placeholder="🔍 Buscar proveedor o RUT..."
                             value={busqueda}
                             onChange={e => setBusqueda(e.target.value)}
+                            style={{ minWidth: 220 }}
                         />
                         <button className="btn-excel" onClick={exportarExcel}>📥 Excel</button>
                     </div>
                 </div>
-                <div className="table-scroll">
-                    <table className="data-table sortable">
+                <div className="table-responsive">
+                    <table className="table-gob">
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <th onClick={() => toggleSort('razonsocial')} className="sortable-th">Razón Social{arrow('razonsocial')}</th>
-                                <th onClick={() => toggleSort('rut')} className="sortable-th">RUT{arrow('rut')}</th>
-                                <th onClick={() => toggleSort('ganadas')} className="sortable-th">CAs Ganadas{arrow('ganadas')}</th>
-                                <th onClick={() => toggleSort('participadas')} className="sortable-th">Participadas{arrow('participadas')}</th>
-                                <th onClick={() => toggleSort('tasa')} className="sortable-th">Tasa Adj.{arrow('tasa')}</th>
-                                <th onClick={() => toggleSort('monto_total')} className="sortable-th">Monto Adjudicado{arrow('monto_total')}</th>
+                                <th onClick={() => toggleSort('razonsocial')} style={{ cursor: 'pointer', userSelect: 'none' }}>Razón Social{arrow('razonsocial')}</th>
+                                <th onClick={() => toggleSort('rut')} style={{ cursor: 'pointer', userSelect: 'none' }}>RUT{arrow('rut')}</th>
+                                <th onClick={() => toggleSort('ganadas')} style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}>CAs Ganadas{arrow('ganadas')}</th>
+                                <th onClick={() => toggleSort('participadas')} style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}>Participadas{arrow('participadas')}</th>
+                                <th onClick={() => toggleSort('tasa')} style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'center' }}>Tasa Adj.{arrow('tasa')}</th>
+                                <th onClick={() => toggleSort('monto_total')} style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'right' }}>Monto Adjudicado{arrow('monto_total')}</th>
                                 <th>Participación</th>
                             </tr>
                         </thead>
                         <tbody>
                             {ordenados.length === 0 && (
-                                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#9ca3af', padding: 24 }}>Sin proveedores.</td></tr>
+                                <tr><td colSpan={8} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>Sin proveedores.</td></tr>
                             )}
                             {ordenados.map((p, i) => {
                                 const pctMonto = montoMaximo > 0 ? (p.monto_total / montoMaximo) * 100 : 0;
                                 return (
                                     <tr key={p.rut || i}>
-                                        <td style={{ color: '#9ca3af', fontWeight: 600 }}>#{i + 1}</td>
+                                        <td style={{ color: '#94a3b8', fontWeight: 600, fontSize: 12 }}>#{i + 1}</td>
                                         <td style={{ fontWeight: 500 }}>{p.razonsocial}</td>
-                                        <td style={{ color: '#6b7280', fontSize: 13 }}>{p.rut}</td>
-                                        <td style={{ textAlign: 'center', fontWeight: 600, color: '#22c55e' }}>{p.ganadas}</td>
-                                        <td style={{ textAlign: 'center' }}>{p.participadas}</td>
-                                        <td style={{ textAlign: 'center' }}>
-                                            <span className={`tasa-badge ${p.tasa >= 50 ? 'tasa-alta' : p.tasa >= 25 ? 'tasa-media' : 'tasa-baja'}`}>
-                                                {p.tasa}%
-                                            </span>
-                                        </td>
-                                        <td style={{ fontWeight: 600 }}>{fmt(p.monto_total)}</td>
+                                        <td style={{ fontFamily: 'monospace', fontSize: 11, color: '#64748b' }}>{p.rut}</td>
+                                        <td style={{ textAlign: 'center', fontWeight: 700, color: '#22c55e' }}>{p.ganadas}</td>
+                                        <td style={{ textAlign: 'center', color: '#64748b' }}>{p.participadas}</td>
+                                        <td style={{ textAlign: 'center' }}><TasaBadge tasa={p.tasa} /></td>
+                                        <td style={{ textAlign: 'right', fontWeight: 600, fontFamily: 'monospace', fontSize: 12 }}>{fmt(p.monto_total)}</td>
                                         <td>
-                                            <div className="mini-bar-wrap">
-                                                <div className="mini-bar-fill" style={{ width: `${pctMonto}%` }} />
+                                            <div style={{ height: 8, background: '#f1f5f9', borderRadius: 4, minWidth: 80, overflow: 'hidden' }}>
+                                                <div style={{ width: `${pctMonto}%`, height: '100%', background: 'linear-gradient(90deg, #3b82f6, #1d4ed8)', borderRadius: 4, transition: 'width .3s' }} />
                                             </div>
                                         </td>
                                     </tr>

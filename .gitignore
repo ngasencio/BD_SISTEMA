@@ -1,6 +1,44 @@
-*__pycache__*
-.claude/
-api/OC_DSSO/DIARIO/
-*.txt
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
 
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Variables de entorno — NUNCA subir al repositorio
+.env
+.env.local
+.env.*.local
+
+# Django
+*.sqlite3
+/backend/media/
+
+# Datos ETL (voluminosos, no deben ir en git)
+api/OC_DSSO/DIARIO/
+api/LI_DSSO/DIARIO/
+api/OC_DSSO/MAESTROS/
+api/LI_DSSO/MAESTROS/
+api/CA_DSSO/
+
+# Logs y archivos temporales de desarrollo
+*.log
+backend/run_err.txt
+backend/fix_login.py
+backend/add_cols.py
+
+# Agentes Claude (configuración local del IDE)
 .claude/
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db

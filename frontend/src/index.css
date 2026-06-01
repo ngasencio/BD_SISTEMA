@@ -532,10 +532,25 @@ button {
 }
 
 /* ════════════════════════════════════════════════════
-   CONTENT
+   APP-SHELL — Contenedor raíz de AppLayout
+   ════════════════════════════════════════════════════ */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+}
+
+/* ════════════════════════════════════════════════════
+   CONTENT — Área principal de contenido
    ════════════════════════════════════════════════════ */
 .content {
   padding: 24px 28px 48px;
+}
+
+/* Feature pages (features/) — rendered inside AppLayout's .content.
+   No extra padding needed; AppLayout already provides it. */
+.feature-page {
+  width: 100%;
 }
 
 /* ── Page title ── */
@@ -5112,4 +5127,63 @@ select.boleta-input {
 @media (max-width: 900px) {
   .charts-row { grid-template-columns: 1fr; }
   .filtro-global-inner { flex-direction: column; align-items: flex-start; }
+}
+
+/* ════════════════════════════════════════════════════
+   HOME PAGE — Module navigation cards
+   ════════════════════════════════════════════════════ */
+.module-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px 18px 14px;
+  transition: box-shadow 0.18s, transform 0.18s, border-color 0.18s;
+  position: relative;
+  overflow: hidden;
+}
+
+.module-card-active {
+  cursor: pointer;
+}
+
+.module-card-active:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  border-color: #cbd5e1;
+}
+
+.module-card-disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.module-card-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--gob-gris5);
+  margin-bottom: 5px;
+  line-height: 1.3;
+}
+
+.module-card-desc {
+  font-size: 12px;
+  color: var(--gob-gris4);
+  line-height: 1.5;
+}
+
+.module-card-link {
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.section-heading {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gob-gris4);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--gob-gris2);
 }

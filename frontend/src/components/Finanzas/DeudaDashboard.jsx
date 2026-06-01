@@ -144,7 +144,7 @@ export default function DeudaDashboard() {
         <div>
             <TopBar rawDataLength={rawData.length} onOpenModal={() => setShowModal(true)} />
 
-            <div className="content">
+            <div>
                 <PageHeader
                     filterUE={filterUE}
                     total={rawData.length}

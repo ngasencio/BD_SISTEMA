@@ -1,9 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
-import { KpiCard } from '../../../abastecimiento/components/KpiCard';
 
 const fmt = n => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n || 0);
 const fmtPct = n => `${(n || 0).toFixed(1)}%`;
+
+function KpiCard({ label, value, sub, color = '#3b82f6' }) {
+    return (
+        <div style={{
+            background: '#fff', borderRadius: 10, padding: '16px 20px',
+            border: '1px solid #e2e8f0', flex: '1 1 160px', minWidth: 150,
+            borderTop: `4px solid ${color}`,
+        }}>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#1e293b' }}>{value}</div>
+            {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
+        </div>
+    );
+}
 
 function useSortable(data, defaultKey = '', defaultDir = 'desc') {
     const [sortKey, setSortKey] = useState(defaultKey);
@@ -26,6 +39,15 @@ function useSortable(data, defaultKey = '', defaultDir = 'desc') {
 
     return { sorted, toggle, arrow, sortKey };
 }
+
+const SortTh = ({ col, label, toggle, arrow, align }) => (
+    <th
+        onClick={() => toggle(col)}
+        style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', textAlign: align || 'left' }}
+    >
+        {label}<span style={{ opacity: 0.6 }}>{arrow(col)}</span>
+    </th>
+);
 
 export default function AhorroTab({ stats, loading, chartsRef }) {
     const barUnidadRef = useRef(null);
@@ -59,23 +81,25 @@ export default function AhorroTab({ stats, loading, chartsRef }) {
         i.codigo_ca.toLowerCase().includes(busquedaItems.toLowerCase())
     );
 
-    const top5Unidades = [...por_unidad].sort((a, b) => b.ahorro - a.ahorro).slice(0, 8);
+    const top8Unidades = [...por_unidad].sort((a, b) => b.ahorro - a.ahorro).slice(0, 8);
     const barUnidadData = {
-        labels: top5Unidades.map(u => u.unidad.length > 20 ? u.unidad.slice(0, 20) + '…' : u.unidad),
+        labels: top8Unidades.map(u => u.unidad.length > 20 ? u.unidad.slice(0, 20) + '…' : u.unidad),
         datasets: [
             {
                 label: 'Presupuesto',
-                data: top5Unidades.map(u => u.presupuesto),
-                backgroundColor: 'rgba(59,130,246,0.6)',
+                data: top8Unidades.map(u => u.presupuesto),
+                backgroundColor: 'rgba(59,130,246,0.75)',
                 borderColor: '#3b82f6',
                 borderWidth: 1,
+                borderRadius: 4,
             },
             {
                 label: 'Monto OC',
-                data: top5Unidades.map(u => u.monto_oc),
-                backgroundColor: 'rgba(34,197,94,0.6)',
+                data: top8Unidades.map(u => u.monto_oc),
+                backgroundColor: 'rgba(34,197,94,0.75)',
                 borderColor: '#22c55e',
                 borderWidth: 1,
+                borderRadius: 4,
             },
         ],
     };
@@ -83,82 +107,86 @@ export default function AhorroTab({ stats, loading, chartsRef }) {
     return (
         <div>
             {/* ── KPIs de ahorro ── */}
-            <section className="kpi-grid">
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
                 <KpiCard
-                    title="Ahorro Total (Simple)"
+                    label="Ahorro Total (Simple)"
                     value={fmt(kpis.ahorro_simple)}
-                    subtitle={`${fmtPct(kpis.pct_ahorro_simple)} del presupuesto`}
-                    icon="💰"
-                    colorVar="--color-success"
+                    sub={`${fmtPct(kpis.pct_ahorro_simple)} del presupuesto`}
+                    color="#22c55e"
                 />
                 <KpiCard
-                    title="Presupuesto Total"
+                    label="Presupuesto Total"
                     value={fmt(kpis.total_presupuesto)}
-                    icon="📋"
-                    colorVar="--color-primary"
+                    color="#3b82f6"
                 />
                 <KpiCard
-                    title="Monto Total OC"
+                    label="Monto Total OC"
                     value={fmt(kpis.total_monto_oc)}
-                    icon="🏷️"
-                    colorVar="--color-accent"
+                    color="#8b5cf6"
                 />
                 <KpiCard
-                    title="% Ahorro Res.188/2026"
+                    label="% Ahorro Res.188/2026"
                     value={`${kpis.pct_ahorro_res188}%`}
-                    subtitle={`$${new Intl.NumberFormat('es-CL').format(kpis.ahorro_res188)} ahorrado`}
-                    icon="📊"
-                    colorVar="--color-success"
+                    sub={`${fmt(kpis.ahorro_res188)} ahorrado`}
+                    color="#10b981"
                 />
-            </section>
+            </div>
 
             {/* ── Panel explicativo Res.188 ── */}
-            <div className="card res188-panel">
-                <h3 className="card-title">📘 Indicador Ahorro — Metodología Res.188/2026</h3>
-                <div className="res188-body">
-                    <p>
-                        El <strong>Indicador 5 de la Resolución 188/2026</strong> de la Dirección ChileCompra evalúa la
-                        eficiencia de las Compras Ágiles midiendo cuánto ahorró la institución respecto al precio
-                        promedio de mercado obtenido durante el proceso competitivo.
-                    </p>
-                    <div className="res188-formula-block">
-                        <p className="formula-title">Fórmula de cálculo:</p>
-                        <div className="formula-box">
-                            <p><strong>Monto Total Ahorrado</strong> =</p>
-                            <p className="formula-indent">Σ [ (Precio promedio de ofertas por ítem − Precio adjudicado por ítem) × Cantidad adjudicada del ítem ]</p>
-                            <p style={{ marginTop: 8 }}><strong>% Ahorro</strong> = (Monto Total Ahorrado / Monto Total Adjudicado) × 100</p>
+            <div className="card res188-panel" style={{ marginBottom: 16 }}>
+                <div className="card-header card-header-accent">
+                    <span>📘</span>
+                    <span className="card-title">Indicador Ahorro — Metodología Res.188/2026</span>
+                </div>
+                <div style={{ padding: '14px 20px' }}>
+                    <div className="res188-body">
+                        <p>
+                            El <strong>Indicador 5 de la Resolución 188/2026</strong> de la Dirección ChileCompra evalúa la
+                            eficiencia de las Compras Ágiles midiendo cuánto ahorró la institución respecto al precio
+                            promedio de mercado obtenido durante el proceso competitivo.
+                        </p>
+                        <div className="res188-formula-block">
+                            <p className="formula-title">Fórmula de cálculo:</p>
+                            <div className="formula-box">
+                                <p><strong>Monto Total Ahorrado</strong> =</p>
+                                <p className="formula-indent">Σ [ (Precio promedio de ofertas por ítem − Precio adjudicado por ítem) × Cantidad adjudicada del ítem ]</p>
+                                <p style={{ marginTop: 8 }}><strong>% Ahorro</strong> = (Monto Total Ahorrado / Monto Total Adjudicado) × 100</p>
+                            </div>
                         </div>
-                    </div>
-                    <div className="res188-aclaraciones">
-                        <div className="aclaracion-item">
-                            <span className="aclaracion-icon">🔵</span>
-                            <span><strong>Precio promedio de ofertas:</strong> promedio de los precios unitarios de todos los proveedores que cotizaron ese ítem específico.</span>
+                        <div className="res188-aclaraciones">
+                            <div className="aclaracion-item">
+                                <span className="aclaracion-icon">🔵</span>
+                                <span><strong>Precio promedio de ofertas:</strong> promedio de los precios unitarios de todos los proveedores que cotizaron ese ítem específico.</span>
+                            </div>
+                            <div className="aclaracion-item">
+                                <span className="aclaracion-icon">🟢</span>
+                                <span><strong>Precio adjudicado:</strong> precio unitario ofertado por el proveedor seleccionado para ese ítem.</span>
+                            </div>
+                            <div className="aclaracion-item">
+                                <span className="aclaracion-icon">⚠️</span>
+                                <span><strong>Ítems con ahorro negativo:</strong> el precio adjudicado fue mayor al promedio de ofertas. Se reportan como oportunidad de mejora.</span>
+                            </div>
+                            <div className="aclaracion-item">
+                                <span className="aclaracion-icon">📌</span>
+                                <span><strong>Aplicabilidad:</strong> solo se calculan compras en estado "Proveedor seleccionado" con al menos 2 cotizantes por ítem.</span>
+                            </div>
                         </div>
-                        <div className="aclaracion-item">
-                            <span className="aclaracion-icon">🟢</span>
-                            <span><strong>Precio adjudicado:</strong> precio unitario ofertado por el proveedor seleccionado para ese ítem.</span>
+                        <div className="res188-resultado">
+                            <span className="resultado-label">Resultado institucional:</span>
+                            <span className="resultado-valor">{kpis.pct_ahorro_res188}%</span>
+                            <span className="resultado-adj">sobre {fmt(kpis.adjudicado_res188)} adjudicado</span>
                         </div>
-                        <div className="aclaracion-item">
-                            <span className="aclaracion-icon">⚠️</span>
-                            <span><strong>Ítems con ahorro negativo:</strong> el precio adjudicado fue mayor al promedio de ofertas. Se reportan como oportunidad de mejora.</span>
-                        </div>
-                        <div className="aclaracion-item">
-                            <span className="aclaracion-icon">📌</span>
-                            <span><strong>Aplicabilidad:</strong> solo se calculan compras en estado "Proveedor seleccionado" con al menos 2 cotizantes por ítem.</span>
-                        </div>
-                    </div>
-                    <div className="res188-resultado">
-                        <span className="resultado-label">Resultado institucional:</span>
-                        <span className="resultado-valor">{kpis.pct_ahorro_res188}%</span>
-                        <span className="resultado-adj">sobre {fmt(kpis.adjudicado_res188)} adjudicado</span>
                     </div>
                 </div>
             </div>
 
             {/* ── Gráfico por unidad ── */}
-            <div className="card">
-                <h3 className="card-title">Presupuesto vs Monto OC por Unidad (Top 8)</h3>
-                <div className="chart-container-md">
+            <div className="card" style={{ marginBottom: 16 }}>
+                <div className="card-header card-header-accent">
+                    <span>📊</span>
+                    <span className="card-title">Presupuesto vs Monto OC por Unidad (Top 8)</span>
+                </div>
+                <div style={{ padding: 16, height: 290, position: 'relative' }}>
                     <Bar
                         ref={barUnidadRef}
                         data={barUnidadData}
@@ -167,13 +195,14 @@ export default function AhorroTab({ stats, loading, chartsRef }) {
                             maintainAspectRatio: false,
                             indexAxis: 'y',
                             plugins: {
-                                legend: { position: 'top' },
+                                legend: { position: 'top', labels: { font: { size: 11 } } },
                                 tooltip: {
                                     callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.parsed.x)}` },
                                 },
                             },
                             scales: {
-                                x: { ticks: { callback: v => `$${(v / 1000000).toFixed(0)}M` } },
+                                x: { ticks: { callback: v => `$${(v / 1e6).toFixed(0)}M`, font: { size: 10 } } },
+                                y: { ticks: { font: { size: 10 } } },
                             },
                         }}
                     />
@@ -181,39 +210,46 @@ export default function AhorroTab({ stats, loading, chartsRef }) {
             </div>
 
             {/* ── Tabla ahorro por unidad ── */}
-            <div className="card">
-                <div className="table-toolbar">
-                    <h3 className="card-title">Ahorro por Unidad de Compra</h3>
-                    <input
-                        className="search-input"
-                        placeholder="🔍 Buscar unidad..."
-                        value={busquedaUnidad}
-                        onChange={e => setBusquedaUnidad(e.target.value)}
-                    />
+            <div className="card" style={{ marginBottom: 16 }}>
+                <div className="card-header card-header-accent">
+                    <span>🏢</span>
+                    <span className="card-title">Ahorro por Unidad de Compra</span>
+                    <div style={{ marginLeft: 'auto' }}>
+                        <input
+                            className="filter-input"
+                            placeholder="🔍 Buscar unidad..."
+                            value={busquedaUnidad}
+                            onChange={e => setBusquedaUnidad(e.target.value)}
+                            style={{ minWidth: 200 }}
+                        />
+                    </div>
                 </div>
-                <div className="table-scroll">
-                    <table className="data-table sortable">
+                <div className="table-responsive">
+                    <table className="table-gob">
                         <thead>
                             <tr>
-                                <th onClick={() => toggleUnidad('unidad')} className="sortable-th">Unidad{arrowUnidad('unidad')}</th>
-                                <th onClick={() => toggleUnidad('total')} className="sortable-th">CAs{arrowUnidad('total')}</th>
-                                <th onClick={() => toggleUnidad('adjudicadas')} className="sortable-th">Adjudicadas{arrowUnidad('adjudicadas')}</th>
-                                <th onClick={() => toggleUnidad('presupuesto')} className="sortable-th">Presupuesto{arrowUnidad('presupuesto')}</th>
-                                <th onClick={() => toggleUnidad('monto_oc')} className="sortable-th">Monto OC{arrowUnidad('monto_oc')}</th>
-                                <th onClick={() => toggleUnidad('ahorro')} className="sortable-th">Ahorro{arrowUnidad('ahorro')}</th>
-                                <th onClick={() => toggleUnidad('pct_ahorro')} className="sortable-th">% Ahorro{arrowUnidad('pct_ahorro')}</th>
+                                <SortTh col="unidad" label="Unidad" toggle={toggleUnidad} arrow={arrowUnidad} />
+                                <SortTh col="total" label="CAs" toggle={toggleUnidad} arrow={arrowUnidad} />
+                                <SortTh col="adjudicadas" label="Adjudicadas" toggle={toggleUnidad} arrow={arrowUnidad} />
+                                <SortTh col="presupuesto" label="Presupuesto" toggle={toggleUnidad} arrow={arrowUnidad} align="right" />
+                                <SortTh col="monto_oc" label="Monto OC" toggle={toggleUnidad} arrow={arrowUnidad} align="right" />
+                                <SortTh col="ahorro" label="Ahorro" toggle={toggleUnidad} arrow={arrowUnidad} align="right" />
+                                <SortTh col="pct_ahorro" label="% Ahorro" toggle={toggleUnidad} arrow={arrowUnidad} align="right" />
                             </tr>
                         </thead>
                         <tbody>
+                            {unidadesFiltradas.length === 0 && (
+                                <tr><td colSpan={7} style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>Sin datos</td></tr>
+                            )}
                             {unidadesFiltradas.map((u, i) => (
                                 <tr key={i}>
                                     <td>{u.unidad}</td>
-                                    <td>{u.total}</td>
-                                    <td>{u.adjudicadas}</td>
-                                    <td>{fmt(u.presupuesto)}</td>
-                                    <td>{u.monto_oc > 0 ? fmt(u.monto_oc) : '—'}</td>
-                                    <td className={u.ahorro >= 0 ? 'text-success' : 'text-danger'}>{fmt(u.ahorro)}</td>
-                                    <td className={u.pct_ahorro >= 0 ? 'text-success' : 'text-danger'}>{fmtPct(u.pct_ahorro)}</td>
+                                    <td style={{ textAlign: 'center' }}>{u.total}</td>
+                                    <td style={{ textAlign: 'center' }}>{u.adjudicadas}</td>
+                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{fmt(u.presupuesto)}</td>
+                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{u.monto_oc > 0 ? fmt(u.monto_oc) : '—'}</td>
+                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: u.ahorro >= 0 ? '#16a34a' : '#dc2626' }}>{fmt(u.ahorro)}</td>
+                                    <td style={{ textAlign: 'right', fontWeight: 600, color: u.pct_ahorro >= 0 ? '#16a34a' : '#dc2626' }}>{fmtPct(u.pct_ahorro)}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -222,40 +258,52 @@ export default function AhorroTab({ stats, loading, chartsRef }) {
             </div>
 
             {/* ── Top ítems con mayor ahorro ── */}
-            <div className="card">
-                <div className="table-toolbar">
-                    <h3 className="card-title">Top Ítems con Mayor Ahorro (Metodología Res.188)</h3>
-                    <input
-                        className="search-input"
-                        placeholder="🔍 Buscar ítem o CA..."
-                        value={busquedaItems}
-                        onChange={e => setBusquedaItems(e.target.value)}
-                    />
+            <div className="card" style={{ marginBottom: 16 }}>
+                <div className="card-header card-header-accent">
+                    <span>💰</span>
+                    <span className="card-title">Top Ítems con Mayor Ahorro (Metodología Res.188)</span>
+                    <div style={{ marginLeft: 'auto' }}>
+                        <input
+                            className="filter-input"
+                            placeholder="🔍 Buscar ítem o CA..."
+                            value={busquedaItems}
+                            onChange={e => setBusquedaItems(e.target.value)}
+                            style={{ minWidth: 200 }}
+                        />
+                    </div>
                 </div>
-                <div className="table-scroll">
-                    <table className="data-table sortable">
+                <div className="table-responsive">
+                    <table className="table-gob">
                         <thead>
                             <tr>
-                                <th onClick={() => toggleTop('codigo_ca')} className="sortable-th">Código CA{arrowTop('codigo_ca')}</th>
-                                <th onClick={() => toggleTop('nombre_producto')} className="sortable-th">Producto{arrowTop('nombre_producto')}</th>
-                                <th onClick={() => toggleTop('precio_promedio')} className="sortable-th">Precio Promedio{arrowTop('precio_promedio')}</th>
-                                <th onClick={() => toggleTop('precio_adjudicado')} className="sortable-th">Precio Adjudicado{arrowTop('precio_adjudicado')}</th>
-                                <th onClick={() => toggleTop('cantidad')} className="sortable-th">Cantidad{arrowTop('cantidad')}</th>
-                                <th onClick={() => toggleTop('ahorro')} className="sortable-th">Ahorro Total{arrowTop('ahorro')}</th>
+                                <SortTh col="codigo_ca" label="Código CA" toggle={toggleTop} arrow={arrowTop} />
+                                <SortTh col="nombre_producto" label="Producto" toggle={toggleTop} arrow={arrowTop} />
+                                <SortTh col="precio_promedio" label="Precio Promedio" toggle={toggleTop} arrow={arrowTop} align="right" />
+                                <SortTh col="precio_adjudicado" label="Precio Adjudicado" toggle={toggleTop} arrow={arrowTop} align="right" />
+                                <SortTh col="cantidad" label="Cantidad" toggle={toggleTop} arrow={arrowTop} align="center" />
+                                <SortTh col="ahorro" label="Ahorro Total" toggle={toggleTop} arrow={arrowTop} align="right" />
                             </tr>
                         </thead>
                         <tbody>
                             {topFiltrados.length === 0 && (
-                                <tr><td colSpan={6} style={{ textAlign: 'center', color: '#9ca3af' }}>Sin datos</td></tr>
+                                <tr><td colSpan={6} style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>Sin datos</td></tr>
                             )}
                             {topFiltrados.map((item, i) => (
                                 <tr key={i}>
-                                    <td><span className="codigo-badge">{item.codigo_ca}</span></td>
-                                    <td title={item.nombre_producto}>{item.nombre_producto?.slice(0, 50)}{item.nombre_producto?.length > 50 ? '…' : ''}</td>
-                                    <td>{fmt(item.precio_promedio)}</td>
-                                    <td>{fmt(item.precio_adjudicado)}</td>
-                                    <td>{item.cantidad}</td>
-                                    <td className="text-success">{fmt(item.ahorro)}</td>
+                                    <td>
+                                        <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 7px', borderRadius: 6, border: '1px solid #bfdbfe' }}>
+                                            {item.codigo_ca}
+                                        </span>
+                                    </td>
+                                    <td title={item.nombre_producto} style={{ maxWidth: 260 }}>
+                                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {item.nombre_producto}
+                                        </div>
+                                    </td>
+                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{fmt(item.precio_promedio)}</td>
+                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{fmt(item.precio_adjudicado)}</td>
+                                    <td style={{ textAlign: 'center' }}>{item.cantidad}</td>
+                                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#16a34a', fontFamily: 'monospace', fontSize: 12 }}>{fmt(item.ahorro)}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -265,28 +313,42 @@ export default function AhorroTab({ stats, loading, chartsRef }) {
 
             {/* ── Ítems con oportunidad de mejora ── */}
             {mejorFiltrados.length > 0 && (
-                <div className="card">
-                    <h3 className="card-title">⚠️ Oportunidades de Mejora — Precio Adjudicado &gt; Promedio</h3>
-                    <p className="card-subtitle">Ítems donde el precio adjudicado superó el precio promedio de las ofertas. Requieren revisión.</p>
-                    <div className="table-scroll">
-                        <table className="data-table sortable">
+                <div className="card" style={{ marginBottom: 16 }}>
+                    <div className="card-header" style={{ background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}>
+                        <span>⚠️</span>
+                        <span className="card-title" style={{ color: '#c2410c' }}>Oportunidades de Mejora — Precio Adjudicado &gt; Promedio</span>
+                        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>{mejorFiltrados.length} ítem(s)</span>
+                    </div>
+                    <div style={{ padding: '8px 16px', background: '#fff7ed', borderBottom: '1px solid #fed7aa', fontSize: 12, color: '#92400e' }}>
+                        Ítems donde el precio adjudicado superó el precio promedio de las ofertas. Requieren revisión.
+                    </div>
+                    <div className="table-responsive">
+                        <table className="table-gob">
                             <thead>
                                 <tr>
-                                    <th onClick={() => toggleMejora('codigo_ca')} className="sortable-th">Código CA{arrowMejora('codigo_ca')}</th>
-                                    <th onClick={() => toggleMejora('nombre_producto')} className="sortable-th">Producto{arrowMejora('nombre_producto')}</th>
-                                    <th onClick={() => toggleMejora('precio_promedio')} className="sortable-th">Precio Promedio{arrowMejora('precio_promedio')}</th>
-                                    <th onClick={() => toggleMejora('precio_adjudicado')} className="sortable-th">Precio Adjudicado{arrowMejora('precio_adjudicado')}</th>
-                                    <th onClick={() => toggleMejora('diferencia')} className="sortable-th">Sobrecosto{arrowMejora('diferencia')}</th>
+                                    <SortTh col="codigo_ca" label="Código CA" toggle={toggleMejora} arrow={arrowMejora} />
+                                    <SortTh col="nombre_producto" label="Producto" toggle={toggleMejora} arrow={arrowMejora} />
+                                    <SortTh col="precio_promedio" label="Precio Promedio" toggle={toggleMejora} arrow={arrowMejora} align="right" />
+                                    <SortTh col="precio_adjudicado" label="Precio Adjudicado" toggle={toggleMejora} arrow={arrowMejora} align="right" />
+                                    <SortTh col="diferencia" label="Sobrecosto" toggle={toggleMejora} arrow={arrowMejora} align="right" />
                                 </tr>
                             </thead>
                             <tbody>
                                 {mejorFiltrados.map((item, i) => (
                                     <tr key={i}>
-                                        <td><span className="codigo-badge">{item.codigo_ca}</span></td>
-                                        <td title={item.nombre_producto}>{item.nombre_producto?.slice(0, 50)}{item.nombre_producto?.length > 50 ? '…' : ''}</td>
-                                        <td>{fmt(item.precio_promedio)}</td>
-                                        <td>{fmt(item.precio_adjudicado)}</td>
-                                        <td className="text-danger">{fmt(item.diferencia)}</td>
+                                        <td>
+                                            <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#fef2f2', color: '#dc2626', padding: '2px 7px', borderRadius: 6, border: '1px solid #fca5a5' }}>
+                                                {item.codigo_ca}
+                                            </span>
+                                        </td>
+                                        <td title={item.nombre_producto} style={{ maxWidth: 260 }}>
+                                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {item.nombre_producto}
+                                            </div>
+                                        </td>
+                                        <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{fmt(item.precio_promedio)}</td>
+                                        <td style={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>{fmt(item.precio_adjudicado)}</td>
+                                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#dc2626', fontFamily: 'monospace', fontSize: 12 }}>{fmt(item.diferencia)}</td>
                                     </tr>
                                 ))}
                             </tbody>

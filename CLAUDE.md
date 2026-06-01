@@ -1,308 +1,243 @@
-# CLAUDE.md — BD_SISTEMA
+# CLAUDE.md
 
-Contexto persistente del proyecto para Claude Code. Leer antes de cualquier tarea.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Subagentes disponibles:**
-> - `backend/CLAUDE.md` — Django REST API: modelos, endpoints, convenciones
-> - `frontend/CLAUDE.md` — React SPA: features, hooks, rutas, componentes
-> - `api/CLAUDE.md` — Scripts ETL: flujo de datos, integración Django, CSV
+> **Agentes especializados en `.claude/`** — leer antes de cada tarea:
 >
-> **Equipo de agentes especializados (`.claude/`):**
-> - `agent-arquitectura.md` — Cómo agregar nuevos módulos, decisiones de diseño, patrón completo de feature
-> - `agent-datos.md` — Mapa completo de tablas DB, relaciones, fuentes de datos, convenciones de nombres
-> - `agent-seguridad.md` — Vulnerabilidades conocidas, fixes pendientes, checklist para código nuevo
-> - `agent-testing.md` — Estrategia de tests, patrones Django/React, prioridades P1/P2/P3
-> - `agent-devops.md` — Deploy con Nginx+Gunicorn, systemd, ETL automatizado, checklist de producción
-> - `django_mysql_expert.md` — Buenas prácticas generales Django + MySQL (Clean Architecture, SOLID)
-> - `react_expert.md` — Buenas prácticas generales React (SOLID, Feature-Sliced Design)
+> | Agente | Cuándo leerlo |
+> |---|---|
+> | `agent-arquitectura.md` | Antes de agregar módulo, decidir estructura, o tocar routing |
+> | `agent-datos.md` | Antes de consultar, modificar o crear modelos y relaciones DB |
+> | `agent-codigo.md` | Antes de escribir código backend o frontend nuevo |
+> | `agent-seguridad.md` | Antes de cada commit o deploy |
+> | `agent-testing.md` | Antes de escribir cualquier test |
+> | `agent-devops.md` | Para deploy, Nginx, ETL cron, backups, troubleshooting |
 
 ---
 
-## Descripción del proyecto
+## What this system does
 
-Sistema web de gestión de compras públicas para el **organismo 7296** (Chile). Consume la API de Mercado Público, almacena en MariaDB y expone los datos mediante una API REST Django + SPA React.
+Internal procurement management web app for **Organismo 7296 — Servicio de Salud Osorno** (Chile). Pulls data from the Mercado Público API, stores it in MariaDB, and exposes it via Django REST API + React SPA.
 
 ---
 
-## Estructura de repositorio
+## Development commands
+
+```bash
+# Backend — from BD_SISTEMA/backend/
+python manage.py runserver 0.0.0.0:8000
+python manage.py makemigrations && python manage.py migrate
+python manage.py createsuperuser
+
+# Frontend — from BD_SISTEMA/frontend/
+npm run dev        # Vite dev server on :5173
+npm run build      # Outputs to dist/ (served by Django at /bd_sistema/)
+
+# ETL scripts — from BD_SISTEMA/api/  (run manually or via cron)
+python LI_SSO_SERVER.py        # Licitaciones ETL
+python OC_SSO_SERVER.py        # Órdenes de Compra ETL
+```
+
+No linting configured. Tests aún no implementados — ver `agent-testing.md` para la estrategia y los comandos (pytest + Vitest).
+
+---
+
+## Repository layout
 
 ```
 BD_SISTEMA/
-├── backend/        # Django 4.2 + DRF — API REST
-├── frontend/       # React 18 + Vite — SPA
-├── api/            # Scripts ETL Python (ejecución manual/cron)
-├── venv/           # Virtualenv Python compartido
-└── requirements.txt
+├── backend/          # Django 4.2 + DRF 3.16 — REST API on :8000
+│   ├── core/         # settings.py, urls.py (mounts /api/ and /bd_sistema/ SPA)
+│   └── api/          # ALL active models, views, serializers, services, urls
+├── frontend/         # React 18 + Vite SPA — served at /bd_sistema/
+│   └── src/
+│       ├── App.jsx              # Router + RequireAuth/RequireRole guards
+│       ├── components/ui/AppLayout.jsx  # Shell: Topbar + Sidebar + <Outlet>
+│       ├── pages/               # Legacy pages (Dashboard, Home, OC, AnexoDeuda)
+│       └── features/            # Feature-Sliced modules (preferred pattern)
+└── api/              # Python ETL scripts — NOT a web server, run via CLI
+    ├── LI_SSO_SERVER.py
+    ├── OC_SSO_SERVER.py
+    └── data/         # Static Excel/CSV files (PAC, FSC, facturas) — NOT in DB
 ```
 
 ---
 
-## Componente 1: `backend/` — Django REST API
+## Data flow
 
-### Stack
-- Python + Django 4.2, Django REST Framework 3.16
-- MySQL/MariaDB (`mysqlclient`), `django-cors-headers`, `simplejwt`
-- `pandas`, `numpy` para procesamiento en servicios
+```
+Mercado Público API (HTTPS, SSL disabled — known issue)
+  → api/ ETL scripts (import Django ORM directly, no HTTP)
+  → MariaDB :3306  bd_sistema
+  → backend/ Django :8000  /api/*  (JWT required)
+  → frontend/ React  /bd_sistema/
+```
 
-### Configuración relevante (`backend/core/settings.py`)
-- `DEBUG = True`, `ALLOWED_HOSTS = ['*']`
-- DB: MariaDB en `127.0.0.1:3306`, base `bd_sistema`, usuario `root`
-- `TIME_ZONE = 'America/Santiago'`, `LANGUAGE_CODE = 'es-cl'`
-- JWT: access token 1 día / refresh token 7 días
-- Cache: `LocMemCache` (volátil, se pierde al reiniciar el proceso)
-- `CORS_ALLOW_ALL_ORIGINS = True`
-- Paginación por defecto: 50 registros (`PageNumberPagination`)
+ETL scripts call `bulk_create` / `all().delete()` on the ORM directly — no intermediate HTTP. Modifying a model requires checking the corresponding ETL script for compatibility.
 
-### Apps Django
-| App | Rol |
-|---|---|
-| `core/` | Configuración del proyecto, urls raíz |
-| `api/` | App principal: modelos, views, serializers, servicios |
-| `ordenes_compra/` | App secundaria, modelos en DB pero sin endpoints propios aún |
+---
 
-### Modelos de datos
-| Modelo | Tabla | Descripción |
+## Backend — active models (`backend/api/models.py`)
+
+Two naming conventions coexist — **do not mix them in new code**:
+
+| Convention | Models | Rule for new models |
 |---|---|---|
-| `Licitacion` | (auto Django) | PK: `codigo_licitacion`. Estado, fechas, organismo, monto |
-| `DetalleLicitacion` | (auto Django) | FK→Licitacion. Producto, categoría, ganador |
-| `OrdenCompra` | `api_ordencompra` | PK: `codigo_oc`. Estado, montos, proveedor, comprador, PAC |
-| `DetalleOrdenCompra` | `api_detalleordencompra` | FK→OrdenCompra. Líneas de detalle |
-| `Devengo` | `devengo` | Anexo N°3: deuda por UE, tipo doc, conceptos presupuestarios |
-| `Anexo1` | `tabla_anexo1` | Consolidado presupuestario |
-| `Proveedor` | `T_Proveedores` | PK: `rut`. Catálogo para boletas |
-| `Comprador` | `T_Comprador` | Catálogo compradores internos |
-| `BoletaGarantia` | `T_BoletaGarantia` | CRUD completo con adjunto (media/) |
-| `BoletaGarantiaAudit` | `T_BoletaGarantia_Audit` | Log JSON de cambios (MODIFICAR/ELIMINAR) |
+| PascalCase fields (legacy, from MP API) | `Licitacion`, `OrdenCompra`, `DetalleLicitacion`, `DetalleOrdenCompra` | Keep as-is; use `db_column` if renaming |
+| snake_case fields (correct Django style) | All others | **Use this** |
 
-### Endpoints REST (todos requieren JWT Bearer excepto `/auth/`)
-```
-POST   /api/auth/login/
-POST   /api/auth/refresh/
-
-GET    /api/licitaciones/             (filtros: Estado, C_NombreOrganismo, Tipo)
-GET    /api/licitaciones/{id}/
-GET    /api/detalles/
-GET    /api/ordenes-compra/           (filtros: EstadoOC, C_Unidad, TipoOC)
-GET    /api/ordenes-compra/{id}/
-GET    /api/ordenes-compra-detalles/
-GET    /api/ordenes-compra/raw_all/   (sin paginación, max 20000)
-GET    /api/devengo/
-GET    /api/devengo/{id}/
-GET    /api/devengo/stats/            (cache 5min)
-GET    /api/devengo/raw_all/          (sin paginación, max 10000)
-GET    /api/dashboard/stats/          (KPIs licitaciones, cache 5min)
-GET    /api/proveedores/              (sin paginación)
-GET    /api/compradores/              (sin paginación)
-CRUD   /api/boletas-garantia/
-GET    /api/boletas-garantia-audit/   (solo lectura)
-```
-
-### Lógica de negocio
-- `backend/api/services.py` → `obtener_kpis_devengo()`: agrega deuda por UE, top proveedores, breakdowns
-- Auditoría de boletas se dispara automáticamente en update/delete (override de `perform_update`/`perform_destroy`)
+| Model | DB table | PK | Notes |
+|---|---|---|---|
+| `Licitacion` | `api_licitacion` | `codigo_licitacion` | PascalCase legacy |
+| `DetalleLicitacion` | `api_detallicitacion` | `id` | FK→Licitacion |
+| `OrdenCompra` | `api_ordencompra` | `codigo_oc` | PascalCase legacy. `TotalNeto`/`TotalBruto` are **TextField** — convert with `Number()` / `Decimal()` |
+| `DetalleOrdenCompra` | `api_detalleordencompra` | `id` | FK→OrdenCompra |
+| `Factura` | (auto) | `id` | `emision` stored as DD-MM-YYYY string |
+| `PlanerPAC` | (auto) | `id` | PAC plan data loaded from Excel |
+| `CompraAgilResumen` | `api_compraagil_resumen` | `codigocompraagil` | `presupuestoestimado` is **TextField** |
+| `CompraAgilDocumento` | `api_compraagil_documentos` | `id` | FK→CompraAgilResumen |
+| `CompraAgilProducto` | `api_compraagil_productos` | `id` | FK→CompraAgilResumen |
+| `CompraAgilProductoCotizado` | `api_compraagil_productos_cotizados` | `id` | Quoted prices |
+| `CompraAgilProveedor` | `api_compraagil_proveedores` | `id` | `proveedorseleccionado` field is **inconsistent**: values are `"1"`, `"Si"`, `"si"`, `"True"`, `"true"` — check with `str(val) in ['1','Si','si','True','true']` |
+| `RevisionOCCorregible` | (auto) | `id` | Manual PAC-link review with resultado/motivo/observaciones |
+| `Devengo` | `devengo` | `id` | snake_case |
+| `Anexo1` | `tabla_anexo1` | `id` | snake_case |
+| `Proveedor` | `T_Proveedores` | `rut` | Custom table name |
+| `Comprador` | `T_Comprador` | `id` | Custom table name |
+| `BoletaGarantia` | `T_BoletaGarantia` | `id` | CRUD + file upload |
+| `BoletaGarantiaAudit` | `T_BoletaGarantia_Audit` | `id` | Auto-written on update/delete |
 
 ---
 
-## Componente 2: `frontend/` — React SPA
+## Backend — all REST endpoints (`/api/`)
 
-### Stack
-- React 18.3, React Router 7.13, Axios 1.13
-- Chart.js 4.5 + react-chartjs-2
-- xlsx 0.18 para exportación Excel
-- Vite 5.4 como build tool
+All require `Authorization: Bearer <access_token>` except `/auth/`.
 
-### Configuración
-- `VITE_API_URL=http://10.8.153.227:8000/api/` (IP LAN del servidor)
-- Desplegada en subruta `/bd_sistema/` (`vite.config.js: base: '/bd_sistema/'`)
-- `BrowserRouter` usa `basename="/bd_sistema"`
-
-### Estructura de `src/`
 ```
-src/
-├── main.jsx            # Entry point, registra Chart.js
-├── App.jsx             # Router principal con guards por rol
-├── store/authStore.jsx # Context API + useReducer (auth global)
-├── lib/axios.js        # Instancia Axios con interceptores JWT
-├── utils.jsx
-├── components/         # Componentes compartidos (Sidebar, Topbar, secciones)
-├── pages/              # Páginas generales
-│   ├── Dashboard.jsx          (/licitaciones)
-│   ├── AnexoDeudaPage.jsx     (/anexo3)
-│   └── OrdenesCompraDashboard.jsx (/ordenes-compra)
-└── features/           # Módulos por dominio (lazy loaded)
-    ├── auth/           # LoginPage, hooks, API calls
-    ├── abastecimiento/ # Boletas garantía, FSC
-    └── finanzas/       # Dashboard devengo
+POST  auth/login/                         TokenObtainPairView
+POST  auth/refresh/                       TokenRefreshView
+
+# Licitaciones
+GET   licitaciones/                       ?Estado=&C_NombreOrganismo=&Tipo=&EsRenovable=
+GET   licitaciones/{id}/
+GET   detalles/                           ?licitacion=&CodigoProducto=&Categoria=
+GET   dashboard/stats/                    KPI aggregates (5 min cache)
+
+# Órdenes de Compra
+GET   ordenes-compra/                     ?EstadoOC=&C_Unidad=&TipoOC=
+GET   ordenes-compra/{id}/
+GET   ordenes-compra-detalles/
+GET   ordenes-compra/raw_all/             ?estado=&anio=&limit= (max 20 000, unpaginated)
+GET   ordenes-compra/proyectos-licitacion/ CodigoLicitacion→ID_Proyecto map (10 min cache)
+GET   facturas/raw_all/                   ?anio= (unpaginated, emision as DD-MM-YYYY string)
+
+# Devengo (Anexo N°3)
+GET   devengo/                            ?codigo_ue=&tipo_documento=&concepto_presupuestario=&search=&ordering=
+GET   devengo/{id}/
+GET   devengo/stats/                      ?ue=&solo_deuda= (5 min cache per ue/flag combo)
+GET   devengo/raw_all/                    ?ue=&desde=&hasta=&limit= (max 10 000)
+
+# PAC
+GET   planer-pac/                         PAC plan rows
+GET   pac/indicadores-res188/             Res.188/2026 savings indicators
+GET   pac/oc-stats/                       OC stats aggregated for PAC
+GET   pac/oc-productos/                   Products per OC for PAC analysis
+
+# Compra Ágil
+GET   compraagil-resumen/                 ?estadoglosa=&unidadcompra=&search=
+GET   compraagil-productos/               ?codigocompraagil=
+GET   compraagil-proveedores/             ?codigocompraagil=
+GET   compraagil/ahorro-stats/            ?fecha_desde=&fecha_hasta= (5 min cache)
+
+# Garantías (Boletas)
+GET   proveedores/                        ?search= (no pagination)
+GET   compradores/                        ?search= (no pagination)
+CRUD  boletas-garantia/                   ?tipo_documento=&banco=&proveedor=&search=&ordering=
+GET   boletas-garantia/{id}/
+GET   boletas-garantia-audit/             Read-only
+
+# Revisiones OC
+CRUD  revisiones-oc/                      ?codigo_oc=
 ```
 
-### Sistema de autenticación
-- JWT en `localStorage` (`access_token`, `refresh_token`)
-- Interceptor REQUEST: inyecta `Authorization: Bearer <token>`
-- Interceptor RESPONSE: ante 401 → intenta refresh automático → si falla, limpia sesión y redirige a `/bd_sistema/login`
-- Cola de peticiones pendientes durante el refresh (patrón `failedQueue`)
+**Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`.
 
-### Rutas y roles
-| Ruta | Componente | Roles |
-|---|---|---|
-| `/login` | LoginPage | Público |
-| `/` | Home | Autenticado |
-| `/licitaciones` | Dashboard | Autenticado |
-| `/anexo3` | AnexoDeudaPage | Autenticado |
-| `/ordenes-compra` | OrdenesCompraDashboard | Autenticado |
-| `/abastecimiento/*` | AbastecimientoDashboard, FSCManager, BoletasPage | admin, abastecimiento, viewer |
-| `/finanzas/*` | FinanzasDashboard | admin, finanzas |
-
-Roles extraídos del JWT payload: `user.role` o `user.groups[0]` → `admin | abastecimiento | finanzas | viewer`
-
-### Capas de API por feature
-- `features/auth/api/` → `/auth/`
-- `features/abastecimiento/api/boletasApi.js` → proveedores, compradores, boletas, auditoría
-- `features/abastecimiento/api/abastecimientoApi.js` → datos FSC/PAC
-- `features/finanzas/api/finanzasApi.js` → devengo stats + raw_all
-
----
-
-## Componente 3: `api/` — Scripts ETL Python
-
-### Propósito
-Extracción de datos desde Mercado Público hacia la base de datos. Se ejecutan manualmente desde CLI o por cron. **No son un servidor HTTP.**
-
-### Configuración fija en scripts
-- `CODIGO_ORGANISMO = "7296"`
-- `TICKET = "2798F2D3-0AC5-4323-9BB9-5E90618194BA"`
-- API Mercado Público: `https://api.mercadopublico.cl/servicios/v1/publico/`
-
-### Scripts principales
-| Script | Función |
-|---|---|
-| `LI_SSO_SERVER.py` | ETL de licitaciones. Menú CLI: descarga diaria, unificar, refresh, sincronizar a DB |
-| `OC_SSO_SERVER.py` | ETL de órdenes de compra + cruce con datos PAC. Misma estructura |
-| `OC_SSO_PorDiaPeriodo_v2.py` | Variante para rango de fechas |
-| `apiv1/` | Scripts legacy de consolidación |
-
-### Integración con Django (importante)
-Los scripts importan Django ORM **directamente** mediante:
+**Cache pattern** — all stat endpoints use `LocMemCache` (volatile — lost on restart, not shared across workers):
 ```python
-sys.path.append('../backend')
-os.environ['DJANGO_SETTINGS_MODULE'] = 'core.settings'
-django.setup()
-```
-Luego llaman a `Model.objects.bulk_create()` y `Model.objects.all().delete()`.
-**No hay comunicación HTTP entre ETL y backend.**
-
-### Archivos de trabajo
-```
-api/LI_DSSO/DIARIO/     # CSVs diarios de licitaciones
-api/LI_DSSO/MAESTROS/   # Maestro_Resumen.csv + Maestro_Detalle.csv
-api/OC_DSSO/DIARIO/     # CSVs diarios de OC
-api/OC_DSSO/MAESTROS/   # OC_Maestro_Resumen.csv + OC_Maestro_Detalles.csv
-api/data/               # Datos estáticos: FSC, PAC, facturas, convenios, devengo, anexo1
-```
-
-### `api/data/data_loader.py`
-Usa Streamlit con `@st.cache_data` para cargar FSC, PAC, OC-PAC y facturas. Interfaz de análisis exploratorio, **separada del sistema Django/React**.
-
----
-
-## Flujo de datos completo
-
-```
-[Mercado Público API]
-        │ HTTPS (urllib, SSL no verificado)
-        ▼
-[api/ Scripts ETL]  →  CSV locales  →  Django ORM directo
-                                              │
-                                              ▼
-                                    [MariaDB :3306 bd_sistema]
-                                              │ ORM
-                                              ▼
-                                    [backend/ Django :8000]
-                                      /api/* (JWT required)
-                                              │ HTTP/JSON + JWT
-                                              ▼
-                                    [frontend/ React /bd_sistema/]
+cache_key = f'my_stats_{param}'
+if data := cache.get(cache_key):
+    return Response(data)
+# compute...
+cache.set(cache_key, data, timeout=300)
 ```
 
 ---
 
-## Base de datos
+## Frontend — layout rule (critical)
 
-- **Motor:** MariaDB / MySQL
-- **Host:** `127.0.0.1:3306`
-- **Base:** `bd_sistema`
-- **Usuario:** `root`
-- **Charset:** `utf8mb4`
-- Las tablas de Boletas usan nombres personalizados (`T_BoletaGarantia`, `T_Comprador`, etc.)
-- Las tablas de Django siguen convención `app_modelo` (`api_ordencompra`, etc.)
+**All pages render inside `AppLayout`** (`components/ui/AppLayout.jsx`), which already provides `<Topbar>`, `<Sidebar>`, `<main class="main">` (margin-left: 68px, margin-top: 40px), and `<div class="content">` (padding: 24px 28px 48px).
 
----
+**Pages must NOT include their own `<Sidebar>`, `<Topbar>`, `<main>`, or `<div class="content">`** — doing so stacks margins and creates ~192px of left whitespace.
 
-## Decisiones de arquitectura relevantes
+```jsx
+// ✅ Correct — renders inside AppLayout's .content
+export default function MyPage() {
+    return (
+        <>
+            <div className="page-header">
+                <div className="page-title"><span className="page-title-icon">📄</span> Title</div>
+                <div className="page-subtitle">Subtitle</div>
+            </div>
+            {/* content */}
+        </>
+    );
+}
 
-1. **ETL sin HTTP:** los scripts ETL acceden a Django ORM directamente vía `sys.path`. No hay API interna entre `api/` y `backend/`.
-2. **Un solo proceso Django** en desarrollo (runserver). No hay workers Gunicorn/uWSGI configurados aún.
-3. **Cache volátil:** `LocMemCache` se pierde al reiniciar. No usar para datos críticos.
-4. **CORS abierto:** `CORS_ALLOW_ALL_ORIGINS = True`. Aceptable en red local, revisar en producción.
-5. **Credenciales hardcoded:** `settings.py` tiene `SECRET_KEY`, contraseña de DB y ticket de API sin variables de entorno.
-6. **Auditoría parcial:** solo `BoletaGarantia` tiene log de cambios. El resto de modelos no tiene historial.
-7. **Datos complementarios en archivos:** FSC, PAC, facturas viven como Excel/CSV en `api/data/`, no en MariaDB.
-8. **SPA en subruta:** el frontend se sirve en `/bd_sistema/`. Requiere servidor web (Nginx/Apache) con proxy reverso a Django en :8000.
-
----
-
-## Convenciones de código
-
-### Backend (Python/Django)
-- Serializers en `backend/api/serializers.py`
-- Lógica de negocio compleja en `backend/api/services.py`, no en views
-- Nuevos endpoints: preferir `ViewSet` + `Router` sobre `APIView` sueltas
-- Nuevos modelos: agregar a `backend/api/models.py` (o `ordenes_compra/models.py` si aplica) + migración
-
-### Frontend (React)
-- Nuevas features van en `src/features/<dominio>/` con subcarpetas `api/`, `components/`, `hooks/`, `routes/`
-- Llamadas HTTP siempre a través de la instancia Axios de `src/lib/axios.js` (tiene interceptores JWT)
-- Estado global de auth solo via `useAuth()` hook de `src/store/authStore.jsx`
-- Roles se validan en `App.jsx` mediante el guard de rutas
-
-### Scripts ETL
-- Mantener menú CLI numérico (patrón existente)
-- Resiliencia: backoff + reintentos para llamadas a Mercado Público
-- Siempre hacer `django.setup()` antes de importar modelos
-
----
-
-## Comandos de desarrollo
-
-```bash
-# Backend
-cd backend
-python manage.py runserver 0.0.0.0:8000
-
-# Frontend
-cd frontend
-npm run dev          # dev server :5173
-npm run build        # genera dist/
-
-# ETL Licitaciones
-cd api
-python LI_SSO_SERVER.py
-
-# ETL Órdenes de Compra
-cd api
-python OC_SSO_SERVER.py
-
-# DB migrations
-cd backend
-python manage.py makemigrations
-python manage.py migrate
+// ❌ Wrong — creates double wrapper
+export default function MyPage() {
+    return (
+        <div style={{ display: 'flex' }}>
+            <Sidebar /><main className="main"><Topbar /><div className="content">...</div></main>
+        </div>
+    );
+}
 ```
 
+Feature pages (`features/*/components/*Page.jsx`) use `<div className="feature-page">` as root — this is a no-padding semantic wrapper; AppLayout's `.content` provides the actual padding.
+
 ---
 
-## Lo que NO está implementado aún
+## Frontend — routes and feature structure
 
-- `ordenes_compra/` app tiene modelos pero sin URLs/views expuestos
-- No hay proceso de despliegue automatizado (Nginx config, systemd, etc.)
-- No hay variables de entorno (`.env`) en el backend — credenciales hardcoded
-- No hay tests automatizados (unitarios ni de integración)
-- Cache distribuida (Redis) no configurada
+| Route | Component | Roles |
+|---|---|---|
+| `/login` | `features/auth/pages/LoginPage` | Public |
+| `/` | `pages/Home` | Authenticated |
+| `/licitaciones` | `pages/Dashboard` | Authenticated |
+| `/anexo3` | `pages/AnexoDeudaPage` | Authenticated |
+| `/ordenes-compra` | `pages/OrdenesCompraDashboard` | Authenticated |
+| `/compra-agil` | `features/compra-agil/components/CompraAgilPage` | Authenticated |
+| `/pac` | `features/pac/components/PacDashboardPage` | Authenticated |
+| `/abastecimiento/*` | `features/abastecimiento/` | admin, abastecimiento, viewer |
+| `/finanzas/*` | `features/finanzas/` | admin, finanzas |
+
+New modules go in `src/features/<domain>/` with `api/`, `components/`, `hooks/`, `routes/` subdirectories. HTTP calls always through `src/lib/axios.js` (has JWT interceptors and automatic token refresh). Auth state only via `useAuth()` from `src/store/authStore.jsx`.
+
+---
+
+## Known issues to fix before production
+
+| Priority | Issue | Location |
+|---|---|---|
+| 🔴 | `SECRET_KEY` and DB password hardcoded in source | `backend/core/settings.py` |
+| 🔴 | `DEBUG = True` and `ALLOWED_HOSTS = ['*']` | `backend/core/settings.py` |
+| 🔴 | DB user is `root` — needs least-privilege user | MariaDB |
+| 🟠 | `CORS_ALLOW_ALL_ORIGINS = True` | `backend/core/settings.py` |
+| 🟠 | SSL verification disabled in Mercado Público API calls | `api/*.py` ETL scripts |
+| 🟠 | ETL uses DELETE+bulk_create without atomic rollback | `api/LI_SSO_SERVER.py`, `OC_SSO_SERVER.py` |
+| 🟡 | `LocMemCache` is volatile and not shared across Gunicorn workers | `backend/core/settings.py` |
+| 🟡 | `facturas_raw_all` filters year with Python string slicing instead of DB query | `backend/api/views.py:facturas_raw_all` |
+| 🟡 | `Factura.emision` stored as DD-MM-YYYY string — can't index or range-query | `backend/api/models.py` |
+| 🟡 | No DB indexes on frequent filter columns (EstadoOC, FechaEnvio, estadoglosa) | `backend/api/models.py` |
+| 🟢 | Delete utility scripts not meant for production | `backend/fix_login.py`, `backend/add_cols.py`, `backend/run_err.txt` |
+| 🟢 | `ordenes_compra/` app empty, not in INSTALLED_APPS | `backend/ordenes_compra/models.py` |

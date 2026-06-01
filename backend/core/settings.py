@@ -1,16 +1,29 @@
 """
 Django settings for BD_SISTEMA.
+
+Variables de entorno cargadas desde backend/.env (ver .env.example).
+Si no existe .env, se usan los fallbacks definidos aquí (solo para desarrollo local).
 """
 
 import datetime
 from pathlib import Path
 
+from decouple import config, Csv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-8&xd20=%g82njyyx0qyh!4&cxhb&drk7wbnxyqb)(bv8fr#&wr'
-DEBUG = True
-ALLOWED_HOSTS = ['*']
+# ─── Seguridad ────────────────────────────────────────────────────────────────
+
+SECRET_KEY = config(
+    'SECRET_KEY',
+    default='django-insecure-8&xd20=%g82njyyx0qyh!4&cxhb&drk7wbnxyqb)(bv8fr#&wr',
+)
+DEBUG = config('DEBUG', default=True, cast=bool)
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ─── Apps ─────────────────────────────────────────────────────────────────────
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -55,19 +68,23 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
+# ─── Base de datos ────────────────────────────────────────────────────────────
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'bd_sistema',
-        'USER': 'root',
-        'PASSWORD': 'Nicolas2017#',
-        'HOST': '127.0.0.1',
-        'PORT': '3306',
+        'NAME':     config('DB_NAME',     default='bd_sistema'),
+        'USER':     config('DB_USER',     default='root'),
+        'PASSWORD': config('DB_PASSWORD', default='Nicolas2017#'),
+        'HOST':     config('DB_HOST',     default='127.0.0.1'),
+        'PORT':     config('DB_PORT',     default='3306'),
         'OPTIONS': {
             'charset': 'utf8mb4',
         },
     }
 }
+
+# ─── Auth ─────────────────────────────────────────────────────────────────────
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -76,26 +93,34 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+# ─── Internacionalización ─────────────────────────────────────────────────────
+
 LANGUAGE_CODE = 'es-cl'
 TIME_ZONE = 'America/Santiago'
 USE_I18N = True
 USE_TZ = True
 
-# Archivos estáticos
-STATIC_URL = 'static/'
+# ─── Archivos estáticos y media ───────────────────────────────────────────────
 
-# Archivos de medios (adjuntos de boletas, etc.)
+STATIC_URL = 'static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Frontend React build
+# Frontend React build (servido por Django en desarrollo)
 FRONTEND_DIST = BASE_DIR.parent / 'frontend' / 'dist'
 
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:5173',
-]
+# ─── CORS ─────────────────────────────────────────────────────────────────────
+# En desarrollo local se permite todo.
+# En producción, definir CORS_ALLOWED_ORIGINS en .env y poner CORS_ALLOW_ALL=False.
+
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # True en desarrollo, False en producción (DEBUG=False)
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:3000,http://localhost:5173',
+    cast=Csv(),
+)
+
+# ─── Django REST Framework ────────────────────────────────────────────────────
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -113,10 +138,16 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 50,
 }
 
+# ─── JWT ──────────────────────────────────────────────────────────────────────
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME':  datetime.timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=7),
 }
+
+# ─── Cache ────────────────────────────────────────────────────────────────────
+# LocMemCache: volátil (se pierde al reiniciar). No compartido entre workers.
+# Migrar a Redis cuando el tiempo de recalculo supere 10s en producción.
 
 CACHES = {
     'default': {
