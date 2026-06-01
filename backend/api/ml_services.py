@@ -161,18 +161,15 @@ def calcular_comparativa_stats():
             por_mes_anio[k]['monto_oc'] += monto_oc
             por_mes_anio[k]['presupuesto'] += presup
 
-    # Proveedores únicos por año (del modelo proveedor)
+    # Proveedores únicos por año — dict O(1) en lugar de búsqueda O(N) por registro
+    ca_anio_map = {
+        ca['codigocompraagil']: (ca.get('fechapublicacion') or '')[:4]
+        for ca in all_ca
+        if ca.get('codigocompraagil')
+    }
     for prov in CompraAgilProveedor.objects.values('codigocompraagil', 'rutproveedor'):
         ca_codigo = prov.get('codigocompraagil') or ''
-        # Buscar año de esa CA
-        ca_anio = next(
-            (
-                (ca.get('fechapublicacion') or '')[:4]
-                for ca in all_ca
-                if ca.get('codigocompraagil') == ca_codigo
-            ),
-            None,
-        )
+        ca_anio = ca_anio_map.get(ca_codigo)
         if ca_anio and ca_anio.isdigit() and prov.get('rutproveedor'):
             por_anio[ca_anio]['proveedores'].add(prov['rutproveedor'])
 
@@ -567,15 +564,20 @@ def calcular_candidatos_convenio(umbral_monto=300000, umbral_frecuencia=3):
         if len(nombre_norm) >= 3:
             grupo_productos[nombre_norm].append(p)
 
-    # Mapa proveedor ganador por CA
+    # Mapa proveedor ganador por CA + mapa rut→nombre (evita N queries a DB después)
+    rut_a_nombre = {}
     ganadores_ca = {}
     for prov in CompraAgilProveedor.objects.values(
         'codigocompraagil', 'rutproveedor', 'razonsocial', 'proveedorseleccionado',
     ):
+        rut = prov.get('rutproveedor') or ''
+        nombre = prov.get('razonsocial') or ''
+        if rut and nombre:
+            rut_a_nombre[rut] = nombre
         if str(prov.get('proveedorseleccionado', '')) in ('1', 'Si', 'si', 'True', 'true'):
             ganadores_ca[prov['codigocompraagil']] = {
-                'rut': prov.get('rutproveedor') or '',
-                'nombre': prov.get('razonsocial') or '',
+                'rut': rut,
+                'nombre': nombre,
             }
 
     candidatos = []
@@ -612,11 +614,8 @@ def calcular_candidatos_convenio(umbral_monto=300000, umbral_frecuencia=3):
             pct_dom = round(conteo[prov_dom_rut] / len(proveedores_ganadores) * 100, 1)
             prov_dominante_rut = prov_dom_rut
             pct_dominancia = pct_dom
-            # Buscar nombre
-            for p in CompraAgilProveedor.objects.filter(
-                rutproveedor=prov_dom_rut
-            ).values('razonsocial')[:1]:
-                nombre_dominante = p.get('razonsocial') or ''
+            # Lookup O(1) desde el mapa ya cargado — sin query adicional a DB
+            nombre_dominante = rut_a_nombre.get(prov_dom_rut, '')
 
         # Scoring
         score = 0
@@ -639,11 +638,13 @@ def calcular_candidatos_convenio(umbral_monto=300000, umbral_frecuencia=3):
 
         nivel = 'Alto' if score >= 3 else 'Medio' if score == 2 else 'Bajo'
 
-        # Nombre legible (recuperar original más común)
+        # Nombre legible — Counter O(N) en lugar de max(set, key=list.count) O(N²)
         nombres_originales = [p.get('nombre') or '' for p in prods if p.get('nombre')]
-        nombre_display = max(
-            set(nombres_originales), key=nombres_originales.count
-        ) if nombres_originales else nombre_norm
+        if nombres_originales:
+            from collections import Counter
+            nombre_display = Counter(nombres_originales).most_common(1)[0][0]
+        else:
+            nombre_display = nombre_norm
 
         candidatos.append({
             'nombre_producto': nombre_display,

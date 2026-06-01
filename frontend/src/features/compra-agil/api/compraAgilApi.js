@@ -9,8 +9,14 @@ export const getCompraAgilAnios = () =>
 export const getCompraAgilComparativa = () =>
     apiClient.get('compraagil/comparativa/');
 
-export const getCompraAgilPatrones = (params = {}) =>
-    apiClient.get('compraagil/patrones/', { params });
+export const getCompraAgilClusters = () =>
+    apiClient.get('compraagil/patrones/', { params: { tipo: 'clusters' } });
+
+export const getCompraAgilAsociaciones = (minSupport = 0.05) =>
+    apiClient.get('compraagil/patrones/', { params: { tipo: 'asociaciones', min_support: minSupport } });
+
+export const getCompraAgilCandidatos = (umbralMonto = 300000, umbralFreq = 3) =>
+    apiClient.get('compraagil/patrones/', { params: { tipo: 'candidatos', umbral_monto: umbralMonto, umbral_frecuencia: umbralFreq } });
 
 export const getCompraAgilResumen = (params = {}) =>
     apiClient.get('compraagil-resumen/', { params });

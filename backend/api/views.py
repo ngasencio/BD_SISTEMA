@@ -440,7 +440,11 @@ def compraagil_comparativa_view(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def compraagil_patrones_view(request):
-    """Patrones ML: clusters, Apriori proveedor/comprador y candidatos convenio."""
+    """
+    Patrones ML segmentados por tipo para carga progresiva en el frontend.
+    ?tipo=clusters|asociaciones|candidatos
+    Cada tipo tiene su propio cache y try/except — un fallo no afecta a los demás.
+    """
     from .ml_services import (
         calcular_clusters_productos,
         calcular_asociaciones_proveedor,
@@ -454,16 +458,51 @@ def compraagil_patrones_view(request):
     except (ValueError, TypeError):
         umbral_monto, umbral_freq, min_support = 300000, 3, 0.05
 
-    cache_key = f'compraagil_patrones_{umbral_monto}_{umbral_freq}_{min_support}'
-    data = cache.get(cache_key)
-    if not data:
-        data = {
-            'clusters': calcular_clusters_productos(),
-            'asociaciones_proveedor': calcular_asociaciones_proveedor(min_support),
-            'asociaciones_comprador': calcular_apriori_comprador(min_support),
-            'candidatos_convenio': calcular_candidatos_convenio(umbral_monto, umbral_freq),
-        }
-        cache.set(cache_key, data, timeout=600)
+    tipo = request.GET.get('tipo', 'clusters')
+
+    if tipo == 'clusters':
+        cache_key = 'compraagil_clusters'
+        data = cache.get(cache_key)
+        if not data:
+            try:
+                data = calcular_clusters_productos()
+            except Exception as e:
+                logger.error('ML clusters error: %s', e)
+                data = {'error': str(e), 'clusters': [], 'n_productos': 0, 'n_analizados': 0}
+            cache.set(cache_key, data, timeout=600)
+
+    elif tipo == 'asociaciones':
+        cache_key = f'compraagil_asoc_{min_support}'
+        data = cache.get(cache_key)
+        if not data:
+            asoc_prov, asoc_comp = {}, {}
+            try:
+                asoc_prov = calcular_asociaciones_proveedor(min_support)
+            except Exception as e:
+                logger.error('ML apriori proveedor error: %s', e)
+                asoc_prov = {'error': str(e), 'frecuentes': [], 'reglas': []}
+            try:
+                asoc_comp = calcular_apriori_comprador(min_support)
+            except Exception as e:
+                logger.error('ML fpgrowth comprador error: %s', e)
+                asoc_comp = {'error': str(e), 'frecuentes': [], 'reglas': []}
+            data = {'asociaciones_proveedor': asoc_prov, 'asociaciones_comprador': asoc_comp}
+            cache.set(cache_key, data, timeout=600)
+
+    elif tipo == 'candidatos':
+        cache_key = f'compraagil_cand_{umbral_monto}_{umbral_freq}'
+        data = cache.get(cache_key)
+        if not data:
+            try:
+                data = calcular_candidatos_convenio(umbral_monto, umbral_freq)
+            except Exception as e:
+                logger.error('ML candidatos error: %s', e)
+                data = {'error': str(e), 'candidatos': [], 'total_encontrados': 0}
+            cache.set(cache_key, data, timeout=600)
+
+    else:
+        return Response({'error': f'tipo no reconocido: {tipo}'}, status=400)
+
     return Response(data)
 
 

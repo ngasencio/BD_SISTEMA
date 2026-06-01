@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Bar, Line } from 'react-chartjs-2';
-import { getCompraAgilComparativa, getCompraAgilPatrones } from '../../api/compraAgilApi';
+import {
+    getCompraAgilComparativa,
+    getCompraAgilClusters,
+    getCompraAgilAsociaciones,
+    getCompraAgilCandidatos,
+} from '../../api/compraAgilApi';
 
 const fmt = n => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n || 0);
 const fmtN = n => new Intl.NumberFormat('es-CL').format(n || 0);
@@ -494,51 +499,193 @@ function BloqueAsociaciones({ asocProv, asocComprador }) {
     );
 }
 
+// ── Progress Stepper ─────────────────────────────────────────────────────────
+function ProgressStepper({ pasos }) {
+    return (
+        <div style={{ padding: '20px 16px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', marginBottom: 16 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 14 }}>
+                🧠 Ejecutando análisis de Machine Learning
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {pasos.map((p, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        {/* Ícono de estado */}
+                        <div style={{
+                            width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 13, fontWeight: 700,
+                            background: p.estado === 'ok' ? '#dcfce7' : p.estado === 'error' ? '#fee2e2' : p.estado === 'loading' ? '#dbeafe' : '#f1f5f9',
+                            color: p.estado === 'ok' ? '#16a34a' : p.estado === 'error' ? '#dc2626' : p.estado === 'loading' ? '#1d4ed8' : '#9ca3af',
+                            border: `2px solid ${p.estado === 'ok' ? '#86efac' : p.estado === 'error' ? '#fca5a5' : p.estado === 'loading' ? '#93c5fd' : '#e2e8f0'}`,
+                        }}>
+                            {p.estado === 'ok' ? '✓' : p.estado === 'error' ? '✗' : p.estado === 'loading' ? '⟳' : String(i + 1)}
+                        </div>
+                        {/* Texto */}
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: p.estado === 'pending' ? '#9ca3af' : '#1e293b' }}>
+                                {p.label}
+                            </div>
+                            {p.detalle && (
+                                <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{p.detalle}</div>
+                            )}
+                        </div>
+                        {/* Barra de progreso individual */}
+                        {p.estado === 'loading' && (
+                            <div style={{ width: 120, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
+                                <div style={{
+                                    height: '100%', background: '#3b82f6', borderRadius: 2,
+                                    animation: 'progressPulse 1.5s ease-in-out infinite',
+                                    width: '60%',
+                                }} />
+                            </div>
+                        )}
+                        {p.estado === 'ok' && p.duracion && (
+                            <span style={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>{p.duracion}s</span>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 const SUB_TABS = [
-    { id: 'evolucion', label: '📈 Evolución Anual' },
+    { id: 'evolucion',     label: '📈 Evolución Anual' },
     { id: 'estacionalidad', label: '📅 Estacionalidad' },
-    { id: 'clusters', label: '🔍 Grupos de Productos' },
-    { id: 'convenio', label: '📋 Candidatos Convenio' },
-    { id: 'asociaciones', label: '🤝 Asociaciones ML' },
+    { id: 'clusters',      label: '🔍 Grupos de Productos' },
+    { id: 'convenio',      label: '📋 Candidatos Convenio' },
+    { id: 'asociaciones',  label: '🤝 Asociaciones ML' },
 ];
+
+// Mapa de qué sub-tabs pertenecen a cada carga
+const TAB_CARGA = {
+    evolucion: 'comp', estacionalidad: 'comp',
+    clusters: 'clusters', convenio: 'candidatos', asociaciones: 'asoc',
+};
 
 export default function ComparativaTab() {
     const [subTab, setSubTab] = useState('evolucion');
-    const [comparativa, setComparativa] = useState(null);
-    const [patrones, setPatrones] = useState(null);
-    const [loadingComp, setLoadingComp] = useState(true);
-    const [loadingPat, setLoadingPat] = useState(true);
-    const [errorComp, setErrorComp] = useState(null);
-    const [errorPat, setErrorPat] = useState(null);
 
+    // ── Estado por sección ───────────────────────────────────────────────────
+    const [comparativa,  setComparativa]  = useState(null);
+    const [clusters,     setClusters]     = useState(null);
+    const [asociaciones, setAsociaciones] = useState(null);
+    const [candidatos,   setCandidatos]   = useState(null);
+
+    const [stComp,    setStComp]    = useState('loading');  // loading|ok|error
+    const [stCluster, setStCluster] = useState('pending');
+    const [stAsoc,    setStAsoc]    = useState('pending');
+    const [stCand,    setStCand]    = useState('pending');
+
+    const [errComp,    setErrComp]    = useState('');
+    const [errCluster, setErrCluster] = useState('');
+    const [errAsoc,    setErrAsoc]    = useState('');
+    const [errCand,    setErrCand]    = useState('');
+
+    const [duraciones, setDuraciones] = useState({});
+
+    // ── Carga comparativa (estadísticas puras, rápida) ───────────────────────
     useEffect(() => {
-        setLoadingComp(true);
+        const t0 = Date.now();
+        setStComp('loading');
         getCompraAgilComparativa()
-            .then(({ data }) => setComparativa(data))
-            .catch(e => setErrorComp(e.message || 'Error al cargar comparativa'))
-            .finally(() => setLoadingComp(false));
+            .then(({ data }) => {
+                setComparativa(data);
+                setStComp('ok');
+                setDuraciones(d => ({ ...d, comp: ((Date.now() - t0) / 1000).toFixed(1) }));
+            })
+            .catch(e => { setStComp('error'); setErrComp(e.message || 'Error al cargar estadísticas'); });
     }, []);
 
+    // ── Carga ML progresiva: clusters → asociaciones → candidatos ────────────
     useEffect(() => {
-        setLoadingPat(true);
-        getCompraAgilPatrones()
-            .then(({ data }) => setPatrones(data))
-            .catch(e => setErrorPat(e.message || 'Error al cargar patrones ML'))
-            .finally(() => setLoadingPat(false));
+        const runML = async () => {
+            // Paso 1: clusters
+            let t = Date.now();
+            setStCluster('loading');
+            try {
+                const { data } = await getCompraAgilClusters();
+                setClusters(data);
+                setStCluster('ok');
+                setDuraciones(d => ({ ...d, cluster: ((Date.now() - t) / 1000).toFixed(1) }));
+            } catch (e) {
+                setStCluster('error');
+                setErrCluster(e.message || 'Error en clustering');
+            }
+
+            // Paso 2: asociaciones
+            t = Date.now();
+            setStAsoc('loading');
+            try {
+                const { data } = await getCompraAgilAsociaciones();
+                setAsociaciones(data);
+                setStAsoc('ok');
+                setDuraciones(d => ({ ...d, asoc: ((Date.now() - t) / 1000).toFixed(1) }));
+            } catch (e) {
+                setStAsoc('error');
+                setErrAsoc(e.message || 'Error en asociaciones');
+            }
+
+            // Paso 3: candidatos
+            t = Date.now();
+            setStCand('loading');
+            try {
+                const { data } = await getCompraAgilCandidatos();
+                setCandidatos(data);
+                setStCand('ok');
+                setDuraciones(d => ({ ...d, cand: ((Date.now() - t) / 1000).toFixed(1) }));
+            } catch (e) {
+                setStCand('error');
+                setErrCand(e.message || 'Error en candidatos');
+            }
+        };
+        runML();
     }, []);
 
-    const handleRefreshCandidatos = (umbralMonto, umbralFreq) => {
-        setLoadingPat(true);
-        getCompraAgilPatrones({ umbral_monto: umbralMonto, umbral_frecuencia: umbralFreq })
-            .then(({ data }) => setPatrones(data))
-            .catch(e => setErrorPat(e.message || 'Error'))
-            .finally(() => setLoadingPat(false));
+    const handleRefreshCandidatos = async (umbralMonto, umbralFreq) => {
+        const t = Date.now();
+        setStCand('loading');
+        try {
+            const { data } = await getCompraAgilCandidatos(umbralMonto, umbralFreq);
+            setCandidatos(data);
+            setStCand('ok');
+            setDuraciones(d => ({ ...d, cand: ((Date.now() - t) / 1000).toFixed(1) }));
+        } catch (e) {
+            setStCand('error');
+            setErrCand(e.message || 'Error al recalcular');
+        }
     };
 
-    const renderError = msg => (
-        <div style={{ padding: 24, textAlign: 'center', color: '#dc2626' }}>
-            <p style={{ fontSize: 14 }}>⚠️ {msg}</p>
+    // ── Pasos del stepper ────────────────────────────────────────────────────
+    const pasosML = [
+        {
+            label: 'Agrupación de productos — TF-IDF + K-means',
+            detalle: clusters ? `${clusters.n_analizados || 0} productos → ${clusters.n_clusters || 0} grupos detectados` : 'Vectorizando nombres de productos y ejecutando clustering...',
+            estado: stCluster, duracion: duraciones.cluster,
+        },
+        {
+            label: 'Asociaciones por proveedor — Algoritmo Apriori',
+            detalle: asociaciones?.asociaciones_proveedor
+                ? `${asociaciones.asociaciones_proveedor.n_proveedores || 0} proveedores · ${asociaciones.asociaciones_proveedor.frecuentes?.length || 0} patrones encontrados`
+                : 'Construyendo matrices de co-ocurrencia y buscando reglas...',
+            estado: stAsoc, duracion: duraciones.asoc,
+        },
+        {
+            label: 'Candidatos a convenio — Scoring multicritério',
+            detalle: candidatos
+                ? `${candidatos.total_encontrados || 0} candidatos identificados`
+                : 'Evaluando frecuencia, proveedor dominante y monto acumulado...',
+            estado: stCand, duracion: duraciones.cand,
+        },
+    ];
+
+    const mlEnProceso = [stCluster, stAsoc, stCand].some(s => s === 'loading' || s === 'pending');
+
+    const renderError = (msg) => (
+        <div style={{ padding: 24, textAlign: 'center' }}>
+            <p style={{ color: '#dc2626', fontSize: 14 }}>⚠️ {msg}</p>
+            <p style={{ color: '#9ca3af', fontSize: 12, marginTop: 6 }}>Revisa los logs del backend para más detalles.</p>
         </div>
     );
 
@@ -547,64 +694,78 @@ export default function ComparativaTab() {
             {/* Sub-tabs */}
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 16, borderBottom: '2px solid #e2e8f0', paddingBottom: 8 }}>
                 {SUB_TABS.map(t => (
-                    <button key={t.id}
-                        onClick={() => setSubTab(t.id)}
-                        style={{
-                            padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                            border: 'none', cursor: 'pointer',
-                            background: subTab === t.id ? '#1d4ed8' : '#f1f5f9',
-                            color: subTab === t.id ? '#fff' : '#475569',
-                            transition: 'all .15s',
-                        }}>
+                    <button key={t.id} onClick={() => setSubTab(t.id)} style={{
+                        padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        border: 'none', cursor: 'pointer', transition: 'all .15s',
+                        background: subTab === t.id ? '#1d4ed8' : '#f1f5f9',
+                        color: subTab === t.id ? '#fff' : '#475569',
+                    }}>
                         {t.label}
                     </button>
                 ))}
             </div>
 
-            {/* Evolución Anual */}
+            {/* Banner de progreso ML — visible cuando algún cálculo corre */}
+            {['clusters', 'convenio', 'asociaciones'].includes(subTab) && (
+                <ProgressStepper pasos={pasosML} />
+            )}
+
+            {/* ── Evolución Anual ── */}
             {subTab === 'evolucion' && (
-                loadingComp ? <div className="loading-spinner">Calculando evolución anual...</div>
-                : errorComp ? renderError(errorComp)
+                stComp === 'loading' ? <div className="loading-spinner">Calculando estadísticas anuales...</div>
+                : stComp === 'error' ? renderError(errComp)
                 : <BloqueEvolucionAnual anios={comparativa?.por_anio || []} />
             )}
 
-            {/* Estacionalidad */}
+            {/* ── Estacionalidad ── */}
             {subTab === 'estacionalidad' && (
-                loadingComp ? <div className="loading-spinner">Calculando heatmap mensual...</div>
-                : errorComp ? renderError(errorComp)
+                stComp === 'loading' ? <div className="loading-spinner">Construyendo heatmap mensual...</div>
+                : stComp === 'error' ? renderError(errComp)
                 : <BloqueHeatmap porMesAnio={comparativa?.por_mes_anio || []} />
             )}
 
-            {/* Grupos de productos */}
+            {/* ── Grupos de Productos ── */}
             {subTab === 'clusters' && (
-                loadingPat ? <div className="loading-spinner">Ejecutando clustering TF-IDF + K-means...</div>
-                : errorPat ? renderError(errorPat)
-                : <BloqueClusters
-                    clusters={patrones?.clusters?.clusters || []}
-                    nProductos={patrones?.clusters?.n_productos || 0}
-                    nAnalizados={patrones?.clusters?.n_analizados || 0}
-                />
+                stCluster === 'loading' || stCluster === 'pending'
+                    ? null  // el stepper ya muestra el progreso
+                    : stCluster === 'error' ? renderError(errCluster)
+                    : <BloqueClusters
+                        clusters={clusters?.clusters || []}
+                        nProductos={clusters?.n_productos || 0}
+                        nAnalizados={clusters?.n_analizados || 0}
+                    />
             )}
 
-            {/* Candidatos convenio */}
+            {/* ── Candidatos Convenio ── */}
             {subTab === 'convenio' && (
-                loadingPat ? <div className="loading-spinner">Calculando candidatos a convenio...</div>
-                : errorPat ? renderError(errorPat)
-                : <BloqueCandidatos
-                    candidatosData={patrones?.candidatos_convenio}
-                    onRefresh={handleRefreshCandidatos}
-                />
+                stCand === 'loading' || stCand === 'pending'
+                    ? null
+                    : stCand === 'error' ? renderError(errCand)
+                    : <BloqueCandidatos
+                        candidatosData={candidatos}
+                        onRefresh={handleRefreshCandidatos}
+                        loadingRefresh={stCand === 'loading'}
+                    />
             )}
 
-            {/* Asociaciones ML */}
+            {/* ── Asociaciones ML ── */}
             {subTab === 'asociaciones' && (
-                loadingPat ? <div className="loading-spinner">Ejecutando Apriori y FP-Growth...</div>
-                : errorPat ? renderError(errorPat)
-                : <BloqueAsociaciones
-                    asocProv={patrones?.asociaciones_proveedor}
-                    asocComprador={patrones?.asociaciones_comprador}
-                />
+                stAsoc === 'loading' || stAsoc === 'pending'
+                    ? null
+                    : stAsoc === 'error' ? renderError(errAsoc)
+                    : <BloqueAsociaciones
+                        asocProv={asociaciones?.asociaciones_proveedor}
+                        asocComprador={asociaciones?.asociaciones_comprador}
+                    />
             )}
+
+            {/* CSS para animación de barra */}
+            <style>{`
+                @keyframes progressPulse {
+                    0%   { transform: translateX(-100%); }
+                    100% { transform: translateX(200%); }
+                }
+            `}</style>
         </div>
     );
 }
