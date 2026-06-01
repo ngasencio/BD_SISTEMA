@@ -55,7 +55,9 @@ function addHeader(doc, titulo, subtitulo, filtros, pagina, totalPaginas) {
         doc.setTextColor(...COLOR.primary);
         doc.setFont('helvetica', 'italic');
         doc.setFontSize(8);
-        const filtroTxt = `Período filtrado: ${filtros.fechaDesde || '—'} → ${filtros.fechaHasta || '—'}`;
+        const filtroTxt = filtros.anio
+            ? `Año filtrado: ${filtros.anio}  (${filtros.fechaDesde} → ${filtros.fechaHasta})`
+            : `Período filtrado: ${filtros.fechaDesde || '—'} → ${filtros.fechaHasta || '—'}`;
         doc.text(filtroTxt, W / 2, 27, { align: 'center' });
         return 34;
     }
@@ -129,7 +131,7 @@ export async function generarPDFCompraAgil({ stats, compras, proveedores, filtro
     doc.setFontSize(22);
     doc.text('REPORTE', W / 2, 30, { align: 'center' });
     doc.setFontSize(26);
-    doc.text('COMPRA ÁGIL', W / 2, 44, { align: 'center' });
+    doc.text(filtros?.anio ? `COMPRA ÁGIL ${filtros.anio}` : 'COMPRA ÁGIL', W / 2, 44, { align: 'center' });
 
     doc.setFillColor(...COLOR.white);
     doc.setDrawColor(...COLOR.primaryLight);
@@ -149,9 +151,15 @@ export async function generarPDFCompraAgil({ stats, compras, proveedores, filtro
     doc.setFontSize(10);
     doc.text('Información del Reporte', 14, 94);
 
+    const periodoLabel = filtros?.anio
+        ? `Año ${filtros.anio} (${filtros.fechaDesde} → ${filtros.fechaHasta})`
+        : filtros?.fechaDesde
+            ? `${filtros.fechaDesde} → ${filtros.fechaHasta || 'hoy'}`
+            : 'Sin filtro (todos los datos)';
+
     const metaItems = [
         ['Fecha de generación:', new Date().toLocaleString('es-CL')],
-        ['Período filtrado:', filtros?.fechaDesde ? `${filtros.fechaDesde} → ${filtros.fechaHasta || 'hoy'}` : 'Sin filtro (todos los datos)'],
+        ['Período filtrado:', periodoLabel],
         ['Total Compras Ágiles:', fmtN(kpis.total_ca)],
         ['Compras Adjudicadas:', `${fmtN(kpis.adjudicadas)} (${kpis.total_ca > 0 ? ((kpis.adjudicadas / kpis.total_ca) * 100).toFixed(1) : 0}%)`],
     ];

@@ -5011,6 +5011,17 @@ select.boleta-input {
   .pac-tab-bar { flex-direction: column; }
 }
 
+/* ── Selector de año (Compra Ágil y otros módulos) ── */
+.anio-selector { display: flex; gap: 4px; flex-wrap: wrap; }
+.anio-btn {
+  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  border: 1.5px solid #d1d5db; background: #fff; color: #374151;
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.anio-btn:hover { border-color: var(--gob-azul); color: var(--gob-azul); background: #eff6ff; }
+.anio-btn.active { background: var(--gob-azul); color: #fff; border-color: var(--gob-azul); }
+.filtro-separator { width: 1px; height: 28px; background: #e2e8f0; margin: 0 6px; align-self: center; }
+
 /* ═══════════════════════════════════════════════════════════
    MÓDULO COMPRA ÁGIL
    ═══════════════════════════════════════════════════════════ */

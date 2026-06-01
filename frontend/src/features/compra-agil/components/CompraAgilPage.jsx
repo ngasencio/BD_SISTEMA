@@ -13,8 +13,12 @@ const TABS = [
     { id: 'proveedores', label: '🏢 Proveedores' },
 ];
 
+const ANO_ACTUAL = new Date().getFullYear();
+const ANOS_DISPONIBLES = Array.from({ length: 4 }, (_, i) => ANO_ACTUAL - i).reverse();
+
 export default function CompraAgilPage() {
     const [tab, setTab] = useState('resumen');
+    const [anio, setAnio] = useState('');
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [generandoPDF, setGenerandoPDF] = useState(false);
@@ -25,7 +29,31 @@ export default function CompraAgilPage() {
 
     const chartsRef = useRef({});
 
+    // Al seleccionar año → llena el rango de fechas automáticamente
+    const handleAnioChange = (value) => {
+        setAnio(value);
+        if (value) {
+            setFechaDesde(`${value}-01-01`);
+            setFechaHasta(`${value}-12-31`);
+        } else {
+            setFechaDesde('');
+            setFechaHasta('');
+        }
+    };
+
+    // Si el usuario edita manualmente las fechas → desvincula el año
+    const handleFechaDesdeChange = (value) => {
+        setFechaDesde(value);
+        setAnio('');
+    };
+
+    const handleFechaHastaChange = (value) => {
+        setFechaHasta(value);
+        setAnio('');
+    };
+
     const handleLimpiarFiltros = () => {
+        setAnio('');
         setFechaDesde('');
         setFechaHasta('');
     };
@@ -38,7 +66,7 @@ export default function CompraAgilPage() {
                 stats,
                 compras,
                 proveedores,
-                filtros: { fechaDesde, fechaHasta },
+                filtros: { fechaDesde, fechaHasta, anio },
                 chartsRef: chartsRef.current,
             });
         } finally {
@@ -46,7 +74,7 @@ export default function CompraAgilPage() {
         }
     };
 
-    const hayFiltros = fechaDesde || fechaHasta;
+    const hayFiltros = fechaDesde || fechaHasta || anio;
 
     return (
         <div className="feature-page">
@@ -68,9 +96,35 @@ export default function CompraAgilPage() {
                 </button>
             </div>
 
-            {/* ── Filtro global de fechas ── */}
+            {/* ── Filtros globales ── */}
             <div className="card filtro-global-bar">
                 <div className="filtro-global-inner">
+                    {/* Selector de año */}
+                    <div className="filtro-group">
+                        <span className="filtro-label">📆 Año:</span>
+                        <div className="anio-selector">
+                            <button
+                                className={`anio-btn${!anio ? ' active' : ''}`}
+                                onClick={() => handleAnioChange('')}
+                            >
+                                Todos
+                            </button>
+                            {ANOS_DISPONIBLES.map(a => (
+                                <button
+                                    key={a}
+                                    className={`anio-btn${anio === String(a) ? ' active' : ''}`}
+                                    onClick={() => handleAnioChange(String(a))}
+                                >
+                                    {a}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Separador */}
+                    <div className="filtro-separator" />
+
+                    {/* Rango de fechas */}
                     <span className="filtro-label">📅 Período:</span>
                     <div className="filtro-group">
                         <label>Desde</label>
@@ -78,7 +132,7 @@ export default function CompraAgilPage() {
                             type="date"
                             className="filtro-input"
                             value={fechaDesde}
-                            onChange={e => setFechaDesde(e.target.value)}
+                            onChange={e => handleFechaDesdeChange(e.target.value)}
                         />
                     </div>
                     <div className="filtro-group">
@@ -87,9 +141,10 @@ export default function CompraAgilPage() {
                             type="date"
                             className="filtro-input"
                             value={fechaHasta}
-                            onChange={e => setFechaHasta(e.target.value)}
+                            onChange={e => handleFechaHastaChange(e.target.value)}
                         />
                     </div>
+
                     {hayFiltros && (
                         <button className="btn-limpiar" onClick={handleLimpiarFiltros}>
                             ✕ Limpiar
@@ -97,7 +152,7 @@ export default function CompraAgilPage() {
                     )}
                     {hayFiltros && (
                         <span className="filtro-activo-badge">
-                            Filtro activo: {fechaDesde || '…'} → {fechaHasta || '…'}
+                            {anio ? `Año ${anio}` : `${fechaDesde || '…'} → ${fechaHasta || '…'}`}
                         </span>
                     )}
                 </div>
