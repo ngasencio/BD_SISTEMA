@@ -31,7 +31,7 @@ export default function CompraAgilPage() {
     }, []);
 
     const filtros = { fechaDesde, fechaHasta };
-    const { stats, loadingStats, errorStats, compras, loadingCompras, errorCompras, proveedores, loadingProveedores } =
+    const { stats, loadingStats, errorStats, compras, loadingCompras, errorCompras, proveedores, loadingProveedores, refresh } =
         useCompraAgil(filtros);
 
     const chartsRef = useRef({});
@@ -180,7 +180,15 @@ export default function CompraAgilPage() {
 
             {/* ── Contenido de tabs ── */}
             {errorStats && (
-                <div className="error-message">Error al cargar datos: {errorStats}</div>
+                <div className="error-message" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                    <span>⚠️ {errorStats}</span>
+                    <button
+                        onClick={() => refresh()}
+                        style={{ padding: '4px 14px', borderRadius: 6, border: '1px solid #fca5a5', background: '#fff', cursor: 'pointer', fontSize: 12, color: '#dc2626', fontWeight: 600 }}
+                    >
+                        🔄 Reintentar
+                    </button>
+                </div>
             )}
 
             {tab === 'resumen' && (

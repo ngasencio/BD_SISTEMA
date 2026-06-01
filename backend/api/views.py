@@ -417,11 +417,15 @@ def compraagil_ahorro_stats_view(request):
     cache_key = f'compraagil_ahorro_{fecha_desde}_{fecha_hasta}'
     data = cache.get(cache_key)
     if not data:
-        data = calcular_compraagil_ahorro_stats(
-            fecha_desde=fecha_desde or None,
-            fecha_hasta=fecha_hasta or None,
-        )
-        cache.set(cache_key, data, timeout=300)
+        try:
+            data = calcular_compraagil_ahorro_stats(
+                fecha_desde=fecha_desde or None,
+                fecha_hasta=fecha_hasta or None,
+            )
+            cache.set(cache_key, data, timeout=300)
+        except Exception as e:
+            logger.error('compraagil_ahorro_stats_view error: %s', e, exc_info=True)
+            return Response({'detail': f'Error al calcular estadísticas: {e}'}, status=500)
     return Response(data)
 
 
