@@ -1,25 +1,37 @@
 """
 Django settings for BD_SISTEMA.
 
-Variables de entorno cargadas desde backend/.env (ver .env.example).
-Si no existe .env, se usan los fallbacks definidos aquí (solo para desarrollo local).
+Variables de entorno cargadas desde el entorno del proceso (os.environ).
+Si no están definidas, se usan los fallbacks (solo para desarrollo local).
 """
 
 import datetime
+import os
 from pathlib import Path
-
-from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+def _env(key, default=None):
+    return os.environ.get(key, default)
+
+def _env_bool(key, default=False):
+    val = os.environ.get(key)
+    if val is None:
+        return default
+    return val.lower() in ('true', '1', 'yes')
+
+def _env_list(key, default=''):
+    raw = os.environ.get(key, default)
+    return [v.strip() for v in raw.split(',') if v.strip()]
+
 # ─── Seguridad ────────────────────────────────────────────────────────────────
 
-SECRET_KEY = config(
+SECRET_KEY = _env(
     'SECRET_KEY',
     default='django-insecure-8&xd20=%g82njyyx0qyh!4&cxhb&drk7wbnxyqb)(bv8fr#&wr',
 )
-DEBUG = config('DEBUG', default=True, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
+DEBUG = _env_bool('DEBUG', default=True)
+ALLOWED_HOSTS = _env_list('ALLOWED_HOSTS', default='*')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -73,11 +85,11 @@ WSGI_APPLICATION = 'core.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME':     config('DB_NAME',     default='bd_sistema'),
-        'USER':     config('DB_USER',     default='root'),
-        'PASSWORD': config('DB_PASSWORD', default='Nicolas2017#'),
-        'HOST':     config('DB_HOST',     default='127.0.0.1'),
-        'PORT':     config('DB_PORT',     default='3306'),
+        'NAME':     _env('DB_NAME',     'bd_sistema'),
+        'USER':     _env('DB_USER',     'root'),
+        'PASSWORD': _env('DB_PASSWORD', 'Nicolas2017#'),
+        'HOST':     _env('DB_HOST',     '127.0.0.1'),
+        'PORT':     _env('DB_PORT',     '3306'),
         'OPTIONS': {
             'charset': 'utf8mb4',
         },
@@ -114,10 +126,9 @@ FRONTEND_DIST = BASE_DIR.parent / 'frontend' / 'dist'
 # En producción, definir CORS_ALLOWED_ORIGINS en .env y poner CORS_ALLOW_ALL=False.
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # True en desarrollo, False en producción (DEBUG=False)
-CORS_ALLOWED_ORIGINS = config(
+CORS_ALLOWED_ORIGINS = _env_list(
     'CORS_ALLOWED_ORIGINS',
     default='http://localhost:3000,http://localhost:5173',
-    cast=Csv(),
 )
 
 # ─── Django REST Framework ────────────────────────────────────────────────────
