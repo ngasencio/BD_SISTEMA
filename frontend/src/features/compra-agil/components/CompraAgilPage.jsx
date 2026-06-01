@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useCompraAgil } from '../hooks/useCompraAgil';
 import ResumenTab from './tabs/ResumenTab';
 import AhorroTab from './tabs/AhorroTab';
 import ComprasTable from './tabs/ComprasTable';
 import ProveedoresTab from './tabs/ProveedoresTab';
 import { generarPDFCompraAgil } from '../utils/pdfExport';
+import { getCompraAgilAnios } from '../api/compraAgilApi';
 
 const TABS = [
     { id: 'resumen', label: '📊 Resumen' },
@@ -13,15 +14,19 @@ const TABS = [
     { id: 'proveedores', label: '🏢 Proveedores' },
 ];
 
-const ANO_ACTUAL = new Date().getFullYear();
-const ANOS_DISPONIBLES = Array.from({ length: 4 }, (_, i) => ANO_ACTUAL - i).reverse();
-
 export default function CompraAgilPage() {
     const [tab, setTab] = useState('resumen');
     const [anio, setAnio] = useState('');
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [generandoPDF, setGenerandoPDF] = useState(false);
+    const [anosDisponibles, setAnosDisponibles] = useState([]);
+
+    useEffect(() => {
+        getCompraAgilAnios()
+            .then(({ data }) => setAnosDisponibles(data))
+            .catch(() => setAnosDisponibles([]));
+    }, []);
 
     const filtros = { fechaDesde, fechaHasta };
     const { stats, loadingStats, errorStats, compras, loadingCompras, errorCompras, proveedores, loadingProveedores } =
@@ -109,7 +114,7 @@ export default function CompraAgilPage() {
                             >
                                 Todos
                             </button>
-                            {ANOS_DISPONIBLES.map(a => (
+                            {anosDisponibles.map(a => (
                                 <button
                                     key={a}
                                     className={`anio-btn${anio === String(a) ? ' active' : ''}`}

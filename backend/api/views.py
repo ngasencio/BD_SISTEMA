@@ -427,6 +427,24 @@ def compraagil_ahorro_stats_view(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def compraagil_anios_view(request):
+    """Años distintos disponibles en fechapublicacion de CompraAgilResumen."""
+    from django.db.models.functions import Substr
+    data = cache.get('compraagil_anios')
+    if not data:
+        anios = (
+            CompraAgilResumen.objects
+            .annotate(anio=Substr('fechapublicacion', 1, 4))
+            .values_list('anio', flat=True)
+            .distinct()
+        )
+        data = sorted({a for a in anios if a and a.isdigit() and len(a) == 4}, reverse=True)
+        cache.set('compraagil_anios', data, timeout=600)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def pac_indicadores_view(request):
     """Indicadores Res.188 calculados desde la BD. Cache 5min."""
     try:

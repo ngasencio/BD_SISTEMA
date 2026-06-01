@@ -3,6 +3,9 @@ import apiClient from '../../../lib/axios';
 export const getCompraAgilAhorroStats = (params = {}) =>
     apiClient.get('compraagil/ahorro-stats/', { params });
 
+export const getCompraAgilAnios = () =>
+    apiClient.get('compraagil/anios/');
+
 export const getCompraAgilResumen = (params = {}) =>
     apiClient.get('compraagil-resumen/', { params });
 
