@@ -694,7 +694,7 @@ class PlanerPAC(models.Model):
 
 
 class CompraAgilResumen(models.Model):
-    codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
+    codigocompraagil = models.TextField(db_column='CodigoCompraAgil', primary_key=True)
     nombre = models.TextField(db_column='Nombre', blank=True, null=True)
     descripcion = models.TextField(db_column='Descripcion', blank=True, null=True)
     estadoid = models.TextField(db_column='EstadoID', blank=True, null=True)
@@ -723,7 +723,7 @@ class CompraAgilResumen(models.Model):
 
 class CompraAgilDocumento(models.Model):
     codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
-    iddocumento = models.TextField(db_column='IDDocumento', blank=True, null=True)
+    iddocumento = models.TextField(db_column='IDDocumento', primary_key=True)
     nombredocumento = models.TextField(db_column='NombreDocumento', blank=True, null=True)
 
     class Meta:
@@ -733,7 +733,7 @@ class CompraAgilDocumento(models.Model):
 
 class CompraAgilProducto(models.Model):
     codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
-    codigoproducto = models.TextField(db_column='CodigoProducto', blank=True, null=True)
+    codigoproducto = models.TextField(db_column='CodigoProducto', primary_key=True)
     nombre = models.TextField(db_column='Nombre', blank=True, null=True)
     descripcion = models.TextField(db_column='Descripcion', blank=True, null=True)
     cantidad = models.TextField(db_column='Cantidad', blank=True, null=True)
@@ -746,7 +746,7 @@ class CompraAgilProducto(models.Model):
 
 class CompraAgilProductoCotizado(models.Model):
     codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
-    rutproveedor = models.TextField(db_column='RutProveedor', blank=True, null=True)
+    rutproveedor = models.TextField(db_column='RutProveedor', primary_key=True)
     codigoproducto = models.TextField(db_column='CodigoProducto', blank=True, null=True)
     nombreproducto = models.TextField(db_column='NombreProducto', blank=True, null=True)
     descripcion = models.TextField(db_column='Descripcion', blank=True, null=True)
@@ -761,7 +761,7 @@ class CompraAgilProductoCotizado(models.Model):
 
 class CompraAgilProveedor(models.Model):
     codigocompraagil = models.TextField(db_column='CodigoCompraAgil', blank=True, null=True)
-    rutproveedor = models.TextField(db_column='RutProveedor', blank=True, null=True)
+    rutproveedor = models.TextField(db_column='RutProveedor', primary_key=True)
     razonsocial = models.TextField(db_column='RazonSocial', blank=True, null=True)
     esemt = models.TextField(db_column='EsEMT', blank=True, null=True)
     estadocotizacionid = models.TextField(db_column='EstadoCotizacionID', blank=True, null=True)
