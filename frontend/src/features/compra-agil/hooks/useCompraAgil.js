@@ -41,23 +41,11 @@ export function useCompraAgil(filtros = {}) {
             const p = {};
             if (fechaDesde) p.fecha_desde = fechaDesde;
             if (fechaHasta) p.fecha_hasta = fechaHasta;
-            // Traemos todas las páginas concatenando resultados
-            let allItems = [];
-            let nextUrl = null;
-            let firstResp = await getCompraAgilResumen({ ...p, page_size: 200, ...extraParams });
-            let d = firstResp.data;
-            allItems = d.results ?? d;
-            setComprasCount(d.count ?? allItems.length);
-            nextUrl = d.next ?? null;
-            // Si hay más páginas, seguimos cargando
-            while (nextUrl) {
-                const pageNum = new URL(nextUrl).searchParams.get('page');
-                const resp = await getCompraAgilResumen({ ...p, page_size: 200, page: pageNum, ...extraParams });
-                const rd = resp.data;
-                allItems = allItems.concat(rd.results ?? []);
-                nextUrl = rd.next ?? null;
-            }
-            setCompras(allItems);
+            // El ViewSet usa NoPaginationMixin → devuelve todos los registros en 1 petición
+            const { data } = await getCompraAgilResumen({ ...p, ...extraParams });
+            const items = Array.isArray(data) ? data : (data.results ?? []);
+            setCompras(items);
+            setComprasCount(items.length);
         } catch (err) {
             const msg = err.response?.data?.detail || err.message || 'Error al cargar compras ágiles.';
             setErrorCompras(msg);

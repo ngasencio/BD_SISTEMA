@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useCompraAgil } from '../hooks/useCompraAgil';
 import ResumenTab from './tabs/ResumenTab';
 import AhorroTab from './tabs/AhorroTab';
@@ -16,6 +16,16 @@ const TABS = [
     { id: 'comparativa', label: '📈 Comparativa' },
 ];
 
+// Hook de debounce: retarda la actualización de un valor N ms
+function useDebounce(value, delay = 400) {
+    const [debounced, setDebounced] = useState(value);
+    useEffect(() => {
+        const t = setTimeout(() => setDebounced(value), delay);
+        return () => clearTimeout(t);
+    }, [value, delay]);
+    return debounced;
+}
+
 export default function CompraAgilPage() {
     const [tab, setTab] = useState('resumen');
     const [anio, setAnio] = useState('');
@@ -24,13 +34,18 @@ export default function CompraAgilPage() {
     const [generandoPDF, setGenerandoPDF] = useState(false);
     const [anosDisponibles, setAnosDisponibles] = useState([]);
 
+    // Los filtros para la API usan debounce — los inputs se actualizan al instante
+    // pero las llamadas a la API esperan 400ms desde el último cambio
+    const fechaDesdeDebounced = useDebounce(fechaDesde, 400);
+    const fechaHastaDebounced = useDebounce(fechaHasta, 400);
+
     useEffect(() => {
         getCompraAgilAnios()
             .then(({ data }) => setAnosDisponibles(data))
             .catch(() => setAnosDisponibles([]));
     }, []);
 
-    const filtros = { fechaDesde, fechaHasta };
+    const filtros = { fechaDesde: fechaDesdeDebounced, fechaHasta: fechaHastaDebounced };
     const { stats, loadingStats, errorStats, compras, loadingCompras, errorCompras, proveedores, loadingProveedores, refresh } =
         useCompraAgil(filtros);
 

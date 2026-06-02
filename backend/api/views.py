@@ -373,7 +373,9 @@ class PlanerPACViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
     search_fields = ['nombre_proyecto', 'nombre_item', 'id_proyecto']
 
 
-class CompraAgilResumenViewSet(viewsets.ReadOnlyModelViewSet):
+class CompraAgilResumenViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
+    """Sin paginación: devuelve todos los registros en 1 sola petición.
+    Con 1489 CAs el JSON pesa ~300KB — manejable. Evita 30 peticiones secuenciales."""
     queryset = CompraAgilResumen.objects.all()
     serializer_class = CompraAgilResumenSerializer
     permission_classes = [IsAuthenticated]
