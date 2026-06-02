@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
+import * as XLSX from 'xlsx';
 import api from '../lib/axios';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -666,7 +667,9 @@ function RevisionModal({ oc, historial, sugerencias, onClose, onSaved }) {
                             />
                             <datalist id="proyectos-list">
                                 {(sugerencias || []).map((s, i) => (
-                                    <option key={i} value={s.id_proyecto}>{s.id_proyecto} ({s.n} OC)</option>
+                                    <option key={i} value={s.id_proyecto}>
+                                        {s.id_proyecto}{s.nombre_proyecto ? ` — ${s.nombre_proyecto}` : ''} ({s.n} OC)
+                                    </option>
                                 ))}
                             </datalist>
                         </div>
@@ -713,9 +716,162 @@ function RevisionModal({ oc, historial, sugerencias, onClose, onSaved }) {
     );
 }
 
+// ─── SUBTAB CORREGIDAS ────────────────────────────────────────────────────────
+
+function SubtabCorregidas({ revisiones, allOrdenes }) {
+    const [fechaDesde,  setFechaDesde]  = useState('');
+    const [fechaHasta,  setFechaHasta]  = useState('');
+    const [revisadoPor, setRevisadoPor] = useState('');
+
+    // Mapa rápido codigo_oc → OC (todos los datos, sin filtro global)
+    const ordenesMap = useMemo(() => {
+        const m = {};
+        allOrdenes.forEach(oc => { m[oc.codigo_oc] = oc; });
+        return m;
+    }, [allOrdenes]);
+
+    // Todas las revisiones con resultado "Enlazada" en orden cronológico desc
+    const enlazadas = useMemo(() => {
+        const rows = [];
+        Object.values(revisiones).forEach(list =>
+            list.filter(r => r.resultado === 'Enlazada').forEach(r => rows.push(r))
+        );
+        return rows.sort((a, b) => new Date(b.fecha_revision) - new Date(a.fecha_revision));
+    }, [revisiones]);
+
+    const revisores = useMemo(() => [...new Set(enlazadas.map(r => r.revisado_por))].sort(), [enlazadas]);
+
+    const filtradas = useMemo(() => enlazadas.filter(r => {
+        const f = r.fecha_revision?.slice(0, 10);
+        if (fechaDesde && f < fechaDesde) return false;
+        if (fechaHasta && f > fechaHasta) return false;
+        if (revisadoPor && r.revisado_por !== revisadoPor) return false;
+        return true;
+    }), [enlazadas, fechaDesde, fechaHasta, revisadoPor]);
+
+    const enriched = useMemo(() => filtradas.map(r => ({ ...r, oc: ordenesMap[r.codigo_oc] || null })), [filtradas, ordenesMap]);
+
+    // KPIs
+    const sincronizadas  = enriched.filter(r => r.oc?.EnlacePAC === 'Enlazada').length;
+    const esperandoSync  = enriched.filter(r => r.oc && r.oc.EnlacePAC !== 'Enlazada').length;
+    const montoLiberado  = enriched
+        .filter(r => r.oc?.EnlacePAC === 'Enlazada' && (!r.oc.TipoMoneda || r.oc.TipoMoneda === 'CLP'))
+        .reduce((s, r) => s + (Number(r.oc.TotalNeto) || 0), 0);
+
+    const exportExcel = () => {
+        const rows = enriched.map(r => ({
+            'Código OC':       r.codigo_oc,
+            'Nombre OC':       r.oc?.NombreOC || '—',
+            'Revisado por':    r.revisado_por,
+            'Fecha Revisión':  new Date(r.fecha_revision).toLocaleString('es-CL'),
+            'ID Proyecto':     r.id_proyecto_asignado || '—',
+            'Nombre Proyecto': r.oc?.Nombre_Proyecto || '—',
+            'Monto Neto':      r.oc ? (Number(r.oc.TotalNeto) || 0) : '—',
+            'Estado Sync':     r.oc?.EnlacePAC === 'Enlazada' ? 'Sincronizada ✓' : (r.oc ? 'Esperando sync' : 'OC sin datos'),
+            'Observaciones':   r.observaciones || '',
+            'Link MP':         r.oc?.LinkMP || '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'OC Corregidas');
+        XLSX.writeFile(wb, `OC_Corregidas_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    };
+
+    return (
+        <div>
+            {/* KPIs */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+                <KpiCard label="Total corregidas (revisión)"  value={enlazadas.length}  sub="Historial completo"         color="#22c55e" />
+                <KpiCard label="Filtro actual"                value={filtradas.length}  sub="Según filtros aplicados"    color="#3b82f6" />
+                <KpiCard label="✅ Sincronizadas (ETL)"        value={sincronizadas}     sub="Confirmadas por el sistema" color="#15803d" />
+                <KpiCard label="⏳ Esperando sync"             value={esperandoSync}     sub="Trabajadas, no sincronizadas aún" color="#f59e0b" />
+                <KpiCard label="Monto liberado (CLP)"         value={fmtM(montoLiberado)} sub="OC sincronizadas TotalNeto" color="#006FB3" />
+            </div>
+
+            {/* Filtros */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16,
+                background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Desde</label>
+                    <input className="filter-input" type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Hasta</label>
+                    <input className="filter-input" type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Revisado por</label>
+                    <select className="filter-input" value={revisadoPor} onChange={e => setRevisadoPor(e.target.value)}>
+                        <option value="">Todos</option>
+                        {revisores.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                </div>
+                <button onClick={exportExcel} style={{ marginLeft: 'auto', padding: '7px 16px', borderRadius: 7,
+                    border: 'none', background: '#16a34a', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    ⬇ Exportar Excel
+                </button>
+            </div>
+
+            {/* Tabla */}
+            <div className="card">
+                <div className="table-responsive">
+                    <table className="table-gob">
+                        <thead>
+                            <tr>
+                                <th>Sync</th>
+                                <th>Código OC</th>
+                                <th>Nombre OC</th>
+                                <th>ID Proyecto</th>
+                                <th>Nombre Proyecto</th>
+                                <th>Revisado por</th>
+                                <th>Fecha Revisión</th>
+                                <th style={{ textAlign: 'right' }}>Monto Neto</th>
+                                <th>Observaciones</th>
+                                <th>Link</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {enriched.map((r, i) => {
+                                const sinc = r.oc?.EnlacePAC === 'Enlazada';
+                                const rowBg = sinc ? '#f0fdf4' : r.oc ? '#fefce8' : '#fff';
+                                return (
+                                    <tr key={`${r.id}-${i}`} style={{ background: rowBg }}>
+                                        <td>
+                                            {sinc
+                                                ? <span style={{ fontSize: 10, fontWeight: 700, color: '#15803d', background: '#dcfce7', padding: '2px 7px', borderRadius: 10, border: '1px solid #bbf7d0' }}>✅ Sincronizada</span>
+                                                : r.oc
+                                                    ? <span style={{ fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef9c3', padding: '2px 7px', borderRadius: 10, border: '1px solid #fde047' }}>⏳ Esperando</span>
+                                                    : <span style={{ fontSize: 10, color: '#94a3b8' }}>Sin datos</span>}
+                                        </td>
+                                        <td><strong style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.codigo_oc}</strong></td>
+                                        <td style={{ maxWidth: 200 }}><div className="truncate-text" title={r.oc?.NombreOC} style={{ fontSize: 12 }}>{r.oc?.NombreOC || '—'}</div></td>
+                                        <td><span style={{ fontFamily: 'monospace', fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 6px', borderRadius: 6, border: '1px solid #bfdbfe' }}>{r.id_proyecto_asignado || '—'}</span></td>
+                                        <td style={{ maxWidth: 180 }}><div className="truncate-text" title={r.oc?.Nombre_Proyecto} style={{ fontSize: 11 }}>{r.oc?.Nombre_Proyecto || '—'}</div></td>
+                                        <td style={{ fontSize: 12 }}><strong>{r.revisado_por}</strong></td>
+                                        <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(r.fecha_revision).toLocaleString('es-CL')}</td>
+                                        <td style={{ textAlign: 'right', fontSize: 12, fontWeight: 600 }}>{r.oc ? fmt(Number(r.oc.TotalNeto), r.oc.TipoMoneda || 'CLP') : '—'}</td>
+                                        <td style={{ maxWidth: 200, fontSize: 11, color: '#64748b' }}><div className="truncate-text" title={r.observaciones}>{r.observaciones || '—'}</div></td>
+                                        <td>{r.oc?.LinkMP ? <a href={r.oc.LinkMP} target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>🔗 MP</a> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                                    </tr>
+                                );
+                            })}
+                            {enriched.length === 0 && (
+                                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 30, color: '#94a3b8' }}>
+                                    No hay OC corregidas con los filtros aplicados
+                                </td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── TAB OC CORREGIBLES ───────────────────────────────────────────────────────
 
-function TabOCCorregibles({ data, proyectosMap }) {
+function TabOCCorregibles({ data, proyectosMap, allOrdenes }) {
+    const [activeSubtab, setActiveSubtab] = useState('candidatas');
     const [search, setSearch] = useState('');
     const [soloConSugerencia, setSoloConSugerencia] = useState(false);
     const [pgPage, setPgPage] = useState(1);
@@ -775,8 +931,32 @@ function TabOCCorregibles({ data, proyectosMap }) {
         ).sort((a, b) => (Number(b.TotalNeto) || 0) - (Number(a.TotalNeto) || 0));
     }, [fuente, search]);
 
+    // Subtab bar style
+    const stBtn = (active) => ({
+        padding: '6px 18px', borderRadius: '6px 6px 0 0', border: 'none', cursor: 'pointer', fontSize: 13,
+        fontWeight: active ? 700 : 400,
+        background: active ? '#fff' : '#f1f5f9',
+        color: active ? '#1e293b' : '#64748b',
+        borderBottom: active ? '2px solid #fff' : '2px solid transparent',
+        boxShadow: active ? '0 -2px 6px rgba(0,0,0,0.06)' : 'none',
+    });
+
+    const totalCorregidas = Object.values(revisiones).flatMap(l => l.filter(r => r.resultado === 'Enlazada')).length;
+
     return (
         <div>
+            {/* Barra de subtabs */}
+            <div style={{ display: 'flex', gap: 2, marginBottom: 0, borderBottom: '2px solid #e2e8f0' }}>
+                <button style={stBtn(activeSubtab === 'candidatas')} onClick={() => setActiveSubtab('candidatas')}>
+                    🛠️ Candidatas ({enriquecidas.length})
+                </button>
+                <button style={stBtn(activeSubtab === 'corregidas')} onClick={() => setActiveSubtab('corregidas')}>
+                    ✅ Corregidas ({totalCorregidas})
+                </button>
+            </div>
+
+            {/* ── Subtab Candidatas ─────────────────────────────────────────── */}
+            {activeSubtab === 'candidatas' && <div style={{ paddingTop: 16 }}>
             {/* KPIs */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
                 <KpiCard label="Candidatas a corrección" value={enriquecidas.length} sub="No Enlazadas con Licitación" color="#E0701E" />
@@ -845,13 +1025,19 @@ function TabOCCorregibles({ data, proyectosMap }) {
                                         <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 12 }}>{fmt(Number(oc.TotalNeto), oc.TipoMoneda || 'CLP')}</td>
                                         <td>
                                             {oc.sugerencias.length > 0
-                                                ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                                ? <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                                     {oc.sugerencias.map((s, i) => (
-                                                        <span key={i} style={{ display: 'inline-block', padding: '2px 7px', borderRadius: 10, fontSize: 10,
-                                                            fontWeight: 700, background: '#dcfce7', color: '#15803d',
-                                                            border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
-                                                            {s.id_proyecto} <span style={{ opacity: 0.7 }}>({s.n})</span>
-                                                        </span>
+                                                        <div key={i} style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 7,
+                                                            background: '#dcfce7', border: '1px solid #bbf7d0', maxWidth: 220 }}>
+                                                            <div style={{ fontSize: 10, fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap' }}>
+                                                                {s.id_proyecto} <span style={{ opacity: 0.6 }}>({s.n})</span>
+                                                            </div>
+                                                            {s.nombre_proyecto && (
+                                                                <div style={{ fontSize: 10, color: '#166534', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.nombre_proyecto}>
+                                                                    {s.nombre_proyecto}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     ))}
                                                   </div>
                                                 : <span style={{ color: '#94a3b8', fontSize: 11 }}>Sin sugerencia</span>}
@@ -886,6 +1072,12 @@ function TabOCCorregibles({ data, proyectosMap }) {
                     onSaved={() => { cargarRevisiones(); setModalOC(null); }}
                 />
             )}
+            </div>}
+
+            {/* ── Subtab Corregidas ─────────────────────────────────────────── */}
+            {activeSubtab === 'corregidas' && <div style={{ paddingTop: 16 }}>
+                <SubtabCorregidas revisiones={revisiones} allOrdenes={allOrdenes} />
+            </div>}
         </div>
     );
 }
@@ -1367,7 +1559,7 @@ export function OrdenesCompraResumen() {
             {activeTab === 'General'        && <TabGeneral data={filtered} />}
             {activeTab === 'Estado'         && <TabEstado data={filtered} />}
             {activeTab === 'Enlace PAC'     && <TabEnlacePAC data={filtered} />}
-            {activeTab === 'OC Corregibles' && <TabOCCorregibles data={filtered} proyectosMap={proyectosMap} />}
+            {activeTab === 'OC Corregibles' && <TabOCCorregibles data={filtered} proyectosMap={proyectosMap} allOrdenes={ordenes} />}
             {activeTab === 'No Enlazadas'   && <TabNoEnlazadas data={filtered} />}
         </div>
     );

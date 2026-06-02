@@ -182,7 +182,7 @@ def ordenes_compra_raw_all(request):
         'C_Unidad', 'C_CodigoUnidad',
         'P_Nombre', 'P_Rut',
         'LinkMP', 'EnlacePAC',
-        'CodigoLicitacion', 'ID_Proyecto',
+        'CodigoLicitacion', 'ID_Proyecto', 'Nombre_Proyecto',
         'TipoCompraInterna', 'TipoOCInterno', 'DescripcionTipoOC',
     )
 
@@ -204,10 +204,10 @@ def ordenes_compra_raw_all(request):
 @permission_classes([IsAuthenticated])
 def ordenes_compra_proyectos_licitacion(request):
     """
-    Mapa cross-year: CodigoLicitacion → lista de ID_Proyecto con contador.
+    Mapa cross-year: CodigoLicitacion → lista de {id_proyecto, nombre_proyecto, n}.
     Usado para sugerir proyectos PAC a OC no enlazadas.
     """
-    cache_key = 'oc_proyectos_licitacion_v1'
+    cache_key = 'oc_proyectos_licitacion_v2'
     cached = cache.get(cache_key)
     if cached:
         return Response(cached)
@@ -220,12 +220,26 @@ def ordenes_compra_proyectos_licitacion(request):
         .annotate(n=Count('codigo_oc'))
         .order_by('CodigoLicitacion', '-n')
     )
+
+    # Nombre por ID_Proyecto — tomamos el primer valor no vacío encontrado
+    nombres = dict(
+        OrdenCompra.objects
+        .exclude(ID_Proyecto__isnull=True).exclude(ID_Proyecto='')
+        .exclude(Nombre_Proyecto__isnull=True).exclude(Nombre_Proyecto='')
+        .values_list('ID_Proyecto', 'Nombre_Proyecto')
+        .distinct()[:5000]
+    )
+
     result = {}
     for r in qs:
         lic = r['CodigoLicitacion']
         if lic not in result:
             result[lic] = []
-        result[lic].append({'id_proyecto': r['ID_Proyecto'], 'n': r['n']})
+        result[lic].append({
+            'id_proyecto':      r['ID_Proyecto'],
+            'nombre_proyecto':  nombres.get(r['ID_Proyecto'], ''),
+            'n':                r['n'],
+        })
 
     cache.set(cache_key, result, timeout=600)
     return Response(result)
