@@ -806,6 +806,9 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
     })
     por_estado = defaultdict(lambda: {'cantidad': 0, 'presupuesto': 0.0})
     por_mes = defaultdict(lambda: {'cantidad': 0, 'presupuesto': 0.0, 'monto_oc': 0.0})
+    por_unidad_mes = defaultdict(lambda: {
+        'presupuesto': 0.0, 'monto_oc': 0.0, 'ahorro': 0.0, 'cantidad': 0,
+    })
     top_ahorro_items = []
     mejora_items = []
 
@@ -823,6 +826,9 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
         por_unidad[unidad]['total'] += 1
         por_mes[fecha]['cantidad'] += 1
         por_mes[fecha]['presupuesto'] += presupuesto
+        key_um = (unidad, fecha)
+        por_unidad_mes[key_um]['presupuesto'] += presupuesto
+        por_unidad_mes[key_um]['cantidad'] += 1
 
         # Ahorro simple (solo si tiene OC)
         oc = oc_map.get(ca.get('oc_codigo') or '')
@@ -831,10 +837,12 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
             total_monto_oc += monto_oc
             por_unidad[unidad]['monto_oc'] += monto_oc
             por_mes[fecha]['monto_oc'] += monto_oc
+            por_unidad_mes[key_um]['monto_oc'] += monto_oc
             if presupuesto > 0:
                 ahorro = presupuesto - monto_oc
                 ahorro_simple_total += ahorro
                 por_unidad[unidad]['ahorro'] += ahorro
+                por_unidad_mes[key_um]['ahorro'] += ahorro
         if estado == 'Proveedor seleccionado':
             por_unidad[unidad]['adjudicadas'] += 1
 
@@ -953,6 +961,21 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
         key=lambda x: x['mes'],
     )
 
+    por_unidad_mes_list = sorted(
+        [
+            {
+                'unidad': k[0],
+                'mes': k[1],
+                'presupuesto': round(v['presupuesto'], 0),
+                'monto_oc': round(v['monto_oc'], 0),
+                'ahorro': round(v['ahorro'], 0),
+                'cantidad': v['cantidad'],
+            }
+            for k, v in por_unidad_mes.items() if k[1]
+        ],
+        key=lambda x: (x['unidad'], x['mes']),
+    )
+
     estados = {e['estado']: e['cantidad'] for e in por_estado_list}
 
     return {
@@ -976,6 +999,7 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
         'por_estado': por_estado_list,
         'por_unidad': por_unidad_list,
         'por_mes': por_mes_list,
+        'por_unidad_mes': por_unidad_mes_list,
         'top_proveedores': top_proveedores,
         'top_ahorro_items': top_ahorro_items[:10],
         'mejora_items': mejora_items[:10],
