@@ -412,56 +412,62 @@ function BloqueCandidatos({ candidatosData, onRefresh }) {
 
 // ── Bloque 5: Asociaciones ML ─────────────────────────────────────────────────
 function BloqueAsociaciones({ asocProv, asocComprador }) {
-    const frecProv = asocProv?.frecuentes || [];
-    const reglasProv = asocProv?.reglas || [];
+    // Nueva estructura: pares + productos_frecuentes (conteo directo)
+    const pares = asocProv?.pares || [];
+    const productosFrec = asocProv?.productos_frecuentes || [];
     const frecComp = asocComprador?.frecuentes || [];
-
-    const advertenciaProv = asocProv?.advertencia;
     const advertenciaComp = asocComprador?.advertencia;
 
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            {/* Asociaciones por proveedor */}
+            {/* Asociaciones por proveedor — conteo directo de pares */}
             <div className="card">
                 <div className="card-header card-header-accent">
                     <span>🏢</span>
-                    <span className="card-title">Productos por Proveedor (Apriori)</span>
+                    <span className="card-title">Co-venta entre Proveedores</span>
                 </div>
                 <div style={{ padding: '8px 16px', fontSize: 11, color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
-                    {asocProv?.n_proveedores || 0} proveedores · {asocProv?.n_productos_vocab || 0} tipos de producto
+                    {asocProv?.n_proveedores || 0} proveedores analizados · {asocProv?.n_productos_vocab || 0} productos en análisis
                 </div>
-                {advertenciaProv && (
-                    <p style={{ padding: '12px 16px', color: '#f59e0b', fontSize: 12 }}>⚠️ {advertenciaProv}</p>
+
+                {/* Productos más ofrecidos */}
+                {productosFrec.length > 0 && (
+                    <div style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 8 }}>
+                            Productos más ofrecidos por proveedores:
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                            {productosFrec.slice(0, 10).map((p, i) => (
+                                <span key={i} title={`${p.n_proveedores} proveedores (${p.pct_proveedores}%)`}
+                                    style={{ fontSize: 11, padding: '2px 8px', background: '#dbeafe', color: '#1d4ed8', borderRadius: 20, cursor: 'default' }}>
+                                    {p.producto} <span style={{ opacity: 0.7 }}>({p.n_proveedores})</span>
+                                </span>
+                            ))}
+                        </div>
+                    </div>
                 )}
-                {!advertenciaProv && !frecProv.length && (
-                    <p style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 12 }}>Sin patrones detectados.</p>
-                )}
-                <div style={{ padding: '0 16px 12px' }}>
-                    {frecProv.map((f, i) => (
-                        <div key={i} style={{ marginTop: 10, padding: '8px 12px', background: '#f8fafc', borderRadius: 8, borderLeft: '3px solid #3b82f6' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
-                                {f.productos.map((p, j) => (
-                                    <span key={j} style={{ fontSize: 11, padding: '2px 8px', background: '#dbeafe', color: '#1d4ed8', borderRadius: 20 }}>{p}</span>
-                                ))}
+
+                {/* Pares co-vendidos */}
+                <div style={{ padding: '8px 16px 12px' }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 8 }}>
+                        Pares de productos co-ofrecidos con más frecuencia:
+                    </p>
+                    {!pares.length && (
+                        <p style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>Sin pares detectados.</p>
+                    )}
+                    {pares.slice(0, 12).map((p, i) => (
+                        <div key={i} style={{ marginBottom: 6, padding: '7px 10px', background: '#f8fafc', borderRadius: 7, borderLeft: '3px solid #3b82f6' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 3 }}>
+                                <span style={{ fontSize: 11, padding: '2px 7px', background: '#dbeafe', color: '#1d4ed8', borderRadius: 20 }}>{p.producto_a}</span>
+                                <span style={{ fontSize: 11, color: '#94a3b8', alignSelf: 'center' }}>+</span>
+                                <span style={{ fontSize: 11, padding: '2px 7px', background: '#dbeafe', color: '#1d4ed8', borderRadius: 20 }}>{p.producto_b}</span>
                             </div>
                             <div style={{ fontSize: 11, color: '#64748b' }}>
-                                {f.n_proveedores} proveedor{f.n_proveedores !== 1 ? 'es' : ''} ofrecen estos productos juntos · soporte: {(f.soporte * 100).toFixed(0)}%
+                                <strong style={{ color: '#374151' }}>{p.n_proveedores}</strong> proveedores ofrecen ambos ·{' '}
+                                Si ofrece A → <strong style={{ color: '#16a34a' }}>{p.confianza_ab}%</strong> también ofrece B
                             </div>
                         </div>
                     ))}
-                    {reglasProv.length > 0 && (
-                        <div style={{ marginTop: 14 }}>
-                            <p style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8 }}>Reglas de asociación más fuertes:</p>
-                            {reglasProv.slice(0, 5).map((r, i) => (
-                                <div key={i} style={{ fontSize: 11, padding: '6px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e2e8f0', marginBottom: 4 }}>
-                                    <strong>{r.si_ofrece.join(' + ')}</strong>
-                                    <span style={{ color: '#94a3b8' }}> → </span>
-                                    <strong style={{ color: '#16a34a' }}>{r.tambien_ofrece.join(' + ')}</strong>
-                                    <span style={{ color: '#64748b', marginLeft: 8 }}>confianza: {(r.confianza * 100).toFixed(0)}% · lift: {r.lift}x</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -598,10 +604,10 @@ export default function ComparativaTab() {
             .catch(e => { setStComp('error'); setErrComp(e.message || 'Error al cargar estadísticas'); });
     }, []);
 
-    // ── Carga ML progresiva: clusters → asociaciones → candidatos ────────────
+    // ── Carga ML: clusters primero, luego asociaciones + candidatos EN PARALELO ──
     useEffect(() => {
         const runML = async () => {
-            // Paso 1: clusters
+            // Paso 1: clusters (secuencial, base para los otros)
             let t = Date.now();
             setStCluster('loading');
             try {
@@ -614,34 +620,38 @@ export default function ComparativaTab() {
                 setErrCluster(e.message || 'Error en clustering');
             }
 
-            // Paso 2: asociaciones
-            t = Date.now();
+            // Pasos 2 y 3: asociaciones + candidatos EN PARALELO (independientes entre sí)
+            const tAsoc = Date.now();
+            const tCand = Date.now();
             setStAsoc('loading');
-            try {
-                const { data } = await getCompraAgilAsociaciones();
-                setAsociaciones(data);
+            setStCand('loading');
+
+            const [resAsoc, resCand] = await Promise.allSettled([
+                getCompraAgilAsociaciones(),
+                getCompraAgilCandidatos(),
+            ]);
+
+            if (resAsoc.status === 'fulfilled') {
+                setAsociaciones(resAsoc.value.data);
                 setStAsoc('ok');
-                setDuraciones(d => ({ ...d, asoc: ((Date.now() - t) / 1000).toFixed(1) }));
-            } catch (e) {
+                setDuraciones(d => ({ ...d, asoc: ((Date.now() - tAsoc) / 1000).toFixed(1) }));
+            } else {
                 setStAsoc('error');
-                setErrAsoc(e.message || 'Error en asociaciones');
+                setErrAsoc(resAsoc.reason?.message || 'Error en asociaciones');
             }
 
-            // Paso 3: candidatos
-            t = Date.now();
-            setStCand('loading');
-            try {
-                const { data } = await getCompraAgilCandidatos();
-                setCandidatos(data);
+            if (resCand.status === 'fulfilled') {
+                setCandidatos(resCand.value.data);
                 setStCand('ok');
-                setDuraciones(d => ({ ...d, cand: ((Date.now() - t) / 1000).toFixed(1) }));
-            } catch (e) {
+                setDuraciones(d => ({ ...d, cand: ((Date.now() - tCand) / 1000).toFixed(1) }));
+            } else {
                 setStCand('error');
-                setErrCand(e.message || 'Error en candidatos');
+                setErrCand(resCand.reason?.message || 'Error en candidatos');
             }
         };
         runML();
     }, []);
+
 
     const handleRefreshCandidatos = async (umbralMonto, umbralFreq) => {
         const t = Date.now();
@@ -665,17 +675,17 @@ export default function ComparativaTab() {
             estado: stCluster, duracion: duraciones.cluster,
         },
         {
-            label: 'Asociaciones por proveedor — Algoritmo Apriori',
+            label: 'Asociaciones por proveedor — Conteo de co-venta + FP-Growth',
             detalle: asociaciones?.asociaciones_proveedor
-                ? `${asociaciones.asociaciones_proveedor.n_proveedores || 0} proveedores · ${asociaciones.asociaciones_proveedor.frecuentes?.length || 0} patrones encontrados`
-                : 'Construyendo matrices de co-ocurrencia y buscando reglas...',
+                ? `${asociaciones.asociaciones_proveedor.n_proveedores || 0} proveedores · ${asociaciones.asociaciones_proveedor.pares?.length || 0} pares detectados`
+                : 'Analizando pares de productos co-ofrecidos por proveedores... (paralelo)',
             estado: stAsoc, duracion: duraciones.asoc,
         },
         {
             label: 'Candidatos a convenio — Scoring multicritério',
             detalle: candidatos
                 ? `${candidatos.total_encontrados || 0} candidatos identificados`
-                : 'Evaluando frecuencia, proveedor dominante y monto acumulado...',
+                : 'Evaluando frecuencia, proveedor dominante y monto acumulado... (paralelo)',
             estado: stCand, duracion: duraciones.cand,
         },
     ];

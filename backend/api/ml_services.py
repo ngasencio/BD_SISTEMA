@@ -338,89 +338,81 @@ def calcular_clusters_productos(n_clusters=None):
 def calcular_asociaciones_proveedor(min_support=0.05):
     """
     Detecta qué productos tiende a ofrecer el mismo proveedor.
-    Cada 'transacción' es un proveedor + los productos que cotizó.
+    Usa conteo directo de pares (O(N·k²)) en lugar de Apriori clásico:
+    con ~1330 proveedores cada uno especializado en 1-3 productos, Apriori
+    no encuentra patrones porque el soporte máximo es ~3%.
+    El conteo directo siempre produce resultados y es más interpretable.
     """
     from .models import CompraAgilProductoCotizado
-    from mlxtend.frequent_patterns import apriori, association_rules
-    import pandas as pd
+    from collections import Counter
 
     cotizaciones = list(CompraAgilProductoCotizado.objects.values(
-        'rutproveedor', 'codigoproducto', 'nombreproducto',
+        'rutproveedor', 'nombreproducto',
     ))
     if not cotizaciones:
-        return {'reglas': [], 'frecuentes': [], 'advertencia': 'Sin datos de cotizaciones'}
+        return {'pares': [], 'productos_frecuentes': [], 'advertencia': 'Sin datos de cotizaciones'}
 
-    # Construir tabla: proveedor → set de productos cotizados
+    # proveedor → set de productos normalizados
     prov_productos = defaultdict(set)
-    producto_nombre = {}
     for c in cotizaciones:
         rut = c.get('rutproveedor') or ''
-        cod = c.get('codigoproducto') or ''
         nombre = preprocesar_texto(c.get('nombreproducto') or '')
-        if rut and cod and nombre:
+        if rut and nombre:
             prov_productos[rut].add(nombre)
-            producto_nombre[cod] = nombre
 
-    if len(prov_productos) < 3:
-        return {'reglas': [], 'frecuentes': [], 'advertencia': 'Pocos proveedores para análisis'}
+    n_prov = len(prov_productos)
+    if n_prov < 3:
+        return {'pares': [], 'productos_frecuentes': [], 'advertencia': 'Pocos proveedores para análisis'}
 
-    # Vocabulario de productos normalizados
-    vocab = sorted({p for prods in prov_productos.values() for p in prods})
-    if len(vocab) < 2:
-        return {'reglas': [], 'frecuentes': [], 'advertencia': 'Productos insuficientes'}
+    # ── Productos más ofrecidos ────────────────────────────────────────────────
+    conteo_individual = Counter(
+        prod for prods in prov_productos.values() for prod in prods
+    )
+    productos_frecuentes = [
+        {
+            'producto': prod,
+            'n_proveedores': cnt,
+            'pct_proveedores': round(cnt / n_prov * 100, 1),
+        }
+        for prod, cnt in conteo_individual.most_common(20)
+        if cnt >= 2
+    ]
 
-    # Matriz binaria proveedor × producto
-    rows = []
-    for rut, prods in prov_productos.items():
-        rows.append({v: (v in prods) for v in vocab})
+    # ── Conteo directo de pares ────────────────────────────────────────────────
+    # Solo sobre los top-150 productos para acotar el trabajo
+    vocab = {p for p, _ in conteo_individual.most_common(150)}
 
-    import pandas as pd
-    df = pd.DataFrame(rows, dtype=bool)
+    pair_count = Counter()
+    for prods in prov_productos.values():
+        en_vocab = sorted([p for p in prods if p in vocab])
+        for i in range(len(en_vocab)):
+            for j in range(i + 1, len(en_vocab)):
+                pair_count[(en_vocab[i], en_vocab[j])] += 1
 
-    # Apriori
-    try:
-        freq = apriori(df, min_support=min_support, use_colnames=True, max_len=4)
-    except Exception:
-        freq = apriori(df, min_support=max(min_support, 0.1), use_colnames=True, max_len=3)
-
-    if freq.empty:
-        return {'reglas': [], 'frecuentes': [], 'advertencia': 'No se encontraron patrones con el soporte mínimo'}
-
-    frecuentes = []
-    for _, row in freq.iterrows():
-        items = list(row['itemsets'])
-        if len(items) >= 2:
-            frecuentes.append({
-                'productos': sorted(items),
-                'soporte': round(float(row['support']), 3),
-                'n_proveedores': int(round(float(row['support']) * len(prov_productos))),
-            })
-    frecuentes.sort(key=lambda x: (-len(x['productos']), -x['soporte']))
-
-    # Reglas de asociación
-    reglas = []
-    try:
-        rules = association_rules(freq, metric='confidence', min_threshold=0.5, num_itemsets=len(freq))
-        for _, r in rules.iterrows():
-            antecedent = sorted(list(r['antecedents']))
-            consequent = sorted(list(r['consequents']))
-            reglas.append({
-                'si_ofrece': antecedent,
-                'tambien_ofrece': consequent,
-                'confianza': round(float(r['confidence']), 2),
-                'soporte': round(float(r['support']), 3),
-                'lift': round(float(r['lift']), 2),
-            })
-        reglas.sort(key=lambda x: -x['lift'])
-    except Exception:
-        pass
+    # Filtrar pares con al menos 2 proveedores y armar respuesta
+    pares = []
+    for (prod_a, prod_b), cnt in pair_count.most_common(40):
+        if cnt < 2:
+            break
+        pct = round(cnt / n_prov * 100, 1)
+        # Confianza: dado que un proveedor ofrece A, ¿qué % también ofrece B?
+        conf_ab = round(cnt / conteo_individual[prod_a] * 100, 1) if conteo_individual[prod_a] else 0
+        conf_ba = round(cnt / conteo_individual[prod_b] * 100, 1) if conteo_individual[prod_b] else 0
+        pares.append({
+            'producto_a': prod_a,
+            'producto_b': prod_b,
+            'n_proveedores': cnt,
+            'pct_proveedores': pct,
+            'confianza_ab': conf_ab,   # % de prov que ofrecen A que también ofrecen B
+            'confianza_ba': conf_ba,
+        })
 
     return {
-        'frecuentes': frecuentes[:20],
-        'reglas': reglas[:15],
-        'n_proveedores': len(prov_productos),
+        'pares': pares,
+        'productos_frecuentes': productos_frecuentes,
+        'n_proveedores': n_prov,
         'n_productos_vocab': len(vocab),
-        'min_support_usado': min_support,
+        'metodo': 'conteo_directo_pares',
     }
 
 
