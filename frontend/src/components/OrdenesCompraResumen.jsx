@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useAuth } from '../store/authStore';
 import api from '../lib/axios';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -513,6 +516,31 @@ function TabEnlacePAC({ data }) {
     );
 }
 
+// ─── PDF helpers ─────────────────────────────────────────────────────────────
+
+const imgToBase64 = (url, maxW = 300, maxH = 200) => new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+        const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+        const c = document.createElement('canvas');
+        c.width  = Math.floor(img.width  * scale);
+        c.height = Math.floor(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+});
+
+const fmtDateStr  = s => { if (!s) return ''; const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; };
+const fmtCompact  = n => {
+    if (n >= 1e9) return `$${(n/1e9).toFixed(1)}B`;
+    if (n >= 1e6) return `$${(n/1e6).toFixed(1)}M`;
+    if (n >= 1e3) return `$${(n/1e3).toFixed(0)}K`;
+    return `$${Math.round(n)}`;
+};
+
 // ─── TAB OC CORREGIBLES — helpers ─────────────────────────────────────────────
 
 const RESULTADO_COLORS = {
@@ -719,18 +747,28 @@ function RevisionModal({ oc, historial, sugerencias, onClose, onSaved }) {
 // ─── SUBTAB CORREGIDAS ────────────────────────────────────────────────────────
 
 function SubtabCorregidas({ revisiones, allOrdenes }) {
+    const { user } = useAuth();
+    const currentUser = user?.username || user?.name || 'Usuario';
+
+    // ── Estado tabla ─────────────────────────────────────────────────────────
     const [fechaDesde,  setFechaDesde]  = useState('');
     const [fechaHasta,  setFechaHasta]  = useState('');
     const [revisadoPor, setRevisadoPor] = useState('');
 
-    // Mapa rápido codigo_oc → OC (todos los datos, sin filtro global)
+    // ── Estado PDF ───────────────────────────────────────────────────────────
+    const [pdfPanel,      setPdfPanel]      = useState(false);
+    const [pdfDesde,      setPdfDesde]      = useState('');
+    const [pdfHasta,      setPdfHasta]      = useState('');
+    const [pdfGenerating, setPdfGenerating] = useState(false);
+
+    // Mapa codigo_oc → OC
     const ordenesMap = useMemo(() => {
         const m = {};
         allOrdenes.forEach(oc => { m[oc.codigo_oc] = oc; });
         return m;
     }, [allOrdenes]);
 
-    // Todas las revisiones con resultado "Enlazada" en orden cronológico desc
+    // Todas las revisiones Enlazadas
     const enlazadas = useMemo(() => {
         const rows = [];
         Object.values(revisiones).forEach(list =>
@@ -749,15 +787,17 @@ function SubtabCorregidas({ revisiones, allOrdenes }) {
         return true;
     }), [enlazadas, fechaDesde, fechaHasta, revisadoPor]);
 
-    const enriched = useMemo(() => filtradas.map(r => ({ ...r, oc: ordenesMap[r.codigo_oc] || null })), [filtradas, ordenesMap]);
+    const enriched = useMemo(() =>
+        filtradas.map(r => ({ ...r, oc: ordenesMap[r.codigo_oc] || null })),
+        [filtradas, ordenesMap]);
 
-    // KPIs
-    const sincronizadas  = enriched.filter(r => r.oc?.EnlacePAC === 'Enlazada').length;
-    const esperandoSync  = enriched.filter(r => r.oc && r.oc.EnlacePAC !== 'Enlazada').length;
-    const montoLiberado  = enriched
+    const sincronizadas = enriched.filter(r => r.oc?.EnlacePAC === 'Enlazada').length;
+    const esperandoSync = enriched.filter(r => r.oc && r.oc.EnlacePAC !== 'Enlazada').length;
+    const montoLiberado = enriched
         .filter(r => r.oc?.EnlacePAC === 'Enlazada' && (!r.oc.TipoMoneda || r.oc.TipoMoneda === 'CLP'))
         .reduce((s, r) => s + (Number(r.oc.TotalNeto) || 0), 0);
 
+    // ── Excel ─────────────────────────────────────────────────────────────────
     const exportExcel = () => {
         const rows = enriched.map(r => ({
             'Código OC':       r.codigo_oc,
@@ -767,7 +807,7 @@ function SubtabCorregidas({ revisiones, allOrdenes }) {
             'ID Proyecto':     r.id_proyecto_asignado || '—',
             'Nombre Proyecto': r.oc?.Nombre_Proyecto || '—',
             'Monto Neto':      r.oc ? (Number(r.oc.TotalNeto) || 0) : '—',
-            'Estado Sync':     r.oc?.EnlacePAC === 'Enlazada' ? 'Sincronizada ✓' : (r.oc ? 'Esperando sync' : 'OC sin datos'),
+            'Estado Sync':     r.oc?.EnlacePAC === 'Enlazada' ? 'Sincronizada' : (r.oc ? 'Esperando sync' : 'Sin datos'),
             'Observaciones':   r.observaciones || '',
             'Link MP':         r.oc?.LinkMP || '',
         }));
@@ -777,19 +817,237 @@ function SubtabCorregidas({ revisiones, allOrdenes }) {
         XLSX.writeFile(wb, `OC_Corregidas_${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
 
+    // ── PDF ───────────────────────────────────────────────────────────────────
+    const generarPDF = async () => {
+        setPdfGenerating(true);
+        try {
+            const BASE = import.meta.env.BASE_URL || '/bd_sistema/';
+
+            // Data para el período del PDF (filtro independiente)
+            const pdfEnlazadas = enlazadas.filter(r => {
+                const f = r.fecha_revision?.slice(0, 10);
+                if (pdfDesde && f < pdfDesde) return false;
+                if (pdfHasta && f > pdfHasta) return false;
+                return true;
+            });
+            const pdfEnriched = pdfEnlazadas.map(r => ({ ...r, oc: ordenesMap[r.codigo_oc] || null }));
+
+            // Análisis de pendientes (sobre TODOS los candidatos, sin filtro de período)
+            const todoCandidatas = allOrdenes.filter(oc => oc.EnlacePAC !== 'Enlazada' && oc.CodigoLicitacion);
+            const lastRevMap = {};
+            Object.entries(revisiones).forEach(([oc_code, revList]) => { lastRevMap[oc_code] = revList[0]; });
+            const sinRevisar   = todoCandidatas.filter(oc => !lastRevMap[oc.codigo_oc]).length;
+            const pendientesOC = todoCandidatas.filter(oc => lastRevMap[oc.codigo_oc]?.resultado === 'Pendiente').length;
+            const justificadas = todoCandidatas.filter(oc => lastRevMap[oc.codigo_oc]?.resultado === 'No Enlazada').length;
+
+            // KPIs del período
+            const totalCandidatas  = todoCandidatas.length;
+            const totalEnlazadasPdf = pdfEnlazadas.length;
+            const sincPdf = pdfEnriched.filter(r => r.oc?.EnlacePAC === 'Enlazada').length;
+            const montoPdf = pdfEnriched
+                .filter(r => r.oc?.EnlacePAC === 'Enlazada' && (!r.oc.TipoMoneda || r.oc.TipoMoneda === 'CLP'))
+                .reduce((s, r) => s + (Number(r.oc?.TotalNeto) || 0), 0);
+
+            // Por revisor en el período
+            const porRevisor = {};
+            pdfEnriched.forEach(r => {
+                if (!porRevisor[r.revisado_por]) porRevisor[r.revisado_por] = { total: 0, sinc: 0, espera: 0 };
+                porRevisor[r.revisado_por].total++;
+                if (r.oc?.EnlacePAC === 'Enlazada') porRevisor[r.revisado_por].sinc++;
+                else porRevisor[r.revisado_por].espera++;
+            });
+
+            // Cargar imágenes
+            const logoB64  = await imgToBase64(`${BASE}logo.jpg`,     180, 180);
+            const edifB64  = await imgToBase64(`${BASE}edificio.jpg`, 400, 200);
+
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const W = 210;
+            const azul   = [0, 111, 179];
+            const azulD  = [0, 51,  102];
+            const verde  = [21, 128,  61];
+            const naranja = [224, 112,  30];
+            const rojo   = [220,  38,  38];
+            const morado = [99,  102, 241];
+            const grisL  = [248, 250, 252];
+            const grisB  = [226, 232, 240];
+            const hoy    = new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' });
+
+            // ── PÁGINA 1 ──────────────────────────────────────────────────────
+            // Header
+            doc.setFillColor(...azul);
+            doc.rect(0, 0, W, 36, 'F');
+            if (logoB64)  doc.addImage(logoB64,  'JPEG', 6,   3, 28, 28);
+            if (edifB64)  doc.addImage(edifB64,  'JPEG', 155, 1, 51, 33);
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');   doc.setFontSize(13);
+            doc.text('SERVICIO DE SALUD OSORNO', 40, 13);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+            doc.text('Informe de Gestión: Enlace de Órdenes de Compra al Plan Anual de Compras', 40, 20);
+            doc.setFontSize(7.5); doc.setTextColor(190, 220, 255);
+            doc.text('Departamento de Abastecimiento — Unidad de Compras Públicas', 40, 26);
+
+            // Info bar
+            doc.setFillColor(237, 245, 255);
+            doc.rect(0, 36, W, 13, 'F');
+            doc.setDrawColor(...azul); doc.setLineWidth(0.25); doc.line(0, 36, W, 36);
+
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...azulD);
+            doc.text(`Período del informe:  ${pdfDesde ? fmtDateStr(pdfDesde) : 'Sin límite inicial'}  —  ${pdfHasta ? fmtDateStr(pdfHasta) : 'Sin límite final'}`, 8, 42);
+            doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+            doc.text(`Generado: ${hoy}   ·   Elaborado por: ${currentUser}`, 8, 47);
+
+            // ── Resumen ejecutivo ─────────────────────────────────────────────
+            let y = 55;
+            doc.setFillColor(...azulD); doc.rect(0, y, W, 7, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(255, 255, 255);
+            doc.text('RESUMEN EJECUTIVO', 8, y + 5); y += 11;
+
+            // 4 KPI cards
+            const kpis = [
+                { label: 'OC Candidatas', sub: 'Identificadas en el sistema', val: String(totalCandidatas), col: naranja },
+                { label: 'OC Enlazadas', sub: 'En el período seleccionado',   val: String(totalEnlazadasPdf), col: verde },
+                { label: 'Sincronizadas', sub: 'Confirmadas por el sistema',  val: String(sincPdf),           col: azul  },
+                { label: 'Monto Liberado', sub: 'CLP, OC sincronizadas',      val: fmtCompact(montoPdf),      col: azulD },
+            ];
+            const cW = 45, cH = 26, gap = 4, sx = 8;
+            kpis.forEach((k, i) => {
+                const x = sx + i * (cW + gap);
+                doc.setFillColor(...grisL);
+                doc.roundedRect(x, y, cW, cH, 2, 2, 'F');
+                doc.setFillColor(...k.col);
+                doc.roundedRect(x, y, cW, 2.5, 1, 1, 'F');          // top accent
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(...k.col);
+                doc.text(k.val, x + cW / 2, y + 14, { align: 'center' });
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(6.8); doc.setTextColor(...azulD);
+                doc.text(k.label, x + cW / 2, y + 19, { align: 'center' });
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.setTextColor(100, 116, 139);
+                doc.text(k.sub, x + cW / 2, y + 23, { align: 'center' });
+            });
+            y += cH + 8;
+
+            // Barra de avance
+            const pct = totalCandidatas > 0 ? Math.min(Math.round(totalEnlazadasPdf / totalCandidatas * 100), 100) : 0;
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...azulD);
+            doc.text(`Avance de gestión en el período: ${pct}% de candidatas enlazadas`, 8, y); y += 4;
+            doc.setFillColor(...grisB); doc.roundedRect(8, y, W - 16, 4.5, 1, 1, 'F');
+            if (pct > 0) { doc.setFillColor(...verde); doc.roundedRect(8, y, (W - 16) * pct / 100, 4.5, 1, 1, 'F'); }
+            doc.setFontSize(6.5); doc.setTextColor(255, 255, 255);
+            if (pct > 8) doc.text(`${pct}%`, 8 + (W - 16) * pct / 100 - 8, y + 3.2);
+            y += 10;
+
+            // Por revisor
+            doc.setFillColor(...azulD); doc.rect(0, y, W, 7, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(255, 255, 255);
+            doc.text('DISTRIBUCIÓN POR RESPONSABLE', 8, y + 5); y += 9;
+
+            const revisorRows = Object.entries(porRevisor).map(([n, c]) => [n, c.total, c.sinc, c.espera]);
+            autoTable(doc, {
+                startY: y,
+                head: [['Responsable', 'Enlazadas en período', 'Sincronizadas (ETL)', 'Esperando sync']],
+                body: revisorRows.length ? revisorRows : [['Sin datos en el período', '—', '—', '—']],
+                margin: { left: 8, right: 8 },
+                styles: { fontSize: 8, cellPadding: 3 },
+                headStyles: { fillColor: azul, textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+                alternateRowStyles: { fillColor: grisL },
+                columnStyles: { 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' } },
+            });
+            y = (doc.lastAutoTable?.finalY || y) + 10;
+
+            // Pendientes
+            doc.setFillColor(...azulD); doc.rect(0, y, W, 7, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(255, 255, 255);
+            doc.text('ESTADO DE OC PENDIENTES DE GESTIÓN (GLOBAL)', 8, y + 5); y += 12;
+
+            [
+                { txt: `Sin revisar — requieren gestión urgente`,                  val: sinRevisar,   col: rojo   },
+                { txt: `Pendientes — marcadas en seguimiento`,                      val: pendientesOC, col: [245, 158, 11] },
+                { txt: `Justificadas — No Enlazadas con motivo documentado`,       val: justificadas, col: morado },
+            ].forEach(item => {
+                doc.setFillColor(...item.col); doc.circle(13, y + 1.8, 2, 'F');
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(30, 41, 59);
+                doc.text(item.txt, 18, y + 3);
+                doc.setFont('helvetica', 'bold'); doc.setTextColor(...item.col);
+                doc.text(String(item.val), W - 14, y + 3, { align: 'right' });
+                y += 9;
+            });
+
+            // Footer p1
+            doc.setDrawColor(...grisB); doc.setLineWidth(0.25); doc.line(8, 284, W - 8, 284);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(148, 163, 184);
+            doc.text('Servicio de Salud Osorno — Sistema de Gestión de Compras Públicas — Documento de uso interno', 8, 289);
+            doc.text('Página 1 de 2', W - 8, 289, { align: 'right' });
+
+            // ── PÁGINA 2 ──────────────────────────────────────────────────────
+            doc.addPage();
+            doc.setFillColor(...azul); doc.rect(0, 0, W, 13, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+            doc.text('SERVICIO DE SALUD OSORNO', 8, 6);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+            doc.text('DETALLE — ÓRDENES DE COMPRA ENLAZADAS EN EL PERÍODO', 8, 11);
+
+            const trunc = (s, n) => s && s.length > n ? s.slice(0, n) + '…' : (s || '—');
+            const detRows = pdfEnriched.map(r => [
+                r.codigo_oc,
+                trunc(r.oc?.NombreOC, 38),
+                r.id_proyecto_asignado || '—',
+                trunc(r.oc?.Nombre_Proyecto, 28),
+                r.revisado_por,
+                new Date(r.fecha_revision).toLocaleDateString('es-CL'),
+                r.oc ? new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(r.oc.TotalNeto) || 0) : '—',
+                r.oc?.EnlacePAC === 'Enlazada' ? 'Si' : 'No',
+            ]);
+
+            autoTable(doc, {
+                startY: 17,
+                head: [['Código OC', 'Nombre OC', 'ID Proyecto', 'Nombre Proyecto', 'Revisado por', 'Fecha', 'Monto Neto', 'Sync']],
+                body: detRows.length ? detRows : [['Sin registros en el período seleccionado', '', '', '', '', '', '', '']],
+                margin: { left: 8, right: 8 },
+                styles: { fontSize: 6.8, cellPadding: 2.2 },
+                headStyles: { fillColor: azul, textColor: 255, fontStyle: 'bold', fontSize: 7 },
+                alternateRowStyles: { fillColor: grisL },
+                columnStyles: {
+                    0: { cellWidth: 28, fontStyle: 'bold' },
+                    1: { cellWidth: 42 },
+                    2: { cellWidth: 24 },
+                    3: { cellWidth: 34 },
+                    4: { cellWidth: 20 },
+                    5: { cellWidth: 18 },
+                    6: { cellWidth: 22, halign: 'right' },
+                    7: { cellWidth: 10, halign: 'center' },
+                },
+            });
+
+            doc.setDrawColor(...grisB); doc.setLineWidth(0.25); doc.line(8, 284, W - 8, 284);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(148, 163, 184);
+            doc.text('Servicio de Salud Osorno — Sistema de Gestión de Compras Públicas — Documento de uso interno', 8, 289);
+            doc.text('Página 2 de 2', W - 8, 289, { align: 'right' });
+
+            const rango = `${pdfDesde || 'inicio'}_${pdfHasta || 'hoy'}`;
+            doc.save(`Informe_Enlace_OC_${rango}.pdf`);
+        } catch (e) {
+            console.error('Error generando PDF:', e);
+            alert('Error al generar el PDF. Ver consola para más detalles.');
+        } finally {
+            setPdfGenerating(false);
+        }
+    };
+
+    // ── Render ────────────────────────────────────────────────────────────────
     return (
         <div>
             {/* KPIs */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-                <KpiCard label="Total corregidas (revisión)"  value={enlazadas.length}  sub="Historial completo"         color="#22c55e" />
-                <KpiCard label="Filtro actual"                value={filtradas.length}  sub="Según filtros aplicados"    color="#3b82f6" />
-                <KpiCard label="✅ Sincronizadas (ETL)"        value={sincronizadas}     sub="Confirmadas por el sistema" color="#15803d" />
-                <KpiCard label="⏳ Esperando sync"             value={esperandoSync}     sub="Trabajadas, no sincronizadas aún" color="#f59e0b" />
-                <KpiCard label="Monto liberado (CLP)"         value={fmtM(montoLiberado)} sub="OC sincronizadas TotalNeto" color="#006FB3" />
+                <KpiCard label="Total corregidas"     value={enlazadas.length}    sub="Historial completo"              color="#22c55e" />
+                <KpiCard label="Filtro actual"        value={filtradas.length}    sub="Según filtros de tabla"          color="#3b82f6" />
+                <KpiCard label="✅ Sincronizadas ETL"  value={sincronizadas}       sub="Confirmadas por el sistema"      color="#15803d" />
+                <KpiCard label="⏳ Esperando sync"     value={esperandoSync}       sub="Trabajadas, aún no sincronizadas" color="#f59e0b" />
+                <KpiCard label="Monto liberado (CLP)" value={fmtM(montoLiberado)} sub="OC sincronizadas, TotalNeto"     color="#006FB3" />
             </div>
 
-            {/* Filtros */}
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16,
+            {/* Filtros tabla */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 12,
                 background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Desde</label>
@@ -806,11 +1064,51 @@ function SubtabCorregidas({ revisiones, allOrdenes }) {
                         {revisores.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                 </div>
-                <button onClick={exportExcel} style={{ marginLeft: 'auto', padding: '7px 16px', borderRadius: 7,
-                    border: 'none', background: '#16a34a', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    ⬇ Exportar Excel
-                </button>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                    <button onClick={exportExcel} style={{ padding: '7px 14px', borderRadius: 7, border: 'none',
+                        background: '#16a34a', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                        ⬇ Excel
+                    </button>
+                    <button onClick={() => setPdfPanel(p => !p)} style={{ padding: '7px 14px', borderRadius: 7,
+                        border: '1px solid #006FB3', background: pdfPanel ? '#006FB3' : '#eff6ff',
+                        color: pdfPanel ? '#fff' : '#1d4ed8', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                        📄 PDF
+                    </button>
+                </div>
             </div>
+
+            {/* Panel PDF */}
+            {pdfPanel && (
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8,
+                    padding: '14px 18px', marginBottom: 14, display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                    <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 8 }}>
+                            📄 Generar Informe PDF — Período independiente
+                        </div>
+                        <div style={{ fontSize: 11, color: '#475569', marginBottom: 10 }}>
+                            El rango que elijas aquí define qué OC aparecen en el reporte para jefatura. Es independiente de los filtros de la tabla.
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Desde (fecha revisión)</label>
+                                <input className="filter-input" type="date" value={pdfDesde} onChange={e => setPdfDesde(e.target.value)} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                <label style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Hasta</label>
+                                <input className="filter-input" type="date" value={pdfHasta} onChange={e => setPdfHasta(e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={generarPDF} disabled={pdfGenerating} style={{
+                        padding: '9px 20px', borderRadius: 7, border: 'none',
+                        background: pdfGenerating ? '#94a3b8' : '#1d4ed8',
+                        color: '#fff', fontWeight: 700, fontSize: 13,
+                        cursor: pdfGenerating ? 'not-allowed' : 'pointer',
+                    }}>
+                        {pdfGenerating ? '⏳ Generando…' : '📄 Generar Informe PDF'}
+                    </button>
+                </div>
+            )}
 
             {/* Tabla */}
             <div className="card">
@@ -818,30 +1116,25 @@ function SubtabCorregidas({ revisiones, allOrdenes }) {
                     <table className="table-gob">
                         <thead>
                             <tr>
-                                <th>Sync</th>
-                                <th>Código OC</th>
-                                <th>Nombre OC</th>
-                                <th>ID Proyecto</th>
-                                <th>Nombre Proyecto</th>
-                                <th>Revisado por</th>
-                                <th>Fecha Revisión</th>
+                                <th>Sync</th><th>Código OC</th><th>Nombre OC</th>
+                                <th>ID Proyecto</th><th>Nombre Proyecto</th>
+                                <th>Revisado por</th><th>Fecha Revisión</th>
                                 <th style={{ textAlign: 'right' }}>Monto Neto</th>
-                                <th>Observaciones</th>
-                                <th>Link</th>
+                                <th>Observaciones</th><th>Link</th>
                             </tr>
                         </thead>
                         <tbody>
                             {enriched.map((r, i) => {
-                                const sinc = r.oc?.EnlacePAC === 'Enlazada';
+                                const sinc  = r.oc?.EnlacePAC === 'Enlazada';
                                 const rowBg = sinc ? '#f0fdf4' : r.oc ? '#fefce8' : '#fff';
                                 return (
                                     <tr key={`${r.id}-${i}`} style={{ background: rowBg }}>
                                         <td>
                                             {sinc
-                                                ? <span style={{ fontSize: 10, fontWeight: 700, color: '#15803d', background: '#dcfce7', padding: '2px 7px', borderRadius: 10, border: '1px solid #bbf7d0' }}>✅ Sincronizada</span>
+                                                ? <span style={{ fontSize: 10, fontWeight: 700, color: '#15803d', background: '#dcfce7', padding: '2px 7px', borderRadius: 10, border: '1px solid #bbf7d0' }}>✅ Sync</span>
                                                 : r.oc
-                                                    ? <span style={{ fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef9c3', padding: '2px 7px', borderRadius: 10, border: '1px solid #fde047' }}>⏳ Esperando</span>
-                                                    : <span style={{ fontSize: 10, color: '#94a3b8' }}>Sin datos</span>}
+                                                    ? <span style={{ fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef9c3', padding: '2px 7px', borderRadius: 10, border: '1px solid #fde047' }}>⏳</span>
+                                                    : <span style={{ fontSize: 10, color: '#94a3b8' }}>—</span>}
                                         </td>
                                         <td><strong style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.codigo_oc}</strong></td>
                                         <td style={{ maxWidth: 200 }}><div className="truncate-text" title={r.oc?.NombreOC} style={{ fontSize: 12 }}>{r.oc?.NombreOC || '—'}</div></td>
@@ -850,7 +1143,7 @@ function SubtabCorregidas({ revisiones, allOrdenes }) {
                                         <td style={{ fontSize: 12 }}><strong>{r.revisado_por}</strong></td>
                                         <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(r.fecha_revision).toLocaleString('es-CL')}</td>
                                         <td style={{ textAlign: 'right', fontSize: 12, fontWeight: 600 }}>{r.oc ? fmt(Number(r.oc.TotalNeto), r.oc.TipoMoneda || 'CLP') : '—'}</td>
-                                        <td style={{ maxWidth: 200, fontSize: 11, color: '#64748b' }}><div className="truncate-text" title={r.observaciones}>{r.observaciones || '—'}</div></td>
+                                        <td style={{ maxWidth: 180, fontSize: 11, color: '#64748b' }}><div className="truncate-text" title={r.observaciones}>{r.observaciones || '—'}</div></td>
                                         <td>{r.oc?.LinkMP ? <a href={r.oc.LinkMP} target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>🔗 MP</a> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
                                     </tr>
                                 );
