@@ -5198,3 +5198,133 @@ select.boleta-input {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--gob-gris2);
 }
+
+/* ── CALENDARIO LICITACIONES ── */
+.cal-layout {
+  display: grid;
+  grid-template-columns: 1fr 284px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .cal-layout { grid-template-columns: 1fr; }
+}
+.cal-grid-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: #f8f9fb;
+  border-bottom: 1px solid #eef0f3;
+}
+.cal-grid-header-cell {
+  text-align: center;
+  padding: 8px 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cal-grid-body {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.cal-day-cell {
+  min-height: 82px;
+  padding: 4px 5px;
+  border-right: 1px solid #f0f2f5;
+  border-bottom: 1px solid #f0f2f5;
+  cursor: default;
+  transition: background 0.12s;
+}
+.cal-day-cell:nth-child(7n) { border-right: none; }
+.cal-day-cell.has-events    { cursor: pointer; }
+.cal-day-cell.is-today      { background: #f0f7ff; }
+.cal-day-cell.is-selected   { background: #e8edf5; }
+.cal-day-cell.is-prox       { background: #fff9ed; }
+.cal-day-cell.other-month   { opacity: 0.3; }
+.cal-day-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  font-size: 12px; font-weight: 500;
+  color: #444;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 3px;
+}
+.cal-day-num.today {
+  background: #1a3d71;
+  color: #fff;
+  font-weight: 700;
+}
+.cal-event-pill {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-bottom: 2px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+.cal-event-more {
+  font-size: 9px;
+  color: #888;
+  font-weight: 600;
+  padding-left: 2px;
+}
+.cal-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  align-items: center;
+}
+.cal-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.cal-legend-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cal-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cal-prox-item {
+  padding: 7px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.cal-prox-item:last-child { border-bottom: none; }
+.cal-prox-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+  display: inline-block;
+  margin-bottom: 3px;
+}
+.cal-day-detail-event {
+  padding: 7px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.cal-day-detail-event:last-child { border-bottom: none; }
+@media (max-width: 600px) {
+  .cal-day-cell { min-height: 52px; padding: 2px 3px; }
+  .cal-event-pill { display: none; }
+  .cal-day-cell.has-events .cal-day-num::after {
+    content: '•';
+    position: absolute;
+    font-size: 6px;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #e74c3c;
+  }
+  .cal-day-num { position: relative; }
+}

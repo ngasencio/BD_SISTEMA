@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../lib/axios';
 import ResumenSect from '../components/ResumenSect';
-import TimelineSect from '../components/TimelineSect';
-import CompradoresSect from '../components/CompradoresSect';
+import CalendarioSect from '../components/CalendarioSect';
 import FinancieroSect from '../components/FinancieroSect';
 import CategoriasSect from '../components/CategoriasSect';
 import ReportesSect from '../components/ReportesSect';
@@ -10,14 +9,13 @@ import GestionSect from '../components/GestionSect';
 import AhorroSect from '../components/AhorroSect';
 
 const TABS = [
-    { id: 'resumen',     label: '🏠 Resumen' },
-    { id: 'gestion',     label: '🚦 Gestión' },
-    { id: 'ahorro',      label: '💰 Ahorro' },
-    { id: 'timeline',    label: '📅 Línea de Tiempo' },
-    { id: 'compradores', label: '👤 Compradores' },
-    { id: 'financiero',  label: '📊 Financiero' },
-    { id: 'categorias',  label: '🗂️ Categorías' },
-    { id: 'reportes',    label: '🖨️ Reportes PDF' },
+    { id: 'resumen',    label: '🏠 Resumen' },
+    { id: 'gestion',    label: '🚦 Gestión' },
+    { id: 'ahorro',     label: '💰 Ahorro' },
+    { id: 'calendario', label: '📅 Calendario' },
+    { id: 'financiero', label: '📊 Financiero' },
+    { id: 'categorias', label: '🗂️ Categorías' },
+    { id: 'reportes',   label: '🖨️ Reportes PDF' },
 ];
 
 const ESTADOS_DISPLAY = {
@@ -204,14 +202,13 @@ export default function Dashboard() {
                 <div className="loading-spinner">Cargando licitaciones…</div>
             ) : (
                 <div className="tab-container">
-                    {activeTab === 'resumen'     && <ResumenSect stats={stats} />}
-                    {activeTab === 'gestion'     && <GestionSect gestionData={gestionData} loading={loadingGestion} />}
-                    {activeTab === 'ahorro'      && <AhorroSect ahorroData={ahorroData} loading={loadingAhorro} />}
-                    {activeTab === 'timeline'    && <TimelineSect licitaciones={licitaciones} />}
-                    {activeTab === 'compradores' && <CompradoresSect licitaciones={licitaciones} />}
-                    {activeTab === 'financiero'  && <FinancieroSect licitaciones={licitaciones} detalles={detalles} />}
-                    {activeTab === 'categorias'  && <CategoriasSect detalles={detalles} />}
-                    {activeTab === 'reportes'    && <ReportesSect licitaciones={licitaciones} />}
+                    {activeTab === 'resumen'    && <ResumenSect stats={stats} licitaciones={licitaciones} />}
+                    {activeTab === 'gestion'    && <GestionSect gestionData={gestionData} loading={loadingGestion} />}
+                    {activeTab === 'ahorro'     && <AhorroSect ahorroData={ahorroData} loading={loadingAhorro} />}
+                    {activeTab === 'calendario' && <CalendarioSect licitaciones={licitaciones} />}
+                    {activeTab === 'financiero' && <FinancieroSect licitaciones={licitaciones} detalles={detalles} />}
+                    {activeTab === 'categorias' && <CategoriasSect detalles={detalles} />}
+                    {activeTab === 'reportes'   && <ReportesSect licitaciones={licitaciones} />}
                 </div>
             )}
         </>

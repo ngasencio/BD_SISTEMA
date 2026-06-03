@@ -17,8 +17,8 @@ from .views import (
 )
 
 router = DefaultRouter()
-router.register(r'licitaciones', LicitacionViewSet)
-router.register(r'detalles', DetalleLicitacionViewSet)
+router.register(r'licitaciones', LicitacionViewSet, basename='licitacion')
+router.register(r'detalles', DetalleLicitacionViewSet, basename='detallicitacion')
 router.register(r'devengo', DevengoViewSet)
 router.register(r'ordenes-compra', OrdenCompraViewSet)
 router.register(r'ordenes-compra-detalles', DetalleOrdenCompraViewSet)
