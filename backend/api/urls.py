@@ -13,6 +13,7 @@ from .views import (
     pac_oc_productos_view, compraagil_ahorro_stats_view, compraagil_anios_view,
     compraagil_comparativa_view, compraagil_patrones_view,
     RevisionOCCorregibleViewSet,
+    licitaciones_ahorro_stats, licitaciones_gestion_stats, licitaciones_anos_view,
 )
 
 router = DefaultRouter()
@@ -56,6 +57,11 @@ urlpatterns = [
     path('compraagil/anios/', compraagil_anios_view, name='compraagil_anios'),
     path('compraagil/comparativa/', compraagil_comparativa_view, name='compraagil_comparativa'),
     path('compraagil/patrones/', compraagil_patrones_view, name='compraagil_patrones'),
+
+    # Licitaciones — estadísticas extendidas
+    path('licitaciones/anos/', licitaciones_anos_view, name='licitaciones_anos'),
+    path('licitaciones/ahorro-stats/', licitaciones_ahorro_stats, name='licitaciones_ahorro_stats'),
+    path('licitaciones/gestion-stats/', licitaciones_gestion_stats, name='licitaciones_gestion_stats'),
 
     # Router ViewSets
     path('', include(router.urls)),

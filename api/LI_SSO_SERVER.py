@@ -556,6 +556,10 @@ def guardar_en_django(db_resumen, db_detalles):
                     defaults[k] = val_dt
                 except:
                     defaults[k] = None
+            elif k == 'EsRenovable':
+                # BooleanField sin null=True — debe ser True/False, nunca None
+                sv = str(v or '').strip().lower()
+                defaults[k] = sv in ('1', 'true', 'si', 'sí', 'yes')
             elif k in [
                 'Etapas', 'CodigoEstado', 'CodigoTipo',
                 'DiasCierreLicitacion', 'CantidadReclamos',
@@ -563,6 +567,7 @@ def guardar_en_django(db_resumen, db_detalles):
                 'UnidadTiempoEvaluacion', 'Estimacion', 'VisibilidadMonto', 'TipoPago',
                 'Tiempo', 'UnidadTiempo', 'ProhibicionContratacion', 'SubContratacion',
                 'ExtensionPlazo', 'EsBaseTipo', 'UnidadTiempoContratoLicitacion',
+                'ValorTiempoRenovacion', 'Adj_Tipo', 'Adj_NumeroOferentes',
             ]:
                 try:
                     defaults[k] = int(float(v)) if (v != '' and v is not None and str(v).strip().lower() not in ('none', 'nan')) else None

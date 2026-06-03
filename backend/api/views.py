@@ -31,6 +31,8 @@ from .services import (
     calcular_oc_stats,
     calcular_oc_productos,
     calcular_compraagil_ahorro_stats,
+    calcular_ahorro_licitaciones,
+    calcular_gestion_licitaciones,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,19 +43,31 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 class LicitacionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Licitacion.objects.prefetch_related('detalles').all()
     serializer_class = LicitacionSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['Estado', 'C_NombreOrganismo', 'Tipo', 'EsRenovable']
 
+    def get_queryset(self):
+        qs = Licitacion.objects.prefetch_related('detalles').all()
+        anio = self.request.query_params.get('anio', '').strip()
+        if anio and anio.isdigit():
+            qs = qs.filter(FechaPublicacion__year=int(anio))
+        return qs
+
 
 class DetalleLicitacionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = DetalleLicitacion.objects.all()
     serializer_class = DetalleLicitacionSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['licitacion', 'CodigoProducto', 'Categoria']
+
+    def get_queryset(self):
+        qs = DetalleLicitacion.objects.all()
+        anio = self.request.query_params.get('anio', '').strip()
+        if anio and anio.isdigit():
+            qs = qs.filter(licitacion__FechaPublicacion__year=int(anio))
+        return qs
 
 
 # =============================================================================
@@ -62,17 +76,78 @@ class DetalleLicitacionViewSet(viewsets.ReadOnlyModelViewSet):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def licitaciones_ahorro_stats(request):
+    """KPIs y desglose de ahorro para licitaciones adjudicadas. Cache 5min por año."""
+    anio = request.GET.get('anio', '').strip()
+    anio_int = int(anio) if anio and anio.isdigit() else None
+    cache_key = f'licitaciones_ahorro_stats_v1_{anio}'
+    data = cache.get(cache_key)
+    if not data:
+        try:
+            data = calcular_ahorro_licitaciones(anio=anio_int)
+            cache.set(cache_key, data, timeout=300)
+        except Exception as e:
+            logger.error('licitaciones_ahorro_stats error: %s', e, exc_info=True)
+            return Response({'detail': f'Error al calcular ahorro: {e}'}, status=500)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def licitaciones_gestion_stats(request):
+    """Licitaciones activas con semáforo de urgencia. Cache 5min por año."""
+    anio = request.GET.get('anio', '').strip()
+    anio_int = int(anio) if anio and anio.isdigit() else None
+    cache_key = f'licitaciones_gestion_stats_v1_{anio}'
+    data = cache.get(cache_key)
+    if not data:
+        try:
+            data = calcular_gestion_licitaciones(anio=anio_int)
+            cache.set(cache_key, data, timeout=300)
+        except Exception as e:
+            logger.error('licitaciones_gestion_stats error: %s', e, exc_info=True)
+            return Response({'detail': f'Error al calcular gestión: {e}'}, status=500)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def licitaciones_anos_view(request):
+    """Años distintos disponibles en FechaPublicacion de Licitacion. Cache 10min."""
+    from django.db import connection
+    data = cache.get('licitaciones_anos_v1')
+    if not data:
+        with connection.cursor() as c:
+            c.execute(
+                'SELECT DISTINCT YEAR(FechaPublicacion) FROM api_licitacion '
+                'WHERE FechaPublicacion IS NOT NULL ORDER BY 1 DESC'
+            )
+            data = [row[0] for row in c.fetchall() if row[0]]
+        cache.set('licitaciones_anos_v1', data, timeout=600)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def dashboard_stats(request):
-    cache_key = 'dashboard_stats_general'
+    anio = request.GET.get('anio', '').strip()
+    estado = request.GET.get('Estado', '').strip()
+    cache_key = f'dashboard_stats_{anio}_{estado}'
     cached_data = cache.get(cache_key)
     if cached_data:
         return Response(cached_data)
 
-    total = Licitacion.objects.count()
-    cerradas = Licitacion.objects.filter(Estado='Cerrada').count()
-    publicadas = Licitacion.objects.filter(Estado='Publicada').count()
-    monto_total = Licitacion.objects.aggregate(t=Sum('MontoEstimado'))['t'] or 0
-    compradores = Licitacion.objects.values('C_Usuario').distinct().count()
+    qs = Licitacion.objects.all()
+    if anio and anio.isdigit():
+        qs = qs.filter(FechaPublicacion__year=int(anio))
+    if estado:
+        qs = qs.filter(Estado=estado)
+
+    total = qs.count()
+    cerradas = qs.filter(Estado='Cerrada').count()
+    publicadas = qs.filter(Estado='Publicada').count()
+    monto_total = qs.aggregate(t=Sum('MontoEstimado'))['t'] or 0
+    compradores = qs.values('C_Usuario').distinct().count()
 
     response_data = {
         'total': total,

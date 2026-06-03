@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import date
 
 from django.db.models import Sum, Count, Q
 
@@ -6,6 +7,7 @@ from .models import (
     OrdenCompra, DetalleOrdenCompra, PlanerPAC,
     CompraAgilResumen, CompraAgilProveedor,
     CompraAgilProductoCotizado,
+    Licitacion, DetalleLicitacion,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
@@ -1003,4 +1005,383 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
         'top_proveedores': top_proveedores,
         'top_ahorro_items': top_ahorro_items[:10],
         'mejora_items': mejora_items[:10],
+    }
+
+
+# =============================================================================
+# Módulo Licitaciones — Ahorro
+# =============================================================================
+
+def _normalizar_usuario(nombre):
+    if not nombre:
+        return 'Sin asignar'
+    return ' '.join(nombre.strip().split()).title()
+
+
+def calcular_ahorro_licitaciones(anio=None):
+    """
+    Calcula el ahorro en licitaciones adjudicadas.
+
+    Grupo A (VisibilidadMonto=1): Ahorro = MontoEstimado − Σ(MontoUnitarioGanador × CantidadAdjudicada)
+    Grupo B (VisibilidadMonto=0): Solo monto transado, sin cálculo de ahorro.
+    Excluye Desierta y Revocada del análisis de ahorro (se cuentan aparte).
+    OC vinculadas: join por CodigoLicitacion → suma TotalBruto.
+    anio: filtrar por FechaAdjudicacion__year (None = todos los años).
+    """
+    # Licitaciones adjudicadas
+    qs_adj = Licitacion.objects.filter(Estado='Adjudicada')
+    if anio:
+        qs_adj = qs_adj.filter(FechaAdjudicacion__year=anio)
+    adjudicadas = list(
+        qs_adj.values(
+            'codigo_licitacion', 'Nombre', 'C_Usuario', 'Tipo',
+            'MontoEstimado', 'VisibilidadMonto', 'FechaAdjudicacion',
+        )
+    )
+
+    codigos_adj = [l['codigo_licitacion'] for l in adjudicadas]
+
+    # Detalles: solo de las licitaciones adjudicadas relevantes
+    detalles_qs = list(
+        DetalleLicitacion.objects.filter(
+            licitacion_id__in=codigos_adj
+        ).exclude(
+            MontoUnitarioGanador__isnull=True
+        ).exclude(
+            CantidadAdjudicada__isnull=True
+        ).values(
+            'licitacion_id', 'Categoria', 'NombreProducto',
+            'MontoUnitarioGanador', 'CantidadAdjudicada',
+        )
+    )
+
+    # Agrupa detalles por licitación
+    detalles_by_lic = defaultdict(list)
+    for d in detalles_qs:
+        detalles_by_lic[d['licitacion_id']].append(d)
+
+    # OC vinculadas por CodigoLicitacion
+    codigos = [l['codigo_licitacion'] for l in adjudicadas]
+    oc_por_lic = defaultdict(lambda: {'n_oc': 0, 'total_bruto': 0.0})
+    for oc in OrdenCompra.objects.filter(
+        CodigoLicitacion__in=codigos
+    ).exclude(CodigoLicitacion='').values(
+        'CodigoLicitacion', 'TotalBruto'
+    ):
+        lic = oc['CodigoLicitacion']
+        oc_por_lic[lic]['n_oc'] += 1
+        try:
+            oc_por_lic[lic]['total_bruto'] += float(oc['TotalBruto'] or 0)
+        except (ValueError, TypeError):
+            pass
+
+    grupo_a = []
+    grupo_b = []
+    kpi_ahorro_total = 0.0
+    kpi_monto_estimado_total = 0.0
+    kpi_adjudicado_a = 0.0
+    kpi_adjudicado_b = 0.0
+    kpi_n_oc = 0
+    kpi_bruto_oc = 0.0
+
+    por_comprador_a = defaultdict(lambda: {'n': 0, 'ahorro': 0.0, 'estimado': 0.0, 'adjudicado': 0.0})
+    por_comprador_b = defaultdict(lambda: {'n': 0, 'adjudicado': 0.0})
+    por_tipo = defaultdict(lambda: {'n': 0, 'ahorro': 0.0, 'adjudicado': 0.0})
+
+    for lic in adjudicadas:
+        codigo = lic['codigo_licitacion']
+        comprador = _normalizar_usuario(lic['C_Usuario'])
+        tipo = lic['Tipo'] or 'Sin tipo'
+        monto_estimado = float(lic['MontoEstimado'] or 0)
+        visibilidad = int(lic['VisibilidadMonto'] or 0)
+        oc_info = oc_por_lic.get(codigo, {'n_oc': 0, 'total_bruto': 0.0})
+
+        # Calcular adjudicado real desde detalles
+        items = detalles_by_lic.get(codigo, [])
+        adjudicado_real = sum(
+            float(d['MontoUnitarioGanador'] or 0) * float(d['CantidadAdjudicada'] or 0)
+            for d in items
+        )
+
+        kpi_n_oc += oc_info['n_oc']
+        kpi_bruto_oc += oc_info['total_bruto']
+        fecha_adj = str(lic['FechaAdjudicacion'])[:10] if lic['FechaAdjudicacion'] else ''
+
+        if visibilidad == 1 and monto_estimado > 0:
+            ahorro = monto_estimado - adjudicado_real
+            pct = round(ahorro / monto_estimado * 100, 2) if monto_estimado > 0 else 0.0
+            kpi_ahorro_total += ahorro
+            kpi_monto_estimado_total += monto_estimado
+            kpi_adjudicado_a += adjudicado_real
+            por_comprador_a[comprador]['n'] += 1
+            por_comprador_a[comprador]['ahorro'] += ahorro
+            por_comprador_a[comprador]['estimado'] += monto_estimado
+            por_comprador_a[comprador]['adjudicado'] += adjudicado_real
+            por_tipo[tipo]['n'] += 1
+            por_tipo[tipo]['ahorro'] += ahorro
+            por_tipo[tipo]['adjudicado'] += adjudicado_real
+            grupo_a.append({
+                'codigo_licitacion': codigo,
+                'nombre': lic['Nombre'] or '',
+                'comprador': comprador,
+                'tipo': tipo,
+                'monto_estimado': round(monto_estimado, 0),
+                'adjudicado_real': round(adjudicado_real, 0),
+                'ahorro': round(ahorro, 0),
+                'pct_ahorro': pct,
+                'n_items': len(items),
+                'n_oc': oc_info['n_oc'],
+                'total_bruto_oc': round(oc_info['total_bruto'], 0),
+                'fecha_adjudicacion': fecha_adj,
+            })
+        else:
+            kpi_adjudicado_b += adjudicado_real
+            por_comprador_b[comprador]['n'] += 1
+            por_comprador_b[comprador]['adjudicado'] += adjudicado_real
+            grupo_b.append({
+                'codigo_licitacion': codigo,
+                'nombre': lic['Nombre'] or '',
+                'comprador': comprador,
+                'tipo': tipo,
+                'adjudicado_real': round(adjudicado_real, 0),
+                'n_items': len(items),
+                'n_oc': oc_info['n_oc'],
+                'total_bruto_oc': round(oc_info['total_bruto'], 0),
+                'fecha_adjudicacion': fecha_adj,
+            })
+
+    grupo_a.sort(key=lambda x: x['ahorro'], reverse=True)
+    grupo_b.sort(key=lambda x: x['adjudicado_real'], reverse=True)
+
+    # Conteos de fallidas — Desierta puede venir como 'Desierta (o art. 3 ó 9 Ley 19.886)'
+    qs_des = Licitacion.objects.filter(Estado__startswith='Desierta')
+    qs_rev = Licitacion.objects.filter(Estado='Revocada')
+    if anio:
+        qs_des = qs_des.filter(FechaPublicacion__year=anio)
+        qs_rev = qs_rev.filter(FechaPublicacion__year=anio)
+    desiertas = qs_des.count()
+    revocadas = qs_rev.count()
+
+    pct_ahorro_promedio = round(kpi_ahorro_total / kpi_monto_estimado_total * 100, 2) if kpi_monto_estimado_total > 0 else 0.0
+
+    por_comprador_list = sorted([
+        {
+            'comprador': k,
+            'n_licitaciones_a': v['n'],
+            'ahorro_total': round(v['ahorro'], 0),
+            'monto_estimado': round(v['estimado'], 0),
+            'adjudicado_a': round(v['adjudicado'], 0),
+            'pct_ahorro': round(v['ahorro'] / v['estimado'] * 100, 2) if v['estimado'] > 0 else 0,
+            'adjudicado_b': round(por_comprador_b.get(k, {}).get('adjudicado', 0.0), 0),
+        }
+        for k, v in por_comprador_a.items()
+    ], key=lambda x: x['ahorro_total'], reverse=True)
+
+    # Agregar compradores que solo tienen grupo B
+    compradores_solo_b = [
+        {
+            'comprador': k,
+            'n_licitaciones_a': 0,
+            'ahorro_total': 0,
+            'monto_estimado': 0,
+            'adjudicado_a': 0,
+            'pct_ahorro': 0,
+            'adjudicado_b': round(v['adjudicado'], 0),
+        }
+        for k, v in por_comprador_b.items()
+        if k not in por_comprador_a
+    ]
+    por_comprador_list += compradores_solo_b
+
+    return {
+        'kpis': {
+            'total_adjudicadas_a': len(grupo_a),
+            'total_adjudicadas_b': len(grupo_b),
+            'total_desiertas': desiertas,
+            'total_revocadas': revocadas,
+            'ahorro_total': round(kpi_ahorro_total, 0),
+            'pct_ahorro_promedio': pct_ahorro_promedio,
+            'monto_estimado_total': round(kpi_monto_estimado_total, 0),
+            'adjudicado_total_a': round(kpi_adjudicado_a, 0),
+            'adjudicado_total_b': round(kpi_adjudicado_b, 0),
+            'n_oc_total': kpi_n_oc,
+            'total_bruto_oc': round(kpi_bruto_oc, 0),
+        },
+        'grupo_a': grupo_a,
+        'grupo_b': grupo_b,
+        'por_comprador': por_comprador_list,
+        'por_tipo': sorted([
+            {
+                'tipo': k,
+                'n': v['n'],
+                'ahorro': round(v['ahorro'], 0),
+                'adjudicado': round(v['adjudicado'], 0),
+                'pct_ahorro': round(v['ahorro'] / v['adjudicado'] * 100, 2) if v['adjudicado'] > 0 else 0,
+            }
+            for k, v in por_tipo.items()
+        ], key=lambda x: x['ahorro'], reverse=True),
+        'fallidas': {
+            'desiertas': desiertas,
+            'revocadas': revocadas,
+        },
+        # Notas metodológicas para mostrar al pie de los gráficos
+        'metodologia': {
+            'grupo_a': 'Ahorro = MontoEstimado (con IVA) − Σ(PrecioUnitarioAdjudicado × CantidadAdjudicada). Solo licitaciones con monto público (VisibilidadMonto=1).',
+            'grupo_b': 'Monto transado = Σ(PrecioUnitarioAdjudicado × CantidadAdjudicada). Monto estimado no público (VisibilidadMonto=0) — ahorro no calculable.',
+            'oc': 'TotalBruto de OC incluye IVA, base comparable con MontoEstimado.',
+        },
+    }
+
+
+# =============================================================================
+# Módulo Licitaciones — Gestión
+# =============================================================================
+
+def calcular_gestion_licitaciones(anio=None):
+    """
+    Retorna licitaciones activas (Publicada / Cerrada) con semáforo de urgencia.
+
+    Semáforo para Publicadas (clave: FechaCierre):
+      🔴 Rojo    → < 3 días o ya vencida
+      🟡 Amarillo → < 7 días
+      🟢 Verde    → ≥ 7 días
+
+    Semáforo para Cerradas (clave: FechaEstimadaAdjudicacion):
+      🔴 Rojo    → fecha estimada ya vencida, o < 3 días, o >30 días sin fecha estimada
+      🟡 Amarillo → < 7 días, o 14-30 días sin fecha estimada
+      🟢 Verde    → ≥ 7 días
+    """
+    hoy = date.today()
+
+    qs_activas = Licitacion.objects.filter(Estado__in=['Publicada', 'Cerrada'])
+    if anio:
+        qs_activas = qs_activas.filter(FechaPublicacion__year=anio)
+    activas = list(qs_activas.values(
+            'codigo_licitacion', 'Nombre', 'C_Usuario', 'Estado', 'Tipo',
+            'FechaCierre', 'FechaEstimadaAdjudicacion', 'MontoEstimado', 'VisibilidadMonto',
+        )
+    )
+
+    licitaciones_out = []
+    kpi = {'publicadas': 0, 'cerradas': 0, 'rojo': 0, 'amarillo': 0, 'verde': 0}
+    por_comprador = defaultdict(lambda: {
+        'total': 0, 'publicadas': 0, 'cerradas': 0, 'rojo': 0, 'amarillo': 0,
+    })
+
+    for lic in activas:
+        comprador = _normalizar_usuario(lic['C_Usuario'])
+        estado = lic['Estado']
+        fecha_cierre = lic['FechaCierre'].date() if lic['FechaCierre'] else None
+        fecha_est_adj = lic['FechaEstimadaAdjudicacion'].date() if lic['FechaEstimadaAdjudicacion'] else None
+
+        dias_para_cierre = None
+        dias_en_evaluacion = None
+        dias_para_adjudicacion = None
+        semaforo = 'verde'
+        descripcion_semaforo = ''
+
+        if estado == 'Publicada':
+            kpi['publicadas'] += 1
+            if fecha_cierre:
+                dias_para_cierre = (fecha_cierre - hoy).days
+                if dias_para_cierre < 0:
+                    semaforo = 'rojo'
+                    descripcion_semaforo = f'Cierre vencido hace {abs(dias_para_cierre)} días'
+                elif dias_para_cierre < 3:
+                    semaforo = 'rojo'
+                    descripcion_semaforo = f'Cierre en {dias_para_cierre} día(s)'
+                elif dias_para_cierre < 7:
+                    semaforo = 'amarillo'
+                    descripcion_semaforo = f'Cierre en {dias_para_cierre} días'
+                else:
+                    semaforo = 'verde'
+                    descripcion_semaforo = f'Cierre en {dias_para_cierre} días'
+            else:
+                semaforo = 'amarillo'
+                descripcion_semaforo = 'Sin fecha de cierre'
+
+        elif estado == 'Cerrada':
+            kpi['cerradas'] += 1
+            if fecha_cierre:
+                dias_en_evaluacion = (hoy - fecha_cierre).days
+            if fecha_est_adj:
+                dias_para_adjudicacion = (fecha_est_adj - hoy).days
+                if dias_para_adjudicacion < 0:
+                    semaforo = 'rojo'
+                    descripcion_semaforo = f'Adjudicación estimada vencida hace {abs(dias_para_adjudicacion)} días'
+                elif dias_para_adjudicacion < 3:
+                    semaforo = 'rojo'
+                    descripcion_semaforo = f'Adjudicación estimada en {dias_para_adjudicacion} día(s)'
+                elif dias_para_adjudicacion < 7:
+                    semaforo = 'amarillo'
+                    descripcion_semaforo = f'Adjudicación estimada en {dias_para_adjudicacion} días'
+                else:
+                    semaforo = 'verde'
+                    descripcion_semaforo = f'Adjudicación estimada en {dias_para_adjudicacion} días'
+            else:
+                # Sin fecha estimada: evaluar por tiempo en evaluación
+                d = dias_en_evaluacion or 0
+                if d > 30:
+                    semaforo = 'rojo'
+                    descripcion_semaforo = f'En evaluación {d} días sin fecha estimada'
+                elif d > 14:
+                    semaforo = 'amarillo'
+                    descripcion_semaforo = f'En evaluación {d} días sin fecha estimada'
+                else:
+                    semaforo = 'verde'
+                    descripcion_semaforo = f'En evaluación {d} días'
+
+        kpi[semaforo] += 1
+        por_comprador[comprador]['total'] += 1
+        # Mapeo singular→plural para que coincida con las claves del defaultdict
+        estado_key = 'publicadas' if estado == 'Publicada' else 'cerradas'
+        por_comprador[comprador][estado_key] += 1
+        por_comprador[comprador][semaforo] = por_comprador[comprador].get(semaforo, 0) + 1
+
+        licitaciones_out.append({
+            'codigo_licitacion': lic['codigo_licitacion'],
+            'nombre': lic['Nombre'] or '',
+            'comprador': comprador,
+            'estado': estado,
+            'tipo': lic['Tipo'] or '',
+            'fecha_cierre': str(fecha_cierre) if fecha_cierre else '',
+            'fecha_estimada_adjudicacion': str(fecha_est_adj) if fecha_est_adj else '',
+            'dias_para_cierre': dias_para_cierre,
+            'dias_en_evaluacion': dias_en_evaluacion,
+            'dias_para_adjudicacion': dias_para_adjudicacion,
+            'semaforo': semaforo,
+            'descripcion_semaforo': descripcion_semaforo,
+            'monto_estimado': float(lic['MontoEstimado'] or 0),
+            'visibilidad_monto': int(lic['VisibilidadMonto'] or 0),
+        })
+
+    # Ordenar: primero rojos, luego amarillos, luego verdes; dentro de cada grupo por urgencia
+    orden_semaforo = {'rojo': 0, 'amarillo': 1, 'verde': 2}
+    licitaciones_out.sort(key=lambda x: (
+        orden_semaforo[x['semaforo']],
+        x['dias_para_cierre'] if x['dias_para_cierre'] is not None else (x['dias_para_adjudicacion'] or 999),
+    ))
+
+    por_comprador_list = sorted([
+        {
+            'comprador': k,
+            'total': v['total'],
+            'publicadas': v.get('publicadas', 0),
+            'cerradas': v.get('cerradas', 0),
+            'alertas_rojo': v.get('rojo', 0),
+            'alertas_amarillo': v.get('amarillo', 0),
+        }
+        for k, v in por_comprador.items()
+    ], key=lambda x: (x['alertas_rojo'], x['alertas_amarillo']), reverse=True)
+
+    return {
+        'kpis': {
+            'total_publicadas': kpi['publicadas'],
+            'total_cerradas': kpi['cerradas'],
+            'alertas_rojo': kpi['rojo'],
+            'alertas_amarillo': kpi['amarillo'],
+            'alertas_verde': kpi['verde'],
+        },
+        'licitaciones': licitaciones_out,
+        'por_comprador': por_comprador_list,
     }
