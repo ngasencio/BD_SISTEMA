@@ -26,3 +26,10 @@ export const getCompraAgilProductos = (params = {}) =>
 
 export const getCompraAgilProveedores = (params = {}) =>
     apiClient.get('compraagil-proveedores/', { params });
+
+// ETL — Actualización desde dashboard
+export const iniciarActualizacionCompraAgil = (fechaDesde, fechaHasta) =>
+    apiClient.post('compraagil/actualizar/', { fecha_desde: fechaDesde, fecha_hasta: fechaHasta });
+
+export const getEstadoActualizacionCompraAgil = (taskId) =>
+    apiClient.get(`compraagil/actualizar-estado/${taskId}/`);

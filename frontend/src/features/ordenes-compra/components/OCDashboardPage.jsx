@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Doughnut, Bar, Line } from 'react-chartjs-2';
 import * as XLSX from 'xlsx';
 import { useOCDashboard } from '../hooks/useOCDashboard';
+import { useActualizarOC } from '../hooks/useActualizarOC';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -468,6 +469,165 @@ function TabAnalitico({ data, anio, unidad }) {
     );
 }
 
+// ── Banner de actualización ETL ───────────────────────────────────────────────
+
+function ocLogColor(line) {
+    if (/✅|COMPLETADO|finalizada/.test(line)) return '#4ade80';
+    if (/❌|Error/.test(line)) return '#f87171';
+    if (/⚠️|Sin datos/.test(line)) return '#fbbf24';
+    if (/✨/.test(line)) return '#a78bfa';
+    if (/🔄|📊|🔗|🚀|>>>/.test(line)) return '#60a5fa';
+    return '#94a3b8';
+}
+
+function OCStepIcon({ paso, pasoActual, status }) {
+    const done = paso < pasoActual || status === 'completado';
+    const active = paso === pasoActual && status === 'en_proceso';
+    const err = status === 'error' && paso === pasoActual;
+    if (err)    return <span style={{ color: '#ef4444', fontSize: 15 }}>✗</span>;
+    if (done)   return <span style={{ color: '#22c55e', fontSize: 15 }}>✓</span>;
+    if (active) return <span style={{ display: 'inline-block', width: 13, height: 13, border: '2px solid #16a34a', borderTopColor: 'transparent', borderRadius: '50%', animation: 'oc-etl-spin 0.8s linear infinite', verticalAlign: 'middle' }} />;
+    return <span style={{ color: '#cbd5e1', fontSize: 14 }}>○</span>;
+}
+
+function OCProgressBar({ pct, active, color, indeterminate }) {
+    return (
+        <div style={{ background: '#e2e8f0', borderRadius: 4, height: 7, overflow: 'hidden', position: 'relative' }}>
+            {indeterminate ? (
+                <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: '40%', background: color, borderRadius: 4, animation: 'oc-etl-indeterminate 1.4s ease-in-out infinite' }} />
+            ) : (
+                <div style={{
+                    width: `${Math.max(2, pct)}%`, height: '100%', borderRadius: 4,
+                    background: active && pct < 100
+                        ? `repeating-linear-gradient(90deg,${color} 0,${color} 20px,${color}99 20px,${color}99 40px)`
+                        : color,
+                    backgroundSize: '40px 100%',
+                    animation: active && pct < 100 ? 'oc-etl-stripes 0.6s linear infinite' : 'none',
+                    transition: 'width 0.7s ease',
+                }} />
+            )}
+        </div>
+    );
+}
+
+function BannerActualizacionOC({ tarea, onCerrar }) {
+    const logRef = useRef(null);
+    useEffect(() => {
+        if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+    }, [tarea.logs_recientes]);
+
+    const puedesCerrar = ['completado', 'error'].includes(tarea.status);
+    const colorH = tarea.status === 'error' ? '#dc2626' : tarea.status === 'completado' ? '#15803d' : '#15803d';
+
+    const fmtF = iso => { if (!iso) return '?'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
+    const fmtN = n => n != null ? Number(n).toLocaleString('es-CL') : null;
+
+    const totalDias = tarea.total_dias || 0;
+    const diasOk = tarea.dias_completados || 0;
+    const ocsD = tarea.ocs_dia || 0;
+    const totalOcsD = tarea.total_ocs_dia || 0;
+    const pct1 = tarea.paso >= 2 || tarea.status === 'completado' ? 100 : (tarea.progreso_pct || 0);
+    const pct2 = tarea.status === 'completado' ? 100 : (tarea.progreso_sync_pct || 0);
+    const logs = tarea.logs_recientes || [];
+
+    return (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1100, width: 400, background: '#fff', borderRadius: 14, boxShadow: '0 16px 48px rgba(0,0,0,0.22)', overflow: 'hidden', border: `2px solid ${colorH}` }}>
+            <style>{`
+                @keyframes oc-etl-spin { to { transform: rotate(360deg); } }
+                @keyframes oc-etl-stripes { to { background-position: 40px 0; } }
+                @keyframes oc-etl-indeterminate { 0%{left:-40%} 60%{left:100%} 100%{left:100%} }
+            `}</style>
+
+            {/* Cabecera */}
+            <div style={{ background: colorH, padding: '11px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ color: '#fff', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {tarea.status === 'completado' ? '✅ Actualización OC completada'
+                        : tarea.status === 'error' ? '❌ Error en actualización OC'
+                        : <><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid rgba(255,255,255,0.5)', borderTopColor: '#fff', borderRadius: '50%', animation: 'oc-etl-spin 0.8s linear infinite' }} /> Actualizando Órdenes de Compra</>}
+                </div>
+                {puedesCerrar && <button onClick={onCerrar} style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14, borderRadius: 4, padding: '2px 7px', fontWeight: 700 }}>✕</button>}
+            </div>
+
+            {/* Cuerpo */}
+            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+                {/* Rango */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#475569' }}>
+                    <span>📅 {fmtF(tarea.fecha_desde)} → {fmtF(tarea.fecha_hasta)}</span>
+                    {totalDias > 0 && <span style={{ background: '#dcfce7', color: '#15803d', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 11 }}>{totalDias} día{totalDias !== 1 ? 's' : ''}</span>}
+                </div>
+
+                {/* Paso 1 */}
+                <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
+                        <span style={{ width: 18, textAlign: 'center', flexShrink: 0 }}><OCStepIcon paso={1} pasoActual={tarea.paso} status={tarea.status} /></span>
+                        <span style={{ fontWeight: tarea.paso === 1 ? 700 : 500, color: tarea.paso >= 1 ? '#1e293b' : '#94a3b8' }}>Descarga de OC + enlace PAC</span>
+                        {tarea.paso === 1 && totalDias > 0 && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>{diasOk}/{totalDias}</span>}
+                    </div>
+                    {tarea.paso >= 1 && (
+                        <>
+                            <div style={{ paddingLeft: 26 }}><OCProgressBar pct={pct1} active={tarea.paso === 1} color="#16a34a" /></div>
+                            {tarea.paso === 1 && (
+                                <div style={{ paddingLeft: 26, marginTop: 4, fontSize: 11, color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ fontStyle: 'italic' }}>{tarea.paso_desc}</span>
+                                    {totalOcsD > 0 && <span style={{ color: '#94a3b8' }}>{ocsD}/{totalOcsD} OCs</span>}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                {/* Paso 2 */}
+                <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 13 }}>
+                        <span style={{ width: 18, textAlign: 'center', flexShrink: 0 }}><OCStepIcon paso={2} pasoActual={tarea.paso} status={tarea.status} /></span>
+                        <span style={{ fontWeight: tarea.paso === 2 ? 700 : 500, color: tarea.paso >= 2 ? '#1e293b' : '#94a3b8' }}>Sincronización con base de datos</span>
+                    </div>
+                    {tarea.paso >= 2 && (
+                        <>
+                            <div style={{ paddingLeft: 26 }}><OCProgressBar pct={pct2} active={tarea.paso === 2} color="#7c3aed" indeterminate={tarea.paso === 2 && pct2 === 0} /></div>
+                            {tarea.paso === 2 && <div style={{ paddingLeft: 26, marginTop: 4, fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>{tarea.paso_desc}</div>}
+                        </>
+                    )}
+                </div>
+
+                {/* Log */}
+                {logs.length > 0 && (
+                    <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 5 }}>Actividad reciente</div>
+                        <div ref={logRef} style={{ background: '#0f172a', borderRadius: 7, padding: '8px 10px', maxHeight: 130, overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: '#334155 #0f172a' }}>
+                            {logs.map((line, i) => (
+                                <div key={i} style={{ fontSize: 11, fontFamily: 'monospace', color: ocLogColor(line), lineHeight: 1.6, wordBreak: 'break-all' }}>{line}</div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Resultados */}
+                {tarea.status === 'completado' && (
+                    <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 13px', fontSize: 12 }}>
+                        <div style={{ fontWeight: 700, color: '#15803d', fontSize: 13, marginBottom: 7 }}>📊 Resultados</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, color: '#166534' }}>
+                            {tarea.ocs_en_bd != null && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🗄️ OC en base de datos</span><span style={{ fontWeight: 700 }}>{fmtN(tarea.ocs_en_bd)}</span></div>}
+                            {tarea.detalles_en_bd != null && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>📋 Líneas de detalle</span><span style={{ fontWeight: 700 }}>{fmtN(tarea.detalles_en_bd)}</span></div>}
+                            {tarea.pac_registros != null && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🔗 Registros con PAC</span><span style={{ fontWeight: 700 }}>{fmtN(tarea.pac_registros)}</span></div>}
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 11, color: '#64748b', borderTop: '1px solid #dcfce7', paddingTop: 6 }}>Dashboard actualizado automáticamente</div>
+                    </div>
+                )}
+
+                {/* Error */}
+                {tarea.status === 'error' && (
+                    <div style={{ background: '#fef2f2', borderRadius: 8, padding: '10px 13px' }}>
+                        <div style={{ fontWeight: 700, color: '#dc2626', fontSize: 12, marginBottom: 5 }}>Detalle del error:</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#b91c1c', wordBreak: 'break-all', whiteSpace: 'pre-wrap', maxHeight: 100, overflowY: 'auto' }}>{tarea.error}</div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -480,20 +640,62 @@ const TABS = [
 export default function OCDashboardPage() {
     const [activeTab, setActiveTab] = useState('estrategico');
     const {
-        ocData,
-        loadingOC,
-        errorOC,
-        anio, setAnio,
-        unidad, setUnidad,
-        years, unidades,
+        ocData, loadingOC, errorOC,
+        anio, setAnio, unidad, setUnidad,
+        years, unidades, refresh,
     } = useOCDashboard();
 
     const isLoading = loadingOC;
 
+    // Modal de actualización
+    const [showModal, setShowModal] = useState(false);
+    const hoy = new Date();
+    const hace7 = new Date(hoy); hace7.setDate(hoy.getDate() - 7);
+    const [modalDesde, setModalDesde] = useState(hace7.toISOString().slice(0, 10));
+    const [modalHasta, setModalHasta] = useState(hoy.toISOString().slice(0, 10));
+
+    const { tarea: tareaOC, iniciando: iniciandoOC, iniciar: iniciarOC, cerrar: cerrarBannerOC } =
+        useActualizarOC(refresh);
+
+    const handleIniciarOC = () => { setShowModal(false); iniciarOC(modalDesde, modalHasta); };
+
     return (
         <div className="feature-page">
 
-            {/* ── Barra de tabs + filtros inline (Opción B) ── */}
+            {/* ── Modal selección de fechas ── */}
+            {showModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: '#fff', borderRadius: 12, padding: '28px 32px', width: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+                        <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: '#1e293b' }}>🔄 Actualizar Órdenes de Compra</h3>
+                        <p style={{ margin: '0 0 20px', fontSize: 13, color: '#64748b' }}>Selecciona el rango de fechas a descargar desde Mercado Público.</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <div>
+                                <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Desde</label>
+                                <input type="date" className="filtro-input" style={{ width: '100%' }} value={modalDesde} onChange={e => setModalDesde(e.target.value)} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>Hasta</label>
+                                <input type="date" className="filtro-input" style={{ width: '100%' }} value={modalHasta} onChange={e => setModalHasta(e.target.value)} />
+                            </div>
+                        </div>
+                        <p style={{ margin: '12px 0 0', fontSize: 11, color: '#94a3b8' }}>
+                            Incluye: descarga diaria, integración en maestros, enlace PAC y sincronización con BD.
+                        </p>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+                            <button onClick={() => setShowModal(false)} style={{ padding: '8px 18px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: 13, color: '#64748b', fontWeight: 600 }}>Cancelar</button>
+                            <button onClick={handleIniciarOC} disabled={iniciandoOC || !modalDesde || !modalHasta}
+                                style={{ padding: '8px 20px', borderRadius: 7, border: 'none', background: '#16a34a', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, opacity: (iniciandoOC || !modalDesde || !modalHasta) ? 0.6 : 1 }}>
+                                {iniciandoOC ? '⏳ Iniciando...' : '🚀 Actualizar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Banner flotante de progreso ── */}
+            {tareaOC && <BannerActualizacionOC tarea={tareaOC} onCerrar={cerrarBannerOC} />}
+
+            {/* ── Barra de tabs + filtros inline ── */}
             <div className="oc-tabbar">
                 <div className="oc-tabbar-tabs">
                     {TABS.map(t => (
@@ -511,26 +713,27 @@ export default function OCDashboardPage() {
                 <div className="oc-tabbar-filters">
                     <div className="oc-filter-group">
                         <span className="oc-filter-label-dark">Año</span>
-                        <select
-                            className="oc-filter-select-light"
-                            value={anio}
-                            onChange={e => setAnio(e.target.value)}
-                        >
+                        <select className="oc-filter-select-light" value={anio} onChange={e => setAnio(e.target.value)}>
                             {years.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
                     <div className="oc-filter-group">
                         <span className="oc-filter-label-dark">Unidad</span>
-                        <select
-                            className="oc-filter-select-light"
-                            style={{ maxWidth: 220 }}
-                            value={unidad}
-                            onChange={e => setUnidad(e.target.value)}
-                        >
+                        <select className="oc-filter-select-light" style={{ maxWidth: 200 }} value={unidad} onChange={e => setUnidad(e.target.value)}>
                             <option value="Todas">Todas las unidades</option>
                             {unidades.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
                     </div>
+                    {/* Botón Actualizar API */}
+                    <button
+                        className="btn-actualizar-api"
+                        onClick={() => setShowModal(true)}
+                        disabled={!!tareaOC && ['iniciado', 'en_proceso'].includes(tareaOC.status)}
+                        title="Descargar nuevas OC desde Mercado Público y sincronizar con BD"
+                        style={{ marginLeft: 8 }}
+                    >
+                        {tareaOC && ['iniciado', 'en_proceso'].includes(tareaOC.status) ? '⏳ Actualizando...' : '🔄 Actualizar API'}
+                    </button>
                 </div>
             </div>
 

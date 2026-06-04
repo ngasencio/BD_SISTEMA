@@ -65,5 +65,6 @@ export function useOCDashboard() {
         unidad, setUnidad,
         years,
         unidades,
+        refresh: fetchOC,
     };
 }

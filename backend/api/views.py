@@ -1,4 +1,5 @@
 import logging
+import re
 import subprocess
 import sys
 import threading
@@ -16,6 +17,14 @@ from rest_framework.response import Response
 
 # Almacén en memoria de tareas de descarga (app local, un solo usuario)
 _tareas_descarga = {}
+
+# Almacén de tareas ETL Compra Ágil
+_tareas_actualizacion_ca: dict = {}
+
+# Almacén de tareas ETL Órdenes de Compra
+_tareas_actualizacion_oc: dict = {}
+
+_RUTA_AG_SERVIDOR = Path(__file__).parent.parent.parent / "api"
 
 from .models import (
     BoletaGarantia, BoletaGarantiaAudit, Comprador,
@@ -917,5 +926,564 @@ def estado_descarga_ofertas(request, task_id):
         "status": tarea["status"],
         "ruta_zip": tarea.get("ruta_zip"),
         "ruta_carpeta": tarea.get("ruta_carpeta"),
+        "error": tarea.get("error"),
+    })
+
+
+# ─── Actualización Compra Ágil desde el dashboard ─────────────────────────────
+
+class _ETLLiveStream:
+    """
+    Reemplaza sys.stdout durante el ETL.
+    Parsea cada línea impresa y actualiza el dict de tarea en tiempo real,
+    evitando errores de codificación cp1252 de Windows (los print del ETL usan emojis).
+    """
+
+    _SKIP = re.compile(
+        r"^\s*(?:={3,}|─{3,}|-{3,}"
+        r"|📄\s*Obteniendo página"
+        r"|🏥\s*ORGANISMO|🔐\s*VALIDACIÓN|1️⃣|2️⃣"
+        r"|EXTRACTOR COMPRA|Región Los Lagos"
+        r"|\s*)$"
+    )
+    _KEEP = re.compile(
+        r"[✅⊗✨📊🔄🔗❌⚠️🚀💾]"
+        r"|\[\d+/\d+\]"
+        r"|registros|OC_Codigo|Método\s*1|SINCRONIZANDO|RESULTADO|INTEGRANDO"
+    )
+
+    def __init__(self, task_id: str, total_dias: int):
+        self._tid = task_id
+        self._total = max(total_dias, 1)
+        self._partial = ""
+        self._dias_ok = 0
+        self._logs: list = []
+
+    def write(self, text: str):
+        self._partial += text
+        while "\n" in self._partial:
+            line, self._partial = self._partial.split("\n", 1)
+            self._handle(line.rstrip("\r"))
+
+    def flush(self):
+        pass
+
+    def _handle(self, line: str):
+        t = _tareas_actualizacion_ca.get(self._tid)
+        if not t:
+            return
+
+        upd: dict = {}
+
+        # Día procesando
+        m = re.search(r"PROCESANDO[:\s]+(\d{2}-\d{2}-\d{4})", line)
+        if m:
+            upd["dia_actual"] = m.group(1)
+            upd["paso_desc"] = f"Procesando {m.group(1)}..."
+
+        # Total registros en región
+        m = re.search(r"Total:\s*(\d+)\s*registros en\s*(\d+)\s*páginas", line)
+        if m:
+            upd["total_region_dia"] = int(m.group(1))
+
+        # SSO validados del día
+        m = re.search(r"SSO.*ambas.*validaciones.*:\s*(\d+)", line)
+        if m:
+            upd["sso_dia"] = int(m.group(1))
+
+        # Día completado → avanza barra
+        if "COMPLETADO EXITOSAMENTE" in line and "DÍA" in line:
+            self._dias_ok += 1
+            pct = min(99, round(self._dias_ok / self._total * 100))
+            upd["dias_completados"] = self._dias_ok
+            upd["progreso_pct"] = pct
+            upd["paso_desc"] = f"{self._dias_ok}/{self._total} días completados"
+
+        # Integración de maestros (dentro de refresh)
+        if "INTEGRANDO NUEVOS DATOS" in line:
+            upd["paso_desc"] = "Integrando datos en maestros..."
+
+        m = re.search(r"Maestro Resumen:\s*(\d+)", line)
+        if m:
+            upd["maestro_resumen_total"] = int(m.group(1))
+
+        # Enlace OC
+        m = re.search(r"CAs con OC_Codigo:\s*(\d+)/(\d+)", line)
+        if m:
+            upd["oc_encontradas"] = int(m.group(1))
+            upd["oc_total_ps"] = int(m.group(2))
+
+        m = re.search(r"Método 1:\s*(\d+)\s*códigos enlazados", line)
+        if m:
+            upd["oc_metodo1"] = int(m.group(1))
+
+        # Sincronización con MariaDB
+        if "SINCRONIZANDO MAESTROS" in line:
+            upd["paso_desc"] = "Subiendo tablas a base de datos..."
+
+        m = re.search(r"(api_compraagil_\w+):\s*(\d+)\s*registros", line)
+        if m:
+            tabla_n = t.get("tablas_sync", 0) + 1
+            upd["tablas_sync"] = tabla_n
+            upd["ultima_tabla_sync"] = f"{m.group(1)}: {m.group(2)} reg."
+            upd["progreso_sync_pct"] = min(100, round(tabla_n / 5 * 100))
+
+        # Log visual — filtrar líneas ruidosas, conservar informativas
+        stripped = line.strip()
+        if stripped and not self._SKIP.match(stripped) and self._KEEP.search(stripped):
+            self._logs.append(stripped)
+            if len(self._logs) > 12:
+                self._logs.pop(0)
+            upd["logs_recientes"] = list(self._logs)
+
+        if upd:
+            t.update(upd)
+
+
+def _ejecutar_actualizacion_compraagil(task_id: str, fecha_desde_str: str, fecha_hasta_str: str):
+    """Ejecuta el ETL de Compra Ágil en un hilo daemon con reporte de progreso en tiempo real."""
+    import contextlib
+    import datetime as _dt
+
+    api_path = str(_RUTA_AG_SERVIDOR)
+    if api_path not in sys.path:
+        sys.path.insert(0, api_path)
+
+    try:
+        import AG_SSO_SERVER as ag
+    except ImportError as exc:
+        _tareas_actualizacion_ca[task_id].update(
+            status="error", error=f"No se pudo cargar AG_SSO_SERVER: {exc}"
+        )
+        return
+
+    try:
+        d1 = _dt.datetime.strptime(fecha_desde_str, "%Y-%m-%d").date()
+        d2 = _dt.datetime.strptime(fecha_hasta_str, "%Y-%m-%d").date()
+        total_dias = (d2 - d1).days + 1
+
+        _tareas_actualizacion_ca[task_id].update(
+            total_dias=total_dias, dias_completados=0, progreso_pct=0,
+            dia_actual=None, logs_recientes=[], oc_encontradas=None,
+            oc_total_ps=None, oc_metodo1=None,
+            maestro_resumen_total=None,
+            tablas_sync=0, progreso_sync_pct=0, ultima_tabla_sync=None,
+        )
+
+        stream = _ETLLiveStream(task_id, total_dias)
+
+        # ── Paso 1: refresh (descarga + enlace OC al final) ──
+        _tareas_actualizacion_ca[task_id].update(
+            status="en_proceso", paso=1,
+            paso_desc="Iniciando descarga de datos...",
+        )
+        with contextlib.redirect_stdout(stream):
+            ag.refresh_base_datos(d1, d2)
+
+        _tareas_actualizacion_ca[task_id].update(
+            paso=2, progreso_pct=100,
+            paso_desc="Sincronizando con base de datos...",
+        )
+
+        # ── Paso 2: sincronizar con MariaDB ──
+        with contextlib.redirect_stdout(stream):
+            ag.sincronizar_con_servidor()
+
+        _tareas_actualizacion_ca[task_id].update(
+            status="completado", paso=3,
+            paso_desc="Completado exitosamente",
+            progreso_sync_pct=100,
+        )
+
+    except Exception as exc:
+        _tareas_actualizacion_ca[task_id].update(status="error", error=str(exc))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def iniciar_actualizacion_compraagil(request):
+    """Inicia el ETL de Compra Ágil. Body: {fecha_desde, fecha_hasta} en formato YYYY-MM-DD."""
+    for tarea in _tareas_actualizacion_ca.values():
+        if tarea.get("status") in ("iniciado", "en_proceso"):
+            return Response({"error": "Ya hay una actualización en curso."}, status=409)
+
+    fecha_desde = (request.data.get("fecha_desde") or "").strip()
+    fecha_hasta = (request.data.get("fecha_hasta") or "").strip()
+    if not fecha_desde or not fecha_hasta:
+        return Response(
+            {"error": "Parámetros fecha_desde y fecha_hasta requeridos (YYYY-MM-DD)."},
+            status=400,
+        )
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_actualizacion_ca[task_id] = {
+        "status": "iniciado",
+        "paso": 0,
+        "paso_desc": "Iniciando...",
+        "fecha_desde": fecha_desde,
+        "fecha_hasta": fecha_hasta,
+        "error": None,
+    }
+    threading.Thread(
+        target=_ejecutar_actualizacion_compraagil,
+        args=(task_id, fecha_desde, fecha_hasta),
+        daemon=True,
+    ).start()
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def estado_actualizacion_compraagil(request, task_id):
+    """Retorna el estado completo de una tarea de actualización Compra Ágil."""
+    tarea = _tareas_actualizacion_ca.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id": task_id,
+        "status": tarea["status"],
+        "paso": tarea["paso"],
+        "paso_desc": tarea["paso_desc"],
+        "fecha_desde": tarea.get("fecha_desde"),
+        "fecha_hasta": tarea.get("fecha_hasta"),
+        # Progreso paso 1
+        "total_dias": tarea.get("total_dias", 0),
+        "dias_completados": tarea.get("dias_completados", 0),
+        "progreso_pct": tarea.get("progreso_pct", 0),
+        "dia_actual": tarea.get("dia_actual"),
+        # Progreso paso 2
+        "tablas_sync": tarea.get("tablas_sync", 0),
+        "progreso_sync_pct": tarea.get("progreso_sync_pct", 0),
+        "ultima_tabla_sync": tarea.get("ultima_tabla_sync"),
+        # Resultados
+        "oc_encontradas": tarea.get("oc_encontradas"),
+        "oc_total_ps": tarea.get("oc_total_ps"),
+        "oc_metodo1": tarea.get("oc_metodo1"),
+        "maestro_resumen_total": tarea.get("maestro_resumen_total"),
+        # Log en tiempo real
+        "logs_recientes": tarea.get("logs_recientes", []),
+        "error": tarea.get("error"),
+    })
+
+
+# ─── Actualización Órdenes de Compra desde el dashboard ──────────────────────
+
+class _ETLLiveStream_OC:
+    """
+    Reemplaza sys.stdout durante el ETL de OC.
+    Parsea líneas informativas y actualiza el dict de tarea en tiempo real.
+    Maneja tanto \\n (líneas normales) como \\r (progreso in-place de ThreadPoolExecutor).
+    """
+
+    _SKIP = re.compile(
+        r"^\s*(?:={3,}|─{3,}|-{3,}"
+        r"|EXTRACTOR SSO|GESTIÓN TOTAL"
+        r"|── Descarga|── Maestros|── Sincronización|── Reparación"
+        r"|\s*)$"
+    )
+    _KEEP = re.compile(
+        r"[✅✨📊🔄🔗❌⚠️🚀💾]|>>>"
+        r"|registros|Guardado|REFRESH|ENLACE|PAC|Vaciando|Insertando|TOTAL EN BD"
+        r"|Maestro|actualizado|COMPLETADO|Sin datos"
+    )
+
+    def __init__(self, task_id: str, total_dias: int):
+        self._tid = task_id
+        self._total = max(total_dias, 1)
+        self._partial = ""
+        self._logs: list = []
+
+    def write(self, text: str):
+        self._partial += text
+        while "\n" in self._partial:
+            raw_line, self._partial = self._partial.split("\n", 1)
+            # Tomar último segmento del carriage-return (líneas de progreso in-place)
+            if "\r" in raw_line:
+                raw_line = raw_line.split("\r")[-1]
+            self._handle(raw_line.strip())
+
+    def flush(self):
+        pass
+
+    def _handle(self, line: str):
+        t = _tareas_actualizacion_oc.get(self._tid)
+        if not t or not line:
+            return
+
+        upd: dict = {}
+
+        # Extracción diaria
+        m = re.search(r"EXTRACCIÓN SSO[:\s]+(\d{2}/\d{2}/\d{4})", line)
+        if m:
+            upd["paso_desc"] = f"Procesando {m.group(1)}..."
+
+        if "Sin datos en API" in line or "Sin datos" in line:
+            upd["paso_desc"] = "Sin datos para este día, continuando..."
+
+        # Integración maestros
+        if "INTEGRANDO NUEVOS DATOS" in line:
+            upd["paso_desc"] = "Integrando datos en maestros..."
+
+        m = re.search(r"Maestro Resumen actualizado.*?(\d+)", line)
+        if m:
+            upd["maestro_resumen_total"] = int(m.group(1))
+
+        m = re.search(r"Maestro Detalles actualizado.*?(\d+)", line)
+        if m:
+            upd["maestro_detalles_total"] = int(m.group(1))
+
+        # Enlace PAC
+        if "ENLACE CON PLAN ANUAL" in line or "INICIANDO ENLACE" in line:
+            upd["paso_desc"] = "Enlazando con Plan Anual de Compras (PAC)..."
+
+        m = re.search(r"actualizado exitosamente con\s*(\d+)\s*registros", line)
+        if m:
+            upd["pac_registros"] = int(m.group(1))
+
+        # Subida a Django
+        if "CARGANDO CSVs" in line or "SINCRONIZACIÓN MASIVA" in line:
+            upd["paso_desc"] = "Preparando carga a base de datos..."
+
+        if "Vaciando la base de datos" in line:
+            upd["paso_desc"] = "Vaciando registros anteriores..."
+            upd["progreso_sync_pct"] = 20
+
+        m = re.search(r"Insertando\s+(\d[\d,]*)\s+Órdenes de Compra", line)
+        if m:
+            n = int(m.group(1).replace(",", ""))
+            upd["ocs_subidas"] = n
+            upd["paso_desc"] = f"Insertando {n:,} órdenes de compra..."
+            upd["progreso_sync_pct"] = 50
+
+        m = re.search(r"Insertando\s+(\d[\d,]*)\s+Detalles", line)
+        if m:
+            n = int(m.group(1).replace(",", ""))
+            upd["detalles_subidos"] = n
+            upd["paso_desc"] = f"Insertando {n:,} líneas de detalle..."
+            upd["progreso_sync_pct"] = 75
+
+        if "Sincronización masiva finalizada" in line:
+            upd["progreso_sync_pct"] = 100
+            upd["paso_desc"] = "Sincronización completada."
+
+        m = re.search(r"TOTAL EN BD:\s*(\d+).*?(\d+)\s*Detalles", line)
+        if m:
+            upd["ocs_en_bd"] = int(m.group(1))
+            upd["detalles_en_bd"] = int(m.group(2))
+
+        # Log visual
+        if not self._SKIP.match(line) and self._KEEP.search(line):
+            self._logs.append(line)
+            if len(self._logs) > 12:
+                self._logs.pop(0)
+            upd["logs_recientes"] = list(self._logs)
+
+        if upd:
+            t.update(upd)
+
+
+def _ejecutar_actualizacion_oc(task_id: str, fecha_desde_str: str, fecha_hasta_str: str):
+    """Ejecuta el ETL de OC en un hilo daemon con reporte de progreso en tiempo real."""
+    import contextlib
+    import datetime as _dt
+
+    api_path = str(_RUTA_AG_SERVIDOR)
+    if api_path not in sys.path:
+        sys.path.insert(0, api_path)
+
+    try:
+        import OC_SSO_SERVER as oc
+    except ImportError as exc:
+        _tareas_actualizacion_oc[task_id].update(
+            status="error", error=f"No se pudo cargar OC_SSO_SERVER: {exc}"
+        )
+        return
+
+    try:
+        d1 = _dt.datetime.strptime(fecha_desde_str, "%Y-%m-%d").date()
+        d2 = _dt.datetime.strptime(fecha_hasta_str, "%Y-%m-%d").date()
+        total_dias = (d2 - d1).days + 1
+
+        _tareas_actualizacion_oc[task_id].update(
+            total_dias=total_dias, dias_completados=0, progreso_pct=0,
+            dia_actual=None, ocs_dia=0, total_ocs_dia=0,
+            logs_recientes=[], maestro_resumen_total=None,
+            maestro_detalles_total=None, pac_registros=None,
+            ocs_subidas=None, detalles_subidos=None,
+            ocs_en_bd=None, detalles_en_bd=None,
+            progreso_sync_pct=0, diff=None,
+        )
+
+        stream = _ETLLiveStream_OC(task_id, total_dias)
+        progress_state: dict = {"days_done": set()}
+
+        def _on_progress(fecha, codigo_oc, done, total):
+            if total > 0 and done >= total:
+                progress_state["days_done"].add(fecha)
+            dias_ok = len(progress_state["days_done"])
+            frac = (dias_ok + (done / max(total, 1))) / max(total_dias, 1)
+            pct = min(99, round(frac * 100))
+            _tareas_actualizacion_oc[task_id].update(
+                dia_actual=fecha.strftime("%d-%m-%Y"),
+                ocs_dia=done,
+                total_ocs_dia=total,
+                progreso_pct=pct,
+                dias_completados=dias_ok,
+                paso_desc=f"Procesando {fecha.strftime('%d-%m-%Y')} — {done}/{total} OCs",
+            )
+
+        # ── Paso 1: refresh (descarga + maestros + PAC) ──
+        _tareas_actualizacion_oc[task_id].update(
+            status="en_proceso", paso=1,
+            paso_desc="Iniciando descarga de Órdenes de Compra...",
+        )
+        with contextlib.redirect_stdout(stream):
+            oc.refresh_base_datos(d1, d2, progress_callback=_on_progress)
+
+        # ── Snapshot pre-sync: capturar estado actual de la BD ──
+        from django.db import close_old_connections as _close_conns
+        _close_conns()
+        snap_pre: dict = {}
+        try:
+            snap_pre = dict(OrdenCompra.objects.values_list("codigo_oc", "EstadoOC"))
+        except Exception:
+            pass
+
+        _tareas_actualizacion_oc[task_id].update(
+            paso=2, progreso_pct=100,
+            paso_desc="Sincronizando con base de datos...",
+        )
+
+        # ── Paso 2: subir maestros a Django/MariaDB ──
+        with contextlib.redirect_stdout(stream):
+            oc.subir_maestros_a_django()
+
+        # ── Diff post-sync: calcular qué cambió ──
+        _tareas_actualizacion_oc[task_id].update(paso_desc="Calculando cambios detectados...")
+        diff: dict = {
+            "nuevas": [], "cambiadas": [],
+            "nuevas_count": 0, "cambiadas_count": 0,
+            "total_antes": len(snap_pre), "total_despues": 0,
+        }
+        try:
+            _close_conns()
+            campos = ("codigo_oc", "EstadoOC", "TotalNeto", "TotalBruto",
+                      "NombreOC", "P_Nombre", "C_Unidad", "FechaEnvio", "TipoOC")
+            snap_post = {r["codigo_oc"]: r for r in OrdenCompra.objects.values(*campos)}
+            diff["total_despues"] = len(snap_post)
+
+            nuevas, cambiadas = [], []
+            for cod, det in snap_post.items():
+                total_raw = str(det.get("TotalNeto") or det.get("TotalBruto") or "")
+                base = {
+                    "codigo":    cod,
+                    "proveedor": det.get("P_Nombre") or "",
+                    "unidad":    det.get("C_Unidad") or "",
+                    "total":     total_raw,
+                    "nombre":    det.get("NombreOC") or "",
+                    "tipo":      det.get("TipoOC") or "",
+                }
+                if cod not in snap_pre:
+                    nuevas.append({**base,
+                        "estado": det.get("EstadoOC") or "",
+                        "fecha":  str(det.get("FechaEnvio") or ""),
+                    })
+                elif snap_pre[cod] != (det.get("EstadoOC") or ""):
+                    cambiadas.append({**base,
+                        "estado_anterior": snap_pre[cod] or "",
+                        "estado_nuevo":    det.get("EstadoOC") or "",
+                    })
+
+            nuevas.sort(key=lambda x: x.get("fecha", "") or "", reverse=True)
+            cambiadas.sort(key=lambda x: x["codigo"])
+
+            diff.update({
+                "nuevas":         nuevas,
+                "cambiadas":      cambiadas,
+                "nuevas_count":   len(nuevas),
+                "cambiadas_count": len(cambiadas),
+            })
+        except Exception as exc_diff:
+            diff["error_diff"] = str(exc_diff)
+
+        _tareas_actualizacion_oc[task_id].update(
+            status="completado", paso=3,
+            paso_desc="Completado exitosamente",
+            progreso_sync_pct=100,
+            diff=diff,
+        )
+
+    except Exception as exc:
+        _tareas_actualizacion_oc[task_id].update(status="error", error=str(exc))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def iniciar_actualizacion_oc(request):
+    """Inicia el ETL de OC. Body: {fecha_desde, fecha_hasta} en formato YYYY-MM-DD."""
+    for tarea in _tareas_actualizacion_oc.values():
+        if tarea.get("status") in ("iniciado", "en_proceso"):
+            return Response({"error": "Ya hay una actualización de OC en curso."}, status=409)
+
+    fecha_desde = (request.data.get("fecha_desde") or "").strip()
+    fecha_hasta = (request.data.get("fecha_hasta") or "").strip()
+    if not fecha_desde or not fecha_hasta:
+        return Response(
+            {"error": "Parámetros fecha_desde y fecha_hasta requeridos (YYYY-MM-DD)."},
+            status=400,
+        )
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_actualizacion_oc[task_id] = {
+        "status": "iniciado",
+        "paso": 0,
+        "paso_desc": "Iniciando...",
+        "fecha_desde": fecha_desde,
+        "fecha_hasta": fecha_hasta,
+        "error": None,
+    }
+    threading.Thread(
+        target=_ejecutar_actualizacion_oc,
+        args=(task_id, fecha_desde, fecha_hasta),
+        daemon=True,
+    ).start()
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def estado_actualizacion_oc(request, task_id):
+    """Retorna el estado completo de una tarea de actualización OC."""
+    tarea = _tareas_actualizacion_oc.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id": task_id,
+        "status": tarea["status"],
+        "paso": tarea["paso"],
+        "paso_desc": tarea["paso_desc"],
+        "fecha_desde": tarea.get("fecha_desde"),
+        "fecha_hasta": tarea.get("fecha_hasta"),
+        # Progreso paso 1
+        "total_dias": tarea.get("total_dias", 0),
+        "dias_completados": tarea.get("dias_completados", 0),
+        "progreso_pct": tarea.get("progreso_pct", 0),
+        "dia_actual": tarea.get("dia_actual"),
+        "ocs_dia": tarea.get("ocs_dia", 0),
+        "total_ocs_dia": tarea.get("total_ocs_dia", 0),
+        # Progreso paso 2
+        "progreso_sync_pct": tarea.get("progreso_sync_pct", 0),
+        # Resultados
+        "maestro_resumen_total": tarea.get("maestro_resumen_total"),
+        "maestro_detalles_total": tarea.get("maestro_detalles_total"),
+        "pac_registros": tarea.get("pac_registros"),
+        "ocs_subidas": tarea.get("ocs_subidas"),
+        "detalles_subidos": tarea.get("detalles_subidos"),
+        "ocs_en_bd": tarea.get("ocs_en_bd"),
+        "detalles_en_bd": tarea.get("detalles_en_bd"),
+        # Log en tiempo real
+        "logs_recientes": tarea.get("logs_recientes", []),
+        # Diff de cambios detectados (disponible al completar)
+        "diff": tarea.get("diff"),
         "error": tarea.get("error"),
     })

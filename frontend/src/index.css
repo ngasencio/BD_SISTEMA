@@ -5037,6 +5037,17 @@ select.boleta-input {
 .btn-limpiar:hover { background: #f3f4f6; color: #111827; }
 .filtro-activo-badge { font-size: 11px; padding: 3px 10px; background: #dbeafe; color: #1d4ed8; border-radius: 20px; font-weight: 500; }
 
+/* Botón Actualizar API (Compra Ágil ETL) */
+.btn-actualizar-api {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 8px;
+  background: #0ea5e9; color: #fff;
+  border: none; cursor: pointer; font-size: 13px; font-weight: 600;
+  transition: background .15s; white-space: nowrap;
+}
+.btn-actualizar-api:hover { background: #0284c7; }
+.btn-actualizar-api:disabled { background: #9ca3af; cursor: not-allowed; }
+
 /* Botón PDF */
 .btn-pdf {
   display: flex; align-items: center; gap: 6px;

@@ -17,6 +17,8 @@ from .views import (
     licitaciones_calendario, licitaciones_anos_calendario,
     compraagil_calendario, compraagil_anos_calendario,
     iniciar_descarga_ofertas, estado_descarga_ofertas,
+    iniciar_actualizacion_compraagil, estado_actualizacion_compraagil,
+    iniciar_actualizacion_oc, estado_actualizacion_oc,
 )
 
 router = DefaultRouter()
@@ -77,6 +79,14 @@ urlpatterns = [
     # Descarga de ofertas (scraper)
     path('licitaciones/descarga-ofertas/', iniciar_descarga_ofertas, name='iniciar_descarga_ofertas'),
     path('licitaciones/descarga-estado/<str:task_id>/', estado_descarga_ofertas, name='estado_descarga_ofertas'),
+
+    # Compra Ágil — Actualización ETL desde dashboard
+    path('compraagil/actualizar/', iniciar_actualizacion_compraagil, name='iniciar_actualizacion_compraagil'),
+    path('compraagil/actualizar-estado/<str:task_id>/', estado_actualizacion_compraagil, name='estado_actualizacion_compraagil'),
+
+    # Órdenes de Compra — Actualización ETL desde dashboard
+    path('ordenes-compra/actualizar/', iniciar_actualizacion_oc, name='iniciar_actualizacion_oc'),
+    path('ordenes-compra/actualizar-estado/<str:task_id>/', estado_actualizacion_oc, name='estado_actualizacion_oc'),
 
     # Router ViewSets
     path('', include(router.urls)),
