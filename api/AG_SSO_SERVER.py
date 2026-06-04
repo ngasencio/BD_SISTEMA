@@ -1058,12 +1058,25 @@ def sincronizar_con_servidor():
         (CARPETA_MAESTROS / "Maestro_Documentos.csv",           TABLA_DOCUMENTOS),
     ]
 
+    # Columnas de fecha de Maestro_Resumen que se almacenan como DATETIME
+    _COLS_FECHA_RESUMEN = [
+        'FechaPublicacion', 'FechaCierre', 'FechaUltimoCambio',
+        'FechaCierrePrimerLlamado', 'FechaCierreSegundoLlamado', 'FechaCancelacion',
+    ]
+
     for ruta_csv, nombre_tabla in tablas:
         if not ruta_csv.exists():
             print(f"   ⚠️  {ruta_csv.name} no encontrado. Omitiendo {nombre_tabla}.")
             continue
         try:
             df = pd.read_csv(ruta_csv, sep=";", encoding="utf-8-sig", dtype=str)
+
+            # Convertir columnas de fecha a datetime para que MySQL las guarde como DATETIME
+            if nombre_tabla == TABLA_RESUMEN:
+                for col in _COLS_FECHA_RESUMEN:
+                    if col in df.columns:
+                        df[col] = pd.to_datetime(df[col], format='%Y-%m-%d %H:%M', errors='coerce')
+
             with engine.connect() as conn:
                 conn.execute(text(f"DROP TABLE IF EXISTS `{nombre_tabla}`"))
                 conn.commit()

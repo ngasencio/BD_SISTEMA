@@ -14,6 +14,9 @@ from .views import (
     compraagil_comparativa_view, compraagil_patrones_view,
     RevisionOCCorregibleViewSet,
     licitaciones_ahorro_stats, licitaciones_gestion_stats, licitaciones_anos_view,
+    licitaciones_calendario, licitaciones_anos_calendario,
+    compraagil_calendario, compraagil_anos_calendario,
+    iniciar_descarga_ofertas, estado_descarga_ofertas,
 )
 
 router = DefaultRouter()
@@ -62,6 +65,18 @@ urlpatterns = [
     path('licitaciones/anos/', licitaciones_anos_view, name='licitaciones_anos'),
     path('licitaciones/ahorro-stats/', licitaciones_ahorro_stats, name='licitaciones_ahorro_stats'),
     path('licitaciones/gestion-stats/', licitaciones_gestion_stats, name='licitaciones_gestion_stats'),
+
+    # Licitaciones — Calendario autónomo
+    path('licitaciones/calendario/', licitaciones_calendario, name='licitaciones_calendario'),
+    path('licitaciones/anos-calendario/', licitaciones_anos_calendario, name='licitaciones_anos_calendario'),
+
+    # Compra Ágil — Calendario autónomo
+    path('compraagil/calendario/', compraagil_calendario, name='compraagil_calendario'),
+    path('compraagil/anos-calendario/', compraagil_anos_calendario, name='compraagil_anos_calendario'),
+
+    # Descarga de ofertas (scraper)
+    path('licitaciones/descarga-ofertas/', iniciar_descarga_ofertas, name='iniciar_descarga_ofertas'),
+    path('licitaciones/descarga-estado/<str:task_id>/', estado_descarga_ofertas, name='estado_descarga_ofertas'),
 
     # Router ViewSets
     path('', include(router.urls)),

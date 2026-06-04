@@ -819,7 +819,9 @@ def calcular_compraagil_ahorro_stats(fecha_desde=None, fecha_hasta=None):
         estado = ca.get('estadoglosa') or ''
         unidad = ca.get('unidadcompra') or 'Sin unidad'
         presupuesto = _f(ca.get('presupuestoestimado'))
-        fecha = (ca.get('fechapublicacion') or '')[:7]   # "YYYY-MM"
+        # fechapublicacion es DateTimeField → usar strftime; antes era TextField
+        fecha_val = ca.get('fechapublicacion')
+        fecha = fecha_val.strftime('%Y-%m') if fecha_val else ''
 
         total_presupuesto += presupuesto
         por_estado[estado]['cantidad'] += 1

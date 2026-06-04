@@ -1,13 +1,21 @@
 import logging
+import subprocess
+import sys
+import threading
+import uuid
+from pathlib import Path
 
 from django.core.cache import cache
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+# Almacén en memoria de tareas de descarga (app local, un solo usuario)
+_tareas_descarga = {}
 
 from .models import (
     BoletaGarantia, BoletaGarantiaAudit, Comprador,
@@ -20,11 +28,23 @@ from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
     CompradorSerializer, DetalleLicitacionSerializer,
     DetalleOrdenCompraSerializer, DevengoSerializer,
-    LicitacionSerializer, OrdenCompraSerializer, ProveedorSerializer,
-    PlanerPACSerializer, CompraAgilResumenSerializer,
+    LicitacionSerializer, LicitacionCalendarioSerializer,
+    OrdenCompraSerializer, ProveedorSerializer,
+    PlanerPACSerializer, CompraAgilResumenSerializer, CompraAgilCalendarioSerializer,
     CompraAgilProductoSerializer, CompraAgilProveedorSerializer,
     RevisionOCCorregibleSerializer,
 )
+
+# Campos de fecha que mapea EVENT_CFG en CalendarioSect.jsx (17 campos)
+_CALENDAR_DATE_FIELDS = [
+    'FechaCreacion', 'FechaPublicacion', 'FechaInicio', 'FechaFinal',
+    'FechaCierre', 'FechaPubRespuestas',
+    'FechaActoAperturaTecnica', 'FechaActoAperturaEconomica',
+    'FechaSoporteFisico', 'FechaTiempoEvaluacion',
+    'FechaVisitaTerreno', 'FechaEntregaAntecedentes',
+    'FechaEstimadaAdjudicacion', 'FechaAdjudicacion', 'Adj_Fecha',
+    'FechaEstimadaFirma', 'FechaInicioContrato',
+]
 from .services import (
     obtener_kpis_devengo,
     calcular_indicadores_res188,
@@ -687,3 +707,215 @@ class RevisionOCCorregibleViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(revisado_por=self.request.user.username)
+
+
+# =============================================================================
+# Calendario — endpoints autónomos (sin filtro de Estado, año por fechas de evento)
+# =============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def licitaciones_anos_calendario(request):
+    """
+    Años en que existe al menos una licitación con alguna fecha de evento en ese año.
+    Usado por el selector de año del Calendario. Cache 10 min.
+    """
+    cache_key = 'licitaciones_anos_calendario_v1'
+    if cached := cache.get(cache_key):
+        return Response(cached)
+
+    from django.db import connection
+    years = set()
+    with connection.cursor() as cursor:
+        for field in _CALENDAR_DATE_FIELDS:
+            try:
+                cursor.execute(
+                    f'SELECT DISTINCT YEAR(`{field}`) FROM api_licitacion WHERE `{field}` IS NOT NULL'
+                )
+                for (yr,) in cursor.fetchall():
+                    if yr is not None and int(yr) >= 2010:  # excluir años basura
+                        years.add(int(yr))
+            except Exception:
+                pass
+
+    data = sorted(years, reverse=True)
+    cache.set(cache_key, data, timeout=600)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def licitaciones_calendario(request):
+    """
+    Licitaciones para el Calendario.
+    Filtra por 'anio': licitaciones que tienen CUALQUIER fecha de evento en ese año.
+    Sin filtro de Estado. Sin paginación (máx 2000). Cache 5 min por año.
+    """
+    anio = request.query_params.get('anio', '').strip()
+    cache_key = f'licitaciones_calendario_{anio or "all"}'
+    if cached := cache.get(cache_key):
+        return Response(cached)
+
+    qs = Licitacion.objects.all()
+    if anio and anio.isdigit():
+        year = int(anio)
+        q = Q()
+        for f in _CALENDAR_DATE_FIELDS:
+            q |= Q(**{f'{f}__year': year})
+        qs = qs.filter(q)
+
+    serializer = LicitacionCalendarioSerializer(qs[:2000], many=True)
+    data = serializer.data
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+# =============================================================================
+# Compra Ágil — Calendario autónomo
+# =============================================================================
+
+_CA_DATE_FIELDS = ['fechapublicacion', 'fechacierre', 'fechaultimocambio']
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def compraagil_anos_calendario(request):
+    """Años distintos con al menos una Compra Ágil con evento en ese año. Cache 10 min."""
+    cache_key = 'compraagil_anos_calendario_v1'
+    if cached := cache.get(cache_key):
+        return Response(cached)
+
+    from django.db import connection
+    years = set()
+    with connection.cursor() as cursor:
+        for field in _CA_DATE_FIELDS:
+            db_col = CompraAgilResumen._meta.get_field(field).column
+            try:
+                cursor.execute(
+                    f'SELECT DISTINCT YEAR(`{db_col}`) FROM api_compraagil_resumen WHERE `{db_col}` IS NOT NULL'
+                )
+                for (yr,) in cursor.fetchall():
+                    if yr is not None and int(yr) >= 2015:
+                        years.add(int(yr))
+            except Exception:
+                pass
+
+    data = sorted(years, reverse=True)
+    cache.set(cache_key, data, timeout=600)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def compraagil_calendario(request):
+    """
+    Compras Ágiles para el Calendario.
+    Filtra por 'anio': compras que tienen CUALQUIER fecha de evento en ese año.
+    Sin paginación (máx 2000). Cache 5 min por año.
+    """
+    anio = request.query_params.get('anio', '').strip()
+    cache_key = f'compraagil_calendario_{anio or "all"}'
+    if cached := cache.get(cache_key):
+        return Response(cached)
+
+    qs = CompraAgilResumen.objects.all()
+    if anio and anio.isdigit():
+        year = int(anio)
+        q = Q()
+        for f in _CA_DATE_FIELDS:
+            q |= Q(**{f'{f}__year': year})
+        qs = qs.filter(q)
+
+    serializer = CompraAgilCalendarioSerializer(qs[:2000], many=True)
+    data = serializer.data
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+# =============================================================================
+# Descarga de Ofertas (scraper Mercado Público)
+# =============================================================================
+
+_SCRIPT_DESCARGA = (
+    Path(__file__).parent.parent.parent / "api" / "DescargaOfertas" / "run_api.py"
+)
+
+
+def _carpeta_descargas() -> Path:
+    home = Path.home()
+    for candidato in [home / "Downloads", home / "Descargas"]:
+        if candidato.exists():
+            return candidato
+    return home / "Downloads"
+
+
+def _ejecutar_descarga(task_id: str, codigo: str):
+    """Corre el scraper en un hilo daemon y actualiza _tareas_descarga."""
+    carpeta_salida = _carpeta_descargas()
+    try:
+        _tareas_descarga[task_id]["status"] = "en_proceso"
+        proc = subprocess.Popen(
+            [sys.executable, str(_SCRIPT_DESCARGA), codigo, str(carpeta_salida)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            cwd=str(_SCRIPT_DESCARGA.parent),
+        )
+        stdout, stderr = proc.communicate()
+
+        if proc.returncode == 0:
+            zip_path = None
+            carpeta_path = None
+            for line in stdout.splitlines():
+                if line.startswith("ZIP_PATH:"):
+                    zip_path = line[9:].strip()
+                elif line.startswith("CARPETA_PATH:"):
+                    carpeta_path = line[13:].strip()
+            _tareas_descarga[task_id].update(
+                status="completado",
+                ruta_zip=zip_path,
+                ruta_carpeta=carpeta_path,
+            )
+        else:
+            error_msg = stderr[-800:] if stderr else "Error desconocido"
+            _tareas_descarga[task_id].update(status="error", error=error_msg)
+    except Exception as exc:
+        _tareas_descarga[task_id].update(status="error", error=str(exc))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def iniciar_descarga_ofertas(request):
+    """Inicia el scraper de ofertas en segundo plano. Retorna un task_id para polling."""
+    codigo = (request.data.get("codigo") or "").strip()
+    if not codigo:
+        return Response({"error": "Código de licitación requerido."}, status=400)
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_descarga[task_id] = {
+        "status": "iniciado",
+        "codigo": codigo,
+        "ruta_zip": None,
+        "ruta_carpeta": None,
+        "error": None,
+    }
+    hilo = threading.Thread(target=_ejecutar_descarga, args=(task_id, codigo), daemon=True)
+    hilo.start()
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def estado_descarga_ofertas(request, task_id):
+    """Retorna el estado actual de una tarea de descarga."""
+    tarea = _tareas_descarga.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id": task_id,
+        "status": tarea["status"],
+        "ruta_zip": tarea.get("ruta_zip"),
+        "ruta_carpeta": tarea.get("ruta_carpeta"),
+        "error": tarea.get("error"),
+    })

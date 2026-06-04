@@ -72,8 +72,13 @@ apiClient.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        // Solo actuamos ante un 401 y evitamos bucles infinitos con _retry
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        // Solo actuamos ante un 401, evitamos bucles infinitos con _retry,
+        // y excluimos los endpoints de auth (login/refresh) — un 401 ahí
+        // significa credenciales incorrectas, no sesión expirada.
+        const isAuthEndpoint = originalRequest.url?.includes('auth/login') ||
+                               originalRequest.url?.includes('auth/refresh');
+
+        if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
             const refreshToken = localStorage.getItem(REFRESH_KEY);
 
             // Si no hay refresh token, cerramos sesión directamente

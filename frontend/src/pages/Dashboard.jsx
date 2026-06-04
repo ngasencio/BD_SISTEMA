@@ -205,7 +205,7 @@ export default function Dashboard() {
                     {activeTab === 'resumen'    && <ResumenSect stats={stats} licitaciones={licitaciones} />}
                     {activeTab === 'gestion'    && <GestionSect gestionData={gestionData} loading={loadingGestion} />}
                     {activeTab === 'ahorro'     && <AhorroSect ahorroData={ahorroData} loading={loadingAhorro} />}
-                    {activeTab === 'calendario' && <CalendarioSect licitaciones={licitaciones} />}
+                    {activeTab === 'calendario' && <CalendarioSect />}
                     {activeTab === 'financiero' && <FinancieroSect licitaciones={licitaciones} detalles={detalles} />}
                     {activeTab === 'categorias' && <CategoriasSect detalles={detalles} />}
                     {activeTab === 'reportes'   && <ReportesSect licitaciones={licitaciones} />}

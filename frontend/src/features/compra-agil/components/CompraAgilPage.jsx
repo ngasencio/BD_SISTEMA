@@ -5,6 +5,7 @@ import AhorroTab from './tabs/AhorroTab';
 import ComprasTable from './tabs/ComprasTable';
 import ProveedoresTab from './tabs/ProveedoresTab';
 import ComparativaTab from './tabs/ComparativaTab';
+import CalendarioTab from './tabs/CalendarioTab';
 import { generarPDFCompraAgil } from '../utils/pdfExport';
 import { getCompraAgilAnios } from '../api/compraAgilApi';
 
@@ -14,6 +15,7 @@ const TABS = [
     { id: 'compras', label: '🛒 Compras Ágiles' },
     { id: 'proveedores', label: '🏢 Proveedores' },
     { id: 'comparativa', label: '📈 Comparativa' },
+    { id: 'calendario', label: '📅 Calendario' },
 ];
 
 // Hook de debounce: retarda la actualización de un valor N ms
@@ -228,6 +230,9 @@ export default function CompraAgilPage() {
             )}
             {tab === 'comparativa' && (
                 <ComparativaTab />
+            )}
+            {tab === 'calendario' && (
+                <CalendarioTab />
             )}
         </div>
     );

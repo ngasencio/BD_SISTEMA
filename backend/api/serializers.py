@@ -39,12 +39,36 @@ class LicitacionSerializer(serializers.ModelSerializer):
             'Descripcion', 'Tipo', 'CodigoTipo', 'Etapas', 'EstadoEtapas',
             'C_CodigoOrganismo', 'C_NombreOrganismo', 'C_Unidad', 'C_ComunaUnidad',
             'C_RegionUnidad', 'C_Usuario',
-            'FechaCreacion', 'FechaCierre', 'FechaPublicacion', 'FechaAdjudicacion',
-            'FechaEstimadaAdjudicacion',
+            'FechaCreacion', 'FechaPublicacion', 'FechaInicio', 'FechaFinal',
+            'FechaCierre', 'FechaPubRespuestas',
+            'FechaActoAperturaTecnica', 'FechaActoAperturaEconomica',
+            'FechaSoporteFisico', 'FechaTiempoEvaluacion',
+            'FechaVisitaTerreno', 'FechaEntregaAntecedentes',
+            'FechaEstimadaAdjudicacion', 'FechaAdjudicacion', 'Adj_Fecha',
+            'FechaEstimadaFirma', 'FechaInicioContrato',
             'Moneda', 'MontoEstimado', 'VisibilidadMonto', 'FuenteFinanciamiento',
             'TiempoDuracionContrato', 'TipoDuracionContrato', 'EsRenovable',
             'Adj_Tipo', 'Adj_Fecha', 'Adj_Numero', 'Adj_NumeroOferentes', 'Adj_UrlActa',
             'detalles',
+        ]
+
+
+class LicitacionCalendarioSerializer(serializers.ModelSerializer):
+    """Serializer liviano para el Calendario — solo los campos que renderiza el componente."""
+    class Meta:
+        model = Licitacion
+        fields = [
+            'codigo_licitacion', 'Nombre', 'Estado', 'Tipo',
+            'C_Usuario', 'C_Unidad',
+            'MontoEstimado',
+            # Las 17 fechas que mapea EVENT_CFG
+            'FechaCreacion', 'FechaPublicacion', 'FechaInicio', 'FechaFinal',
+            'FechaCierre', 'FechaPubRespuestas',
+            'FechaActoAperturaTecnica', 'FechaActoAperturaEconomica',
+            'FechaSoporteFisico', 'FechaTiempoEvaluacion',
+            'FechaVisitaTerreno', 'FechaEntregaAntecedentes',
+            'FechaEstimadaAdjudicacion', 'FechaAdjudicacion', 'Adj_Fecha',
+            'FechaEstimadaFirma', 'FechaInicioContrato',
         ]
 
 
@@ -263,6 +287,17 @@ class CompraAgilResumenSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompraAgilResumen
         fields = '__all__'
+
+
+class CompraAgilCalendarioSerializer(serializers.ModelSerializer):
+    """Serializer liviano para el Calendario de Compra Ágil."""
+    class Meta:
+        model = CompraAgilResumen
+        fields = [
+            'codigocompraagil', 'nombre', 'estadoglosa',
+            'unidadcompra', 'presupuestoestimado',
+            'fechapublicacion', 'fechacierre', 'fechaultimocambio',
+        ]
 
 
 class CompraAgilDocumentoSerializer(serializers.ModelSerializer):
