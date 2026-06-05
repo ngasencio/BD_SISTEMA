@@ -21,6 +21,9 @@ from .views import (
     iniciar_actualizacion_oc, estado_actualizacion_oc,
     iniciar_actualizacion_li, estado_actualizacion_li,
     cancelar_actualizacion_ca, cancelar_actualizacion_oc, cancelar_actualizacion_li,
+    GestionContratoViewSet,
+    iniciar_actualizacion_contratos, estado_actualizacion_contratos,
+    cancelar_actualizacion_contratos, contratos_stats_view,
 )
 
 router = DefaultRouter()
@@ -44,6 +47,9 @@ router.register(r'compraagil-proveedores', CompraAgilProveedorViewSet)
 
 # Módulo Revisión OC Corregibles
 router.register(r'revisiones-oc', RevisionOCCorregibleViewSet)
+
+# Módulo Gestión de Contratos
+router.register(r'contratos', GestionContratoViewSet, basename='contrato')
 
 urlpatterns = [
     # Autenticación JWT
@@ -100,6 +106,12 @@ urlpatterns = [
 
     # Compra Ágil — cancelación
     path('compraagil/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_ca, name='cancelar_actualizacion_ca'),
+
+    # Gestión de Contratos — ETL desde dashboard
+    path('contratos/stats/', contratos_stats_view, name='contratos_stats'),
+    path('contratos/actualizar/', iniciar_actualizacion_contratos, name='iniciar_actualizacion_contratos'),
+    path('contratos/actualizar-estado/<str:task_id>/', estado_actualizacion_contratos, name='estado_actualizacion_contratos'),
+    path('contratos/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_contratos, name='cancelar_actualizacion_contratos'),
 
     # Router ViewSets
     path('', include(router.urls)),

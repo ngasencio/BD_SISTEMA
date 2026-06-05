@@ -14,6 +14,9 @@ const FSCManager = lazy(() =>
 const BoletasPage = lazy(() =>
     import('../components/BoletasPage').then(m => ({ default: m.BoletasPage }))
 );
+const GestionContratosPage = lazy(() =>
+    import('../components/GestionContratosPage').then(m => ({ default: m.GestionContratosPage }))
+);
 
 const Loading = () => <div className="loading-spinner">Cargando módulo...</div>;
 
@@ -30,6 +33,10 @@ export const abastecimientoRoutes = (
         <Route
             path="/abastecimiento/boletas"
             element={<Suspense fallback={<Loading />}><BoletasPage /></Suspense>}
+        />
+        <Route
+            path="/abastecimiento/contratos"
+            element={<Suspense fallback={<Loading />}><GestionContratosPage /></Suspense>}
         />
     </>
 );

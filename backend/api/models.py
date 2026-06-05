@@ -814,3 +814,42 @@ class RevisionOCCorregible(models.Model):
 
     def __str__(self):
         return f"{self.codigo_oc} — {self.resultado} ({self.revisado_por})"
+
+
+# =============================================================================
+# Módulo Gestión de Contratos (Mercado Público — Contratos SSO)
+# =============================================================================
+
+class GestionContrato(models.Model):
+    numero_contrato             = models.CharField(max_length=100, primary_key=True)
+    nombre_contrato             = models.TextField(blank=True, null=True)
+    id_licitacion_oc            = models.CharField(max_length=100, blank=True, null=True)
+    rut_organismo               = models.CharField(max_length=30, blank=True, null=True)
+    nombre_organismo            = models.TextField(blank=True, null=True)
+    ejecucion_contrato          = models.CharField(max_length=150, blank=True, null=True)
+    categoria_contrato          = models.CharField(max_length=100, blank=True, null=True)
+    tipo_contrato               = models.CharField(max_length=150, blank=True, null=True)
+    unidad_requirente           = models.CharField(max_length=200, blank=True, null=True)
+    unidad_moneda               = models.CharField(max_length=20, blank=True, null=True)
+    monto_contrato              = models.BigIntegerField(null=True, blank=True)
+    monto_ejecutado             = models.BigIntegerField(null=True, blank=True)
+    monto_por_ejecutar          = models.BigIntegerField(null=True, blank=True)
+    fecha_inicio                = models.CharField(max_length=20, blank=True, null=True)
+    fecha_termino               = models.CharField(max_length=20, blank=True, null=True)
+    estado_contrato             = models.CharField(max_length=100, blank=True, null=True)
+    garantias_hitos_incumplidos = models.IntegerField(null=True, blank=True)
+    garantias_por_vencer        = models.IntegerField(null=True, blank=True)
+    garantias_vencidas          = models.IntegerField(null=True, blank=True)
+    garantias_cobradas          = models.IntegerField(null=True, blank=True)
+    sanciones_solicitadas       = models.IntegerField(null=True, blank=True)
+    sanciones_aplicadas         = models.IntegerField(null=True, blank=True)
+    dias_vigencia               = models.IntegerField(null=True, blank=True)
+    dias_restantes              = models.IntegerField(null=True, blank=True)
+    evaluacion                  = models.CharField(max_length=50, blank=True, null=True)
+
+    class Meta:
+        db_table = 'data_gestioncontratos'
+        ordering = ['-monto_contrato']
+
+    def __str__(self):
+        return f"{self.numero_contrato} — {self.nombre_contrato}"

@@ -32,7 +32,7 @@ from .models import (
     DetalleLicitacion, DetalleOrdenCompra, Devengo,
     Factura, Licitacion, OrdenCompra, Proveedor,
     PlanerPAC, CompraAgilResumen, CompraAgilProducto, CompraAgilProveedor,
-    RevisionOCCorregible,
+    RevisionOCCorregible, GestionContrato,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
@@ -42,7 +42,7 @@ from .serializers import (
     OrdenCompraSerializer, ProveedorSerializer,
     PlanerPACSerializer, CompraAgilResumenSerializer, CompraAgilCalendarioSerializer,
     CompraAgilProductoSerializer, CompraAgilProveedorSerializer,
-    RevisionOCCorregibleSerializer,
+    RevisionOCCorregibleSerializer, GestionContratoSerializer,
 )
 
 # Campos de fecha que mapea EVENT_CFG en CalendarioSect.jsx (17 campos)
@@ -1960,3 +1960,309 @@ def cancelar_actualizacion_oc(request, task_id):
 def cancelar_actualizacion_li(request, task_id):
     """Cancela una tarea ETL de Licitaciones en curso."""
     return _cancelar_tarea(_tareas_actualizacion_li, task_id)
+
+
+# =============================================================================
+# Módulo Gestión de Contratos
+# =============================================================================
+
+_tareas_actualizacion_contratos: dict = {}
+
+_RUTA_CONTRATOS_EXCEL = (
+    Path(__file__).parent.parent.parent
+    / "api" / "data" / "data_gestioncontratos" / "data_gestioncontratos"
+)
+
+_COLUMNAS_CONTRATOS = [
+    "numero_contrato", "nombre_contrato", "id_licitacion_oc",
+    "rut_organismo", "nombre_organismo", "ejecucion_contrato",
+    "categoria_contrato", "tipo_contrato", "unidad_requirente",
+    "unidad_moneda", "monto_contrato", "monto_ejecutado",
+    "monto_por_ejecutar", "fecha_inicio", "fecha_termino",
+    "estado_contrato", "garantias_hitos_incumplidos", "garantias_por_vencer",
+    "garantias_vencidas", "garantias_cobradas", "sanciones_solicitadas",
+    "sanciones_aplicadas", "dias_vigencia", "dias_restantes", "evaluacion",
+]
+
+
+def _ejecutar_actualizacion_contratos(task_id: str):
+    """Lee el Excel de contratos SSO y carga los datos en GestionContrato."""
+    import math
+    import pandas as pd
+    from django.db import transaction, close_old_connections
+
+    try:
+        _tareas_actualizacion_contratos[task_id].update(
+            status="en_proceso", paso=1,
+            paso_desc="Buscando archivo Excel de contratos...",
+            logs_recientes=["Iniciando carga de contratos SSO..."],
+        )
+
+        archivos = list(_RUTA_CONTRATOS_EXCEL.glob("*.xls*"))
+        if not archivos:
+            raise FileNotFoundError(
+                f"No se encontró ningún archivo Excel en:\n{_RUTA_CONTRATOS_EXCEL}\n"
+                "Descarga primero el archivo desde Mercado Público."
+            )
+
+        archivo = max(archivos, key=lambda f: f.stat().st_mtime)
+        logs = [f"Archivo encontrado: {archivo.name}"]
+        _tareas_actualizacion_contratos[task_id].update(
+            paso_desc=f"Leyendo {archivo.name}...",
+            logs_recientes=logs,
+            archivo_nombre=archivo.name,
+        )
+
+        tablas = pd.read_html(str(archivo), encoding="utf-8")
+        if len(tablas) < 3:
+            raise ValueError(
+                f"Estructura inesperada: {len(tablas)} tabla(s) encontradas (se esperaban 3)."
+            )
+
+        df = tablas[2].copy()
+        if df.empty:
+            raise ValueError("El archivo no contiene datos de contratos.")
+
+        if len(df.columns) == len(_COLUMNAS_CONTRATOS):
+            df.columns = _COLUMNAS_CONTRATOS
+        else:
+            raise ValueError(
+                f"Columnas inesperadas: {len(df.columns)} encontradas, "
+                f"{len(_COLUMNAS_CONTRATOS)} esperadas."
+            )
+
+        total = len(df)
+        logs.append(f"{total} contratos leídos con {len(df.columns)} columnas.")
+        _tareas_actualizacion_contratos[task_id].update(
+            paso=2, paso_desc=f"Procesando {total} contratos...",
+            total_registros=total, logs_recientes=logs,
+        )
+
+        cols_int = [
+            "monto_contrato", "monto_ejecutado", "monto_por_ejecutar",
+            "garantias_hitos_incumplidos", "garantias_por_vencer",
+            "garantias_vencidas", "garantias_cobradas",
+            "sanciones_solicitadas", "sanciones_aplicadas",
+            "dias_vigencia", "dias_restantes",
+        ]
+        for col in cols_int:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        def _to_int(v):
+            try:
+                if v is None or (isinstance(v, float) and math.isnan(v)):
+                    return None
+                iv = int(v)
+                # Descartar valores que excedan 10^13 (posible corrupción de datos)
+                if abs(iv) > 10_000_000_000_000:
+                    return None
+                return iv
+            except Exception:
+                return None
+
+        def _to_str(v):
+            s = str(v).strip() if v is not None else ""
+            return s if s not in ("nan", "None", "") else None
+
+        from .models import GestionContrato
+
+        registros = [
+            GestionContrato(
+                numero_contrato=_to_str(row["numero_contrato"]) or f"SIN_COD_{idx}",
+                nombre_contrato=_to_str(row["nombre_contrato"]),
+                id_licitacion_oc=_to_str(row["id_licitacion_oc"]),
+                rut_organismo=_to_str(row["rut_organismo"]),
+                nombre_organismo=_to_str(row["nombre_organismo"]),
+                ejecucion_contrato=_to_str(row["ejecucion_contrato"]),
+                categoria_contrato=_to_str(row["categoria_contrato"]),
+                tipo_contrato=_to_str(row["tipo_contrato"]),
+                unidad_requirente=_to_str(row["unidad_requirente"]),
+                unidad_moneda=_to_str(row["unidad_moneda"]),
+                monto_contrato=_to_int(row["monto_contrato"]),
+                monto_ejecutado=_to_int(row["monto_ejecutado"]),
+                monto_por_ejecutar=_to_int(row["monto_por_ejecutar"]),
+                fecha_inicio=_to_str(row["fecha_inicio"]),
+                fecha_termino=_to_str(row["fecha_termino"]),
+                estado_contrato=_to_str(row["estado_contrato"]),
+                garantias_hitos_incumplidos=_to_int(row["garantias_hitos_incumplidos"]),
+                garantias_por_vencer=_to_int(row["garantias_por_vencer"]),
+                garantias_vencidas=_to_int(row["garantias_vencidas"]),
+                garantias_cobradas=_to_int(row["garantias_cobradas"]),
+                sanciones_solicitadas=_to_int(row["sanciones_solicitadas"]),
+                sanciones_aplicadas=_to_int(row["sanciones_aplicadas"]),
+                dias_vigencia=_to_int(row["dias_vigencia"]),
+                dias_restantes=_to_int(row["dias_restantes"]),
+                evaluacion=_to_str(row["evaluacion"]),
+            )
+            for idx, (_, row) in enumerate(df.iterrows())
+        ]
+
+        logs.append("Cargando en base de datos (eliminar + insertar)...")
+        _tareas_actualizacion_contratos[task_id].update(
+            paso=3, paso_desc="Cargando en base de datos...",
+            logs_recientes=logs,
+        )
+
+        close_old_connections()
+        with transaction.atomic():
+            GestionContrato.objects.all().delete()
+            GestionContrato.objects.bulk_create(registros, batch_size=500)
+
+        logs.append(f"✅ {len(registros)} contratos cargados exitosamente.")
+        _tareas_actualizacion_contratos[task_id].update(
+            status="completado", paso=4,
+            paso_desc=f"Completado: {len(registros)} contratos cargados.",
+            total_cargados=len(registros),
+            logs_recientes=logs,
+            progreso_pct=100,
+        )
+
+    except Exception as exc:
+        _tareas_actualizacion_contratos[task_id].update(
+            status="error", error=str(exc)
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def iniciar_actualizacion_contratos(request):
+    """Inicia la carga de contratos SSO desde el Excel descargado."""
+    for tarea in _tareas_actualizacion_contratos.values():
+        if tarea.get("status") in ("iniciado", "en_proceso"):
+            return Response({"error": "Ya hay una actualización en curso."}, status=409)
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_actualizacion_contratos[task_id] = {
+        "status": "iniciado",
+        "paso": 0,
+        "paso_desc": "Iniciando...",
+        "error": None,
+        "logs_recientes": [],
+        "total_registros": 0,
+        "total_cargados": 0,
+        "archivo_nombre": None,
+        "progreso_pct": 0,
+    }
+    threading.Thread(
+        target=_ejecutar_actualizacion_contratos,
+        args=(task_id,),
+        daemon=True,
+    ).start()
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def estado_actualizacion_contratos(request, task_id):
+    """Retorna el estado de una tarea de carga de contratos."""
+    tarea = _tareas_actualizacion_contratos.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id":        task_id,
+        "status":         tarea["status"],
+        "paso":           tarea["paso"],
+        "paso_desc":      tarea["paso_desc"],
+        "total_registros": tarea.get("total_registros", 0),
+        "total_cargados": tarea.get("total_cargados", 0),
+        "archivo_nombre": tarea.get("archivo_nombre"),
+        "progreso_pct":   tarea.get("progreso_pct", 0),
+        "logs_recientes": tarea.get("logs_recientes", []),
+        "error":          tarea.get("error"),
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancelar_actualizacion_contratos(request, task_id):
+    """Cancela una tarea de carga de contratos en curso."""
+    return _cancelar_tarea(_tareas_actualizacion_contratos, task_id)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def contratos_stats_view(request):
+    """KPIs y distribuciones para el dashboard de Gestión de Contratos."""
+    from .models import GestionContrato
+
+    qs = GestionContrato.objects.all()
+    total = qs.count()
+    if total == 0:
+        return Response({"total": 0, "vacio": True})
+
+    estados_vigentes = [
+        "En ejecución", "En ejecución (Modificado)", "Ampliado"
+    ]
+    vigentes = qs.filter(estado_contrato__in=estados_vigentes).count()
+    terminados = qs.exclude(estado_contrato__in=estados_vigentes).count()
+
+    agg = qs.aggregate(
+        monto_total=Sum("monto_contrato"),
+        monto_ejecutado=Sum("monto_ejecutado"),
+    )
+    monto_total = agg["monto_total"] or 0
+    monto_ejecutado = agg["monto_ejecutado"] or 0
+    pct_ejecutado = round(monto_ejecutado / monto_total * 100, 1) if monto_total else 0
+
+    por_estado = list(
+        qs.values("estado_contrato")
+        .annotate(total=Count("numero_contrato"), monto=Sum("monto_contrato"))
+        .order_by("-total")
+    )
+
+    por_categoria = list(
+        qs.values("categoria_contrato")
+        .annotate(total=Count("numero_contrato"), monto=Sum("monto_contrato"))
+        .order_by("-total")
+    )
+
+    por_tipo = list(
+        qs.values("tipo_contrato")
+        .annotate(total=Count("numero_contrato"), monto=Sum("monto_contrato"))
+        .order_by("-total")
+    )
+
+    por_unidad = list(
+        qs.values("unidad_requirente")
+        .annotate(total=Count("numero_contrato"), monto=Sum("monto_contrato"))
+        .order_by("-total")
+    )
+
+    por_ejecucion = list(
+        qs.values("ejecucion_contrato")
+        .annotate(total=Count("numero_contrato"))
+        .order_by("-total")
+    )
+
+    con_garantias_por_vencer = qs.filter(garantias_por_vencer__gt=0).count()
+    con_garantias_vencidas   = qs.filter(garantias_vencidas__gt=0).count()
+    con_sanciones            = qs.filter(sanciones_solicitadas__gt=0).count()
+
+    return Response({
+        "total":                  total,
+        "vigentes":               vigentes,
+        "terminados":             terminados,
+        "monto_total":            monto_total,
+        "monto_ejecutado":        monto_ejecutado,
+        "pct_ejecutado":          pct_ejecutado,
+        "con_garantias_por_vencer": con_garantias_por_vencer,
+        "con_garantias_vencidas": con_garantias_vencidas,
+        "con_sanciones":          con_sanciones,
+        "por_estado":             por_estado,
+        "por_categoria":          por_categoria,
+        "por_tipo":               por_tipo,
+        "por_unidad":             por_unidad,
+        "por_ejecucion":          por_ejecucion,
+        "vacio":                  False,
+    })
+
+
+class GestionContratoViewSet(viewsets.ReadOnlyModelViewSet):
+    """Lista paginada de contratos con filtros básicos."""
+    queryset = GestionContrato.objects.all()
+    serializer_class = GestionContratoSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    filterset_fields = ["estado_contrato", "categoria_contrato", "tipo_contrato", "unidad_requirente"]
+    search_fields = ["nombre_contrato", "numero_contrato", "nombre_organismo"]
+    ordering_fields = ["monto_contrato", "monto_ejecutado", "dias_restantes", "fecha_inicio"]
