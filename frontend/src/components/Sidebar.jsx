@@ -11,7 +11,6 @@ export default function Sidebar() {
     const [openGroups, setOpenGroups] = useState({
         abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac') || path.startsWith('/compra-agil'),
         finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas'),
-        admin: false,
     });
     const [openMods, setOpenMods] = useState({
         mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra') || path.startsWith('/compra-agil'),
@@ -104,13 +103,6 @@ export default function Sidebar() {
                                     <span className="nav-item-text">Indicadores Res.188</span>
                                 </div>
                                 <div
-                                    className={`nav-item ${pacTab === 'ordenes' ? 'active' : ''}`}
-                                    onClick={() => goTo('/pac?tab=ordenes', 'abast', 'pac')}
-                                >
-                                    <span>🛍️</span>
-                                    <span className="nav-item-text">Órdenes de Compra</span>
-                                </div>
-                                <div
                                     className={`nav-item ${pacTab === 'informe' ? 'active' : ''}`}
                                     onClick={() => goTo('/pac?tab=informe', 'abast', 'pac')}
                                 >
@@ -180,20 +172,6 @@ export default function Sidebar() {
                     </div>
                 </div>
 
-                {/* ── ADMINISTRACIÓN ────────────────── */}
-                <div className={`nav-group ${openGroups.admin ? 'open' : ''}`}>
-                    <div className="nav-group-title" onClick={() => toggleGroup('admin')}>
-                        <span className="nav-group-title-icon">⚙️</span>
-                        <span className="nav-group-title-text">Administración</span>
-                        <span className="nav-group-arrow" style={{ transform: openGroups.admin ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
-                    </div>
-                    <div className="nav-group-children" style={{ display: openGroups.admin ? 'block' : 'none' }}>
-                        <div className="nav-item disabled">
-                            <span>👤</span> <span className="nav-item-text">Gestión de Usuarios</span>
-                            <span className="nav-badge">Pronto</span>
-                        </div>
-                    </div>
-                </div>
             </nav>
 
             <div className="sidebar-footer">

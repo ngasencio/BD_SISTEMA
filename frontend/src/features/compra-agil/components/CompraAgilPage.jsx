@@ -320,7 +320,7 @@ function BannerActualizacion({ tarea, onVerCambios, onCerrar, onCancelar }) {
     const totalCambios = (diff.nuevas_count || 0) + (diff.cambiadas_count || 0) + (diff.oc_vinculadas_count || 0);
 
     return (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1100, width: 400, background: '#fff', borderRadius: 14, boxShadow: '0 16px 48px rgba(0,0,0,0.22)', overflow: 'hidden', border: `2px solid ${colorH}`, position: 'fixed' }}>
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1100, width: 400, background: '#fff', borderRadius: 14, boxShadow: '0 16px 48px rgba(0,0,0,0.22)', overflow: 'hidden', border: `2px solid ${colorH}` }}>
             <style>{`
                 @keyframes ca-spin    { to { transform: rotate(360deg); } }
                 @keyframes ca-stripes { to { background-position: 40px 0; } }

@@ -2,14 +2,12 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { usePacDashboard } from '../hooks/usePacDashboard';
 import IndicadoresRes188Tab from './tabs/IndicadoresRes188Tab';
-import OrdenesCompraTab from './tabs/OrdenesCompraTab';
 import InformePDFTab from './tabs/InformePDFTab';
 
 const ANIOS = [2024, 2025, 2026];
 
 const TAB_TITLES = {
     indicadores: { title: 'Indicadores Res.188', subtitle: 'Cumplimiento regulatorio · Resolución Exenta N°188/2026' },
-    ordenes:     { title: 'Análisis Órdenes de Compra', subtitle: 'Estadísticas y seguimiento de OC · Organismo 7296' },
     informe:     { title: 'Informe PDF', subtitle: 'Reporte consolidado para impresión' },
 };
 
@@ -18,7 +16,7 @@ export default function PacDashboardPage() {
     const tab = searchParams.get('tab') || 'indicadores';
     const [anio, setAnio] = useState(2026);
 
-    const { indicadores, ocStats, ocProductos, caResumen, loading, error, refresh } = usePacDashboard(anio);
+    const { indicadores, ocStats, caResumen, loading, error, refresh } = usePacDashboard(anio);
 
     const { title, subtitle } = TAB_TITLES[tab] ?? TAB_TITLES.indicadores;
 
@@ -60,9 +58,6 @@ export default function PacDashboardPage() {
                 <>
                     {tab === 'indicadores' && (
                         <IndicadoresRes188Tab indicadores={indicadores} caResumen={caResumen} />
-                    )}
-                    {tab === 'ordenes' && (
-                        <OrdenesCompraTab ocStats={ocStats} ocProductos={ocProductos} />
                     )}
                     {tab === 'informe' && (
                         <InformePDFTab indicadores={indicadores} ocStats={ocStats} anio={anio} />
