@@ -265,15 +265,14 @@ Si necesitas una clase nueva → agregarla en `frontend/src/index.css`.
 | Módulo | Ruta | Estado | Notas |
 |---|---|---|---|
 | Licitaciones | `/licitaciones` | ✅ Completo | Dashboard + filtros + gráficos + **botón ETL + panel de cambios** |
-| Órdenes de Compra | `/ordenes-compra` | ✅ Funcional | Pendiente migrar a `features/` + **botón ETL + panel de cambios** |
+| Órdenes de Compra | `/ordenes-compra` | ✅ Funcional | Pendiente migrar a `features/` + **botón ETL + panel de cambios + tab Comparativo pendiente** |
 | Anexo N°3 | `/anexo3` | ✅ Funcional | |
-| Compra Ágil | `/compra-agil` | ✅ Completo | Tablas + análisis ML + **botón ETL** |
-| PAC | `/pac` | ✅ Completo | Res.188 indicadores + stats OC |
+| Compra Ágil | `/compra-agil` | ✅ Completo | Tablas + análisis ML + **botón ETL + panel de cambios** |
+| PAC | `/pac` | ✅ Completo | Res.188 indicadores + Informe PDF (tab OC eliminado) |
 | Boletas de Garantía | `/abastecimiento/boletas` | ✅ Completo | CRUD + auditoría + archivo adjunto |
 | FSC Manager | `/abastecimiento/fsc` | ✅ Funcional | |
 | Dashboard Finanzas | `/finanzas/dashboard` | ⚠️ En desarrollo | Hook mapeado a API real, construcción activa |
-| Gestión Inventario | — | 🔲 Próximo | Solo placeholder en Sidebar |
-| Gestión Usuarios | — | 🔲 Próximo | Solo placeholder en Sidebar |
+| Gestión Inventario | — | 🔲 Próximo | Placeholder en Sidebar |
 
 ---
 
@@ -292,12 +291,20 @@ Los 3 módulos principales (Licitaciones, OC, Compra Ágil) tienen un botón "�
 ### Hook genérico `useActualizarXXX`
 
 ```js
-const { tarea, iniciando, iniciar, cerrar } = useActualizarXXX(onCompletado);
-// tarea: null | { status, paso, paso_desc, progreso_pct, logs_recientes, diff, ... }
+const { tarea, iniciando, iniciar, cancelar, cerrar } = useActualizarXXX(onCompletado);
+// tarea: null | { status, paso, paso_desc, progreso_pct, logs_recientes, diff, task_id, ... }
 // iniciar(fechaDesde, fechaHasta) → POST → polling cada 3s
-// cerrar() → detiene polling + limpia tarea
-// onCompletado() → callback al llegar a status='completado' (usado para abrir panel)
+// cancelar()  → POST a endpoint cancelar → detiene el hilo ETL (ctypes kill)
+// cerrar()    → detiene polling + limpia tarea
+// onCompletado() → callback al llegar a status='completado' (abre panel de cambios)
+// status posibles: 'iniciado' | 'en_proceso' | 'completado' | 'error' | 'cancelado'
 ```
+
+### Botón ✕ de cancelación (los 3 banners)
+
+Durante el proceso → muestra diálogo de confirmación inline ("¿Detener la actualización? [No, continuar] [Sí, detener]").
+Al confirmar → POST `*/actualizar-cancelar/<task_id>/` → backend mata el hilo con ctypes + marca status='cancelado'.
+Cuando completado/error → ✕ cierra directamente sin confirmación.
 
 ### Flujo UX
 
@@ -335,3 +342,8 @@ const { tarea, iniciando, iniciar, cerrar } = useActualizarXXX(onCompletado);
 | 3 | `withIva` hardcodea 19% — el modelo tiene `PorcentajeIva` | `components/OrdenesCompraResumen.jsx:31` | Baja |
 | 4 | `components/ui/Sidebar.jsx` es legacy — no referenciar | `components/ui/Sidebar.jsx` | Baja |
 | 5 | Dashboard Finanzas aún en construcción | `features/finanzas/` | Media |
+| 6 | Tab "Comparativo Anual" de OC pendiente de implementar | `components/OrdenesCompraResumen.jsx` | Media |
+
+### Nota: TipoCompraInterna — valores legacy
+
+El campo `TipoCompraInterna` del modelo `OrdenCompra` puede contener valores numéricos `"0"`–`"6"` si la DB fue cargada con una versión anterior del ETL que no incluía `_enriquecer_df_oc()`. La función `TIPO_COMPRA_LABEL` en `OrdenesCompraResumen.jsx` normaliza estos valores a nombres legibles. Para limpiar definitivamente, re-ejecutar el ETL (Opción 6 + 8 en OC_SSO_SERVER.py).
