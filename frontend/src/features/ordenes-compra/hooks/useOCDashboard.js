@@ -58,6 +58,7 @@ export function useOCDashboard() {
     }, [years, anio]);
 
     return {
+        rawOC,
         ocData,
         loadingOC,
         errorOC,

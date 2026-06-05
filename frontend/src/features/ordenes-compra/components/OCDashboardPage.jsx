@@ -469,6 +469,265 @@ function TabAnalitico({ data, anio, unidad }) {
     );
 }
 
+// ── Tab: Comparativo Anual ────────────────────────────────────────────────────
+
+const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const ANIO_COLORS = ['#10b981','#3b82f6','#94a3b8','#f59e0b','#8b5cf6','#ef4444','#06b6d4'];
+const TIPO_LABEL  = { AG:'Compra Ágil', CM:'Conv. Marco', TD:'Trato Directo', OC:'Licitación', SE:'Licitación', MC:'M. Cuantía' };
+
+function anioColor(y, allYears) {
+    return ANIO_COLORS[allYears.indexOf(y) % ANIO_COLORS.length];
+}
+
+function TabComparativoAnual({ rawOC }) {
+    const availableYears = useMemo(() => {
+        const s = new Set();
+        rawOC.forEach(r => {
+            const f = r.FechaEnvio || r.FechaCreacion;
+            if (!f) return;
+            const yr = new Date(f).getFullYear();
+            if (!isNaN(yr)) s.add(yr.toString());
+        });
+        return [...s].sort((a, b) => b - a);
+    }, [rawOC]);
+
+    const [selYears, setSelYears] = useState([]);
+
+    useEffect(() => {
+        if (availableYears.length && selYears.length === 0)
+            setSelYears(availableYears.slice(0, 3));
+    }, [availableYears]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const toggle = y => setSelYears(prev =>
+        prev.includes(y) ? prev.filter(x => x !== y) : [...prev, y].sort((a, b) => b - a)
+    );
+
+    // Agrega por año × mes (excluye Canceladas)
+    const stats = useMemo(() => {
+        const r = {};
+        selYears.forEach(y => {
+            r[y] = Array.from({ length: 12 }, () => ({ total: 0, enlazadas: 0, neto: 0, sinPACNeto: 0 }));
+        });
+        rawOC.forEach(row => {
+            const f = row.FechaEnvio || row.FechaCreacion;
+            if (!f || row.EstadoOC === 'Cancelada') return;
+            const y = new Date(f).getFullYear().toString();
+            if (!r[y]) return;
+            const m = new Date(f).getMonth();
+            const neto = parseFloat(row.TotalNeto) || 0;
+            r[y][m].total++;
+            r[y][m].neto += neto;
+            if (row.EnlacePAC === 'Enlazada') r[y][m].enlazadas++;
+            else r[y][m].sinPACNeto += neto;
+        });
+        return r;
+    }, [rawOC, selYears]);
+
+    // Resumen anual
+    const summary = useMemo(() =>
+        selYears.map(y => {
+            const ms = stats[y] || [];
+            const total    = ms.reduce((s, m) => s + m.total, 0);
+            const enlazadas = ms.reduce((s, m) => s + m.enlazadas, 0);
+            const neto     = ms.reduce((s, m) => s + m.neto, 0);
+            const sinPAC   = ms.reduce((s, m) => s + m.sinPACNeto, 0);
+            return { y, total, enlazadas, pct: total ? enlazadas / total * 100 : 0, neto, sinPAC };
+        }), [stats, selYears]);
+
+    // Tipo OC por año (% apilado)
+    const tipoChartData = useMemo(() => {
+        const byYear = {};
+        selYears.forEach(y => { byYear[y] = {}; });
+        rawOC.forEach(row => {
+            const f = row.FechaEnvio || row.FechaCreacion;
+            if (!f || row.EstadoOC === 'Cancelada') return;
+            const y = new Date(f).getFullYear().toString();
+            if (!byYear[y]) return;
+            const t = TIPO_LABEL[row.TipoOC] || row.TipoOC || 'Otro';
+            byYear[y][t] = (byYear[y][t] || 0) + 1;
+        });
+        const tipos = [...new Set(selYears.flatMap(y => Object.keys(byYear[y])))];
+        const TCOLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316'];
+        return {
+            labels: selYears,
+            datasets: tipos.map((t, i) => ({
+                label: t,
+                data: selYears.map(y => {
+                    const tot = Object.values(byYear[y]).reduce((s, v) => s + v, 0);
+                    return tot ? Math.round((byYear[y][t] || 0) / tot * 100) : 0;
+                }),
+                backgroundColor: TCOLORS[i % TCOLORS.length],
+                stack: 's',
+            })),
+        };
+    }, [rawOC, selYears]);
+
+    // Línea: % enlace mensual
+    const lineData = useMemo(() => ({
+        labels: MESES_CORTO,
+        datasets: selYears.map(y => {
+            const col = anioColor(y, availableYears);
+            const ms  = stats[y] || [];
+            return {
+                label: y,
+                data: ms.map(m => m.total ? Math.round(m.enlazadas / m.total * 100) : null),
+                borderColor: col, backgroundColor: col + '18',
+                tension: 0.35, pointRadius: 4, fill: false, spanGaps: true,
+            };
+        }),
+    }), [stats, selYears, availableYears]);
+
+    if (!rawOC.length) return (
+        <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8', fontSize: 14 }}>Sin datos disponibles</div>
+    );
+
+    return (
+        <div className="oc-tab-content">
+            <div className="oc-section-header">
+                <div className="oc-section-title">Comparativo Anual</div>
+                <div className="oc-section-sub">Evolución interanual de enlace PAC, montos y tipos de compra — excluye OC canceladas</div>
+            </div>
+
+            {/* Selector de años */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginRight: 4 }}>Comparar años:</span>
+                {availableYears.map(y => {
+                    const sel = selYears.includes(y);
+                    const col = anioColor(y, availableYears);
+                    return (
+                        <button key={y} onClick={() => toggle(y)} style={{
+                            padding: '4px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                            border: `2px solid ${col}`, background: sel ? col : '#fff', color: sel ? '#fff' : col,
+                            transition: 'all 0.15s',
+                        }}>{y}</button>
+                    );
+                })}
+            </div>
+
+            {/* KPI cards por año */}
+            {selYears.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${selYears.length}, 1fr)`, gap: 12, marginBottom: 24 }}>
+                    {summary.map(({ y, total, enlazadas, pct, neto, sinPAC }) => {
+                        const col = anioColor(y, availableYears);
+                        return (
+                            <div key={y} style={{ background: '#fff', borderRadius: 10, padding: '14px 18px', border: `2px solid ${col}28`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                                <div style={{ color: col, fontWeight: 800, fontSize: 17, marginBottom: 10 }}>{y}</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                    {[
+                                        ['N° OC activas',  total.toLocaleString('es-CL'),  null],
+                                        ['% Enlace PAC',   `${pct.toFixed(1)}%`,            pct >= 70 ? '#16a34a' : pct >= 50 ? '#ca8a04' : '#dc2626'],
+                                        ['Monto Neto',     clpM(neto),                      null],
+                                        ['Monto sin PAC',  clpM(sinPAC),                    '#dc2626'],
+                                    ].map(([label, val, color]) => (
+                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                            <span style={{ color: '#64748b' }}>{label}</span>
+                                            <span style={{ fontWeight: 700, color: color || '#1e293b' }}>{val}</span>
+                                        </div>
+                                    ))}
+                                    <div style={{ background: '#f1f5f9', borderRadius: 3, height: 4, marginTop: 4 }}>
+                                        <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: col, borderRadius: 3, transition: 'width 0.5s' }} />
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {selYears.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: 13 }}>
+                    Selecciona al menos un año para ver el comparativo
+                </div>
+            )}
+
+            {/* Gráficos */}
+            {selYears.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 16, marginBottom: 24 }}>
+                {/* Línea: tasa mensual */}
+                <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Tasa de Enlace PAC mensual (%)</div>
+                    <div style={{ height: 220 }}>
+                        <Line data={lineData} options={{
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top', labels: { font: { size: 11 } } },
+                                tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y ?? '—'}%` } },
+                            },
+                            scales: {
+                                y: { min: 0, max: 100, ticks: { callback: v => `${v}%`, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+                                x: { ticks: { font: { size: 11 } }, grid: { display: false } },
+                            },
+                        }} />
+                    </div>
+                </div>
+
+                {/* Barras 100%: tipo de compra */}
+                <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Distribución Tipo de Compra</div>
+                    <div style={{ height: 220 }}>
+                        <Bar data={tipoChartData} options={{
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 10 } },
+                                tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` } },
+                            },
+                            scales: {
+                                x: { stacked: true, ticks: { font: { size: 12 } } },
+                                y: { stacked: true, max: 100, ticks: { callback: v => `${v}%`, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+                            },
+                        }} />
+                    </div>
+                </div>
+            </div>}
+
+            {/* Tabla resumen mensual */}
+            {selYears.length > 0 && <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Resumen Mensual</div>
+                <div className="oc-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Mes</th>
+                                {selYears.map(y => (
+                                    <React.Fragment key={y}>
+                                        <th style={{ color: anioColor(y, availableYears), textAlign: 'right' }}>{y} · N°OC</th>
+                                        <th style={{ color: anioColor(y, availableYears), textAlign: 'right' }}>{y} · % PAC</th>
+                                        <th style={{ color: anioColor(y, availableYears), textAlign: 'right' }}>{y} · Neto</th>
+                                    </React.Fragment>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {MESES_CORTO.map((mes, i) => {
+                                const anyData = selYears.some(y => (stats[y]?.[i]?.total ?? 0) > 0);
+                                if (!anyData) return null;
+                                return (
+                                    <tr key={mes}>
+                                        <td style={{ fontWeight: 600, fontSize: 12 }}>{mes}</td>
+                                        {selYears.map(y => {
+                                            const m = stats[y]?.[i];
+                                            const pct = m?.total ? (m.enlazadas / m.total * 100).toFixed(1) : null;
+                                            const pctColor = pct !== null
+                                                ? (parseFloat(pct) >= 70 ? '#16a34a' : parseFloat(pct) >= 50 ? '#ca8a04' : '#dc2626')
+                                                : '#94a3b8';
+                                            return (
+                                                <React.Fragment key={y}>
+                                                    <td style={{ textAlign: 'right', fontSize: 12 }}>{m?.total ?? '—'}</td>
+                                                    <td style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: pctColor }}>{pct !== null ? `${pct}%` : '—'}</td>
+                                                    <td style={{ textAlign: 'right', fontSize: 12 }}>{m?.neto ? clpM(m.neto) : '—'}</td>
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>}
+        </div>
+    );
+}
+
 // ── Banner de actualización ETL ───────────────────────────────────────────────
 
 function ocLogColor(line) {
@@ -631,16 +890,17 @@ function BannerActualizacionOC({ tarea, onCerrar }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const TABS = [
-    { key: 'estrategico', label: 'Estratégico', icon: '📊' },
-    { key: 'tactico',     label: 'Táctico',     icon: '📈' },
-    { key: 'operativo',  label: 'Operativo',   icon: '📋' },
-    { key: 'analitico',  label: 'Analítico',   icon: '🔍' },
+    { key: 'estrategico',  label: 'Estratégico',  icon: '📊' },
+    { key: 'tactico',      label: 'Táctico',      icon: '📈' },
+    { key: 'operativo',    label: 'Operativo',    icon: '📋' },
+    { key: 'analitico',    label: 'Analítico',    icon: '🔍' },
+    { key: 'comparativo',  label: 'Comparativo',  icon: '📅' },
 ];
 
 export default function OCDashboardPage() {
     const [activeTab, setActiveTab] = useState('estrategico');
     const {
-        ocData, loadingOC, errorOC,
+        rawOC, ocData, loadingOC, errorOC,
         anio, setAnio, unidad, setUnidad,
         years, unidades, refresh,
     } = useOCDashboard();
@@ -711,19 +971,23 @@ export default function OCDashboardPage() {
                 </div>
 
                 <div className="oc-tabbar-filters">
-                    <div className="oc-filter-group">
-                        <span className="oc-filter-label-dark">Año</span>
-                        <select className="oc-filter-select-light" value={anio} onChange={e => setAnio(e.target.value)}>
-                            {years.map(y => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                    </div>
-                    <div className="oc-filter-group">
-                        <span className="oc-filter-label-dark">Unidad</span>
-                        <select className="oc-filter-select-light" style={{ maxWidth: 200 }} value={unidad} onChange={e => setUnidad(e.target.value)}>
-                            <option value="Todas">Todas las unidades</option>
-                            {unidades.map(u => <option key={u} value={u}>{u}</option>)}
-                        </select>
-                    </div>
+                    {activeTab !== 'comparativo' && (
+                        <>
+                            <div className="oc-filter-group">
+                                <span className="oc-filter-label-dark">Año</span>
+                                <select className="oc-filter-select-light" value={anio} onChange={e => setAnio(e.target.value)}>
+                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </div>
+                            <div className="oc-filter-group">
+                                <span className="oc-filter-label-dark">Unidad</span>
+                                <select className="oc-filter-select-light" style={{ maxWidth: 200 }} value={unidad} onChange={e => setUnidad(e.target.value)}>
+                                    <option value="Todas">Todas las unidades</option>
+                                    {unidades.map(u => <option key={u} value={u}>{u}</option>)}
+                                </select>
+                            </div>
+                        </>
+                    )}
                     {/* Botón Actualizar API */}
                     <button
                         className="btn-actualizar-api"
@@ -750,10 +1014,11 @@ export default function OCDashboardPage() {
                 )}
                 {!isLoading && !errorOC && (
                     <>
-                        {activeTab === 'estrategico' && <TabEstrategico data={ocData} anio={anio} />}
-                        {activeTab === 'tactico'     && <TabTactico data={ocData} />}
-                        {activeTab === 'operativo'   && <TabOperativo data={ocData} />}
-                        {activeTab === 'analitico'   && <TabAnalitico data={ocData} anio={anio} unidad={unidad} />}
+                        {activeTab === 'estrategico'  && <TabEstrategico data={ocData} anio={anio} />}
+                        {activeTab === 'tactico'      && <TabTactico data={ocData} />}
+                        {activeTab === 'operativo'    && <TabOperativo data={ocData} />}
+                        {activeTab === 'analitico'    && <TabAnalitico data={ocData} anio={anio} unidad={unidad} />}
+                        {activeTab === 'comparativo'  && <TabComparativoAnual rawOC={rawOC} />}
                     </>
                 )}
             </div>

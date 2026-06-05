@@ -265,7 +265,7 @@ Si necesitas una clase nueva → agregarla en `frontend/src/index.css`.
 | Módulo | Ruta | Estado | Notas |
 |---|---|---|---|
 | Licitaciones | `/licitaciones` | ✅ Completo | Dashboard + filtros + gráficos + **botón ETL + panel de cambios** |
-| Órdenes de Compra | `/ordenes-compra` | ✅ Funcional | Pendiente migrar a `features/` + **botón ETL + panel de cambios + tab Comparativo pendiente** |
+| Órdenes de Compra | `/ordenes-compra` | ✅ Funcional | Pendiente migrar a `features/` + **botón ETL + panel de cambios**. Tab Comparativo Anual implementado en `OCDashboardPage.jsx`. |
 | Anexo N°3 | `/anexo3` | ✅ Funcional | |
 | Compra Ágil | `/compra-agil` | ✅ Completo | Tablas + análisis ML + **botón ETL + panel de cambios** |
 | PAC | `/pac` | ✅ Completo | Res.188 indicadores + Informe PDF (tab OC eliminado) |
@@ -342,7 +342,16 @@ Cuando completado/error → ✕ cierra directamente sin confirmación.
 | 3 | `withIva` hardcodea 19% — el modelo tiene `PorcentajeIva` | `components/OrdenesCompraResumen.jsx:31` | Baja |
 | 4 | `components/ui/Sidebar.jsx` es legacy — no referenciar | `components/ui/Sidebar.jsx` | Baja |
 | 5 | Dashboard Finanzas aún en construcción | `features/finanzas/` | Media |
-| 6 | Tab "Comparativo Anual" de OC pendiente de implementar | `components/OrdenesCompraResumen.jsx` | Media |
+
+### Nota: useOCDashboard — datos sin filtrar vs filtrados
+
+El hook `useOCDashboard` expone dos datasets:
+- `rawOC` — todos los registros sin filtrar (por año ni unidad). Usar para análisis interanuales.
+- `ocData` — filtrado por `anio` + `unidad` seleccionados. Usar para los tabs Estratégico/Táctico/Operativo/Analítico.
+
+El tab **Comparativo Anual** usa `rawOC` directamente y agrega por año/mes en `useMemo` dentro del componente, sin llamadas adicionales al backend. Patrón a seguir para otros análisis interanuales.
+
+`EnlacePAC` tiene valores `"Enlazada"` o `"No Enlazada"` (ambos strings truthy). Siempre comparar con `=== 'Enlazada'`, nunca verificar truthiness directamente.
 
 ### Nota: TipoCompraInterna — valores legacy
 

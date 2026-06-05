@@ -637,6 +637,23 @@ function RevisionModal({ oc, historial, sugerencias, onClose, onSaved }) {
                         <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b' }}>📋 Revisión de OC</div>
                         <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#64748b', marginTop: 2 }}>{oc.codigo_oc}</div>
                         <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2, maxWidth: 440 }}>{oc.NombreOC}</div>
+                        {oc.FechaEnvio && (
+                            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>📅 Enviada: {fmtDate(oc.FechaEnvio)}</div>
+                        )}
+                        {sugerencias.length > 0 && (
+                            <div style={{ marginTop: 8, padding: '7px 10px', background: '#f0fdf4', borderRadius: 7, border: '1px solid #bbf7d0', maxWidth: 440 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 5 }}>
+                                    {sugerencias.length === 1 ? 'Proyecto sugerido' : `${sugerencias.length} proyectos sugeridos`}
+                                </div>
+                                {sugerencias.map((s, i) => (
+                                    <div key={i} style={{ fontSize: 12, marginBottom: i < sugerencias.length - 1 ? 4 : 0 }}>
+                                        <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#15803d' }}>{s.id_proyecto}</span>
+                                        {s.nombre_proyecto && <span style={{ color: '#166534' }}> — {s.nombre_proyecto}</span>}
+                                        <span style={{ fontSize: 10, color: '#64748b' }}> ({s.n} OC vinculadas)</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>×</button>
                 </div>
@@ -1190,6 +1207,8 @@ function TabOCCorregibles({ data, proyectosMap, allOrdenes }) {
     const [soloConSugerencia, setSoloConSugerencia] = useState(false);
     const [pgPage, setPgPage] = useState(1);
     const [pgSize, setPgSize] = useState(20);
+    const [sortCol, setSortCol] = useState('FechaEnvio');
+    const [sortDir, setSortDir] = useState('desc');
     const [revisiones, setRevisiones] = useState({});   // { codigo_oc: [rev,...] }
     const [modalOC, setModalOC] = useState(null);
 
@@ -1235,15 +1254,34 @@ function TabOCCorregibles({ data, proyectosMap, allOrdenes }) {
     }).length;
 
     const fuente = soloConSugerencia ? conSugerencia : enriquecidas;
+
+    const toggleSort = col => {
+        if (sortCol === col) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+        else { setSortCol(col); setSortDir('desc'); }
+    };
+    const sortArrow = col => sortCol === col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : '';
+
     const filtradas = useMemo(() => {
         const s = search.toLowerCase();
-        return fuente.filter(oc =>
+        const rows = fuente.filter(oc =>
             !s || oc.codigo_oc?.toLowerCase().includes(s)
                 || oc.NombreOC?.toLowerCase().includes(s)
                 || oc.CodigoLicitacion?.toLowerCase().includes(s)
                 || oc.P_Nombre?.toLowerCase().includes(s)
-        ).sort((a, b) => (Number(b.TotalNeto) || 0) - (Number(a.TotalNeto) || 0));
-    }, [fuente, search]);
+        );
+        rows.sort((a, b) => {
+            let va, vb;
+            if (sortCol === 'FechaEnvio') {
+                va = a.FechaEnvio ? new Date(a.FechaEnvio).getTime() : 0;
+                vb = b.FechaEnvio ? new Date(b.FechaEnvio).getTime() : 0;
+            } else {
+                va = Number(a.TotalNeto) || 0;
+                vb = Number(b.TotalNeto) || 0;
+            }
+            return sortDir === 'desc' ? vb - va : va - vb;
+        });
+        return rows;
+    }, [fuente, search, sortCol, sortDir]);
 
     // Subtab bar style
     const stBtn = (active) => ({
@@ -1304,12 +1342,17 @@ function TabOCCorregibles({ data, proyectosMap, allOrdenes }) {
                         <thead>
                             <tr>
                                 <th>Estado</th>
+                                <th onClick={() => toggleSort('FechaEnvio')} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                                    Fecha Envío{sortArrow('FechaEnvio')}
+                                </th>
                                 <th>Código OC</th>
                                 <th>Nombre OC</th>
                                 <th>Tipo OC Interno</th>
                                 <th>CodigoLicitacion</th>
                                 <th>Proveedor</th>
-                                <th style={{ textAlign: 'right' }}>Monto Neto</th>
+                                <th onClick={() => toggleSort('TotalNeto')} style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                                    Monto Neto{sortArrow('TotalNeto')}
+                                </th>
                                 <th>ID Proyecto sugerido</th>
                                 <th>Link MP</th>
                                 <th>Acción</th>
@@ -1327,6 +1370,7 @@ function TabOCCorregibles({ data, proyectosMap, allOrdenes }) {
                                 return (
                                     <tr key={oc.codigo_oc} style={{ background: rowBg }}>
                                         <td><RevisionBadge revision={ultimaRev} /></td>
+                                        <td style={{ fontSize: 11, whiteSpace: 'nowrap', color: '#64748b' }}>{fmtDate(oc.FechaEnvio)}</td>
                                         <td><strong style={{ fontFamily: 'monospace', fontSize: 11 }}>{oc.codigo_oc}</strong></td>
                                         <td style={{ maxWidth: 200 }}><div className="truncate-text" title={oc.NombreOC} style={{ fontSize: 12 }}>{oc.NombreOC}</div></td>
                                         <td style={{ fontSize: 11 }}>{oc.TipoOCInterno || '—'}</td>
@@ -1369,7 +1413,7 @@ function TabOCCorregibles({ data, proyectosMap, allOrdenes }) {
                                     </tr>
                                 );
                             })}
-                            {filtradas.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>Sin resultados</td></tr>}
+                            {filtradas.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>Sin resultados</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -1750,6 +1794,460 @@ function TabNoEnlazadas({ data }) {
     );
 }
 
+// ─── Tab: Comparativo Anual ───────────────────────────────────────────────────
+
+const ANIO_COLORS = ['#10b981','#3b82f6','#94a3b8','#f59e0b','#8b5cf6','#ef4444','#06b6d4'];
+const TIPO_LABEL  = { AG:'Compra Ágil', CM:'Conv. Marco', TD:'Trato Directo', OC:'Licitación', SE:'Licitación', MC:'M. Cuantía' };
+function anioColor(y, allYears) { return ANIO_COLORS[allYears.indexOf(y) % ANIO_COLORS.length]; }
+
+function TabComparativoAnual({ data }) {
+    const availableYears = useMemo(() => {
+        const s = new Set();
+        data.forEach(r => {
+            const f = r.FechaEnvio || r.FechaCreacion;
+            if (!f) return;
+            const yr = new Date(f).getFullYear();
+            if (!isNaN(yr)) s.add(yr.toString());
+        });
+        return [...s].sort((a, b) => b - a);
+    }, [data]);
+
+    const [selYears, setSelYears] = useState([]);
+
+    useEffect(() => {
+        if (availableYears.length && selYears.length === 0)
+            setSelYears(availableYears.slice(0, 3));
+    }, [availableYears]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const toggle = y => setSelYears(prev =>
+        prev.includes(y) ? prev.filter(x => x !== y) : [...prev, y].sort((a, b) => b - a)
+    );
+
+    const stats = useMemo(() => {
+        const r = {};
+        selYears.forEach(y => {
+            r[y] = Array.from({ length: 12 }, () => ({ total: 0, enlazadas: 0, neto: 0, sinPACNeto: 0 }));
+        });
+        data.forEach(row => {
+            const f = row.FechaEnvio || row.FechaCreacion;
+            if (!f || row.EstadoOC === 'Cancelada') return;
+            const y = new Date(f).getFullYear().toString();
+            if (!r[y]) return;
+            const m = new Date(f).getMonth();
+            const neto = parseFloat(row.TotalNeto) || 0;
+            r[y][m].total++;
+            r[y][m].neto += neto;
+            if (row.EnlacePAC === 'Enlazada') r[y][m].enlazadas++;
+            else r[y][m].sinPACNeto += neto;
+        });
+        return r;
+    }, [data, selYears]);
+
+    const summary = useMemo(() =>
+        selYears.map(y => {
+            const ms = stats[y] || [];
+            const total     = ms.reduce((s, m) => s + m.total, 0);
+            const enlazadas = ms.reduce((s, m) => s + m.enlazadas, 0);
+            const neto      = ms.reduce((s, m) => s + m.neto, 0);
+            const sinPAC    = ms.reduce((s, m) => s + m.sinPACNeto, 0);
+            return { y, total, enlazadas, pct: total ? enlazadas / total * 100 : 0, neto, sinPAC };
+        }), [stats, selYears]);
+
+    const tipoChartData = useMemo(() => {
+        const byYear = {};
+        selYears.forEach(y => { byYear[y] = {}; });
+        data.forEach(row => {
+            const f = row.FechaEnvio || row.FechaCreacion;
+            if (!f || row.EstadoOC === 'Cancelada') return;
+            const y = new Date(f).getFullYear().toString();
+            if (!byYear[y]) return;
+            const t = TIPO_LABEL[row.TipoOC] || row.TipoOC || 'Otro';
+            byYear[y][t] = (byYear[y][t] || 0) + 1;
+        });
+        const tipos = [...new Set(selYears.flatMap(y => Object.keys(byYear[y])))];
+        const TCOLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316'];
+        return {
+            labels: selYears,
+            datasets: tipos.map((t, i) => ({
+                label: t,
+                data: selYears.map(y => {
+                    const tot = Object.values(byYear[y]).reduce((s, v) => s + v, 0);
+                    return tot ? Math.round((byYear[y][t] || 0) / tot * 100) : 0;
+                }),
+                backgroundColor: TCOLORS[i % TCOLORS.length],
+                stack: 's',
+            })),
+        };
+    }, [data, selYears]);
+
+    const lineData = useMemo(() => ({
+        labels: MESES,
+        datasets: selYears.map(y => {
+            const col = anioColor(y, availableYears);
+            const ms  = stats[y] || [];
+            return {
+                label: y,
+                data: ms.map(m => m.total ? Math.round(m.enlazadas / m.total * 100) : null),
+                borderColor: col, backgroundColor: col + '18',
+                tension: 0.35, pointRadius: 4, fill: false, spanGaps: true,
+            };
+        }),
+    }), [stats, selYears, availableYears]);
+
+    // ── Derivados para análisis de monto y cantidad ────────────────────────────
+
+    const concentracion = useMemo(() =>
+        selYears.map(y => {
+            const ms = stats[y] || [];
+            const totalNeto = ms.reduce((s, m) => s + m.neto, 0);
+            const netoQ4    = ms.slice(9).reduce((s, m) => s + m.neto, 0);
+            const pctQ4     = totalNeto ? netoQ4 / totalNeto * 100 : 0;
+            const picaN = ms.reduce((b, m, i) => m.neto  > b.v ? { v: m.neto,  i } : b, { v: 0, i: -1 });
+            const picaQ = ms.reduce((b, m, i) => m.total > b.v ? { v: m.total, i } : b, { v: 0, i: -1 });
+            const totalQ = ms.reduce((s, m) => s + m.total, 0);
+            return {
+                y,
+                pctQ4,
+                mesPicoNeto: picaN.i >= 0 ? MESES[picaN.i] : '—',
+                mesPicoCant: picaQ.i >= 0 ? MESES[picaQ.i] : '—',
+                ticket: totalQ ? totalNeto / totalQ : 0,
+            };
+        }), [stats, selYears]);
+
+    const montoBarData = useMemo(() => ({
+        labels: MESES,
+        datasets: selYears.map(y => {
+            const col = anioColor(y, availableYears);
+            return { label: y, data: (stats[y] || []).map(m => m.neto || null), backgroundColor: col + 'cc', borderColor: col, borderWidth: 1 };
+        }),
+    }), [stats, selYears, availableYears]);
+
+    const acumuladoData = useMemo(() => ({
+        labels: MESES,
+        datasets: selYears.map(y => {
+            const col = anioColor(y, availableYears);
+            let acc = 0;
+            return {
+                label: y,
+                data: (stats[y] || []).map(m => { acc += m.neto; return acc || null; }),
+                borderColor: col, backgroundColor: col + '18',
+                tension: 0.35, pointRadius: 3, fill: false, spanGaps: true,
+            };
+        }),
+    }), [stats, selYears, availableYears]);
+
+    const cantBarData = useMemo(() => ({
+        labels: MESES,
+        datasets: selYears.map(y => {
+            const col = anioColor(y, availableYears);
+            return { label: y, data: (stats[y] || []).map(m => m.total || null), backgroundColor: col + 'cc', borderColor: col, borderWidth: 1 };
+        }),
+    }), [stats, selYears, availableYears]);
+
+    const ticketData = useMemo(() => ({
+        labels: MESES,
+        datasets: selYears.map(y => {
+            const col = anioColor(y, availableYears);
+            return {
+                label: y,
+                data: (stats[y] || []).map(m => m.total ? Math.round(m.neto / m.total) : null),
+                borderColor: col, backgroundColor: col + '18',
+                tension: 0.35, pointRadius: 3, fill: false, spanGaps: true,
+            };
+        }),
+    }), [stats, selYears, availableYears]);
+
+    if (!data.length) return (
+        <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8', fontSize: 14 }}>Sin datos disponibles</div>
+    );
+
+    return (
+        <div>
+            <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 16, color: '#1e293b' }}>Comparativo Anual</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Evolución interanual de enlace PAC, montos y tipos de compra — excluye OC canceladas</div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginRight: 4 }}>Comparar años:</span>
+                {availableYears.map(y => {
+                    const sel = selYears.includes(y);
+                    const col = anioColor(y, availableYears);
+                    return (
+                        <button key={y} onClick={() => toggle(y)} style={{
+                            padding: '4px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                            border: `2px solid ${col}`, background: sel ? col : '#fff', color: sel ? '#fff' : col,
+                            transition: 'all 0.15s',
+                        }}>{y}</button>
+                    );
+                })}
+            </div>
+
+            {selYears.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${selYears.length}, 1fr)`, gap: 12, marginBottom: 24 }}>
+                    {summary.map(({ y, total, enlazadas, pct, neto, sinPAC }) => {
+                        const col = anioColor(y, availableYears);
+                        return (
+                            <div key={y} style={{ background: '#fff', borderRadius: 10, padding: '14px 18px', border: `2px solid ${col}28`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                                <div style={{ color: col, fontWeight: 800, fontSize: 17, marginBottom: 10 }}>{y}</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                    {[
+                                        ['N° OC activas',  total.toLocaleString('es-CL'),  null],
+                                        ['% Enlace PAC',   `${pct.toFixed(1)}%`,            pct >= 70 ? '#16a34a' : pct >= 50 ? '#ca8a04' : '#dc2626'],
+                                        ['Monto Neto',     fmtM(neto),                      null],
+                                        ['Monto sin PAC',  fmtM(sinPAC),                    '#dc2626'],
+                                    ].map(([label, val, color]) => (
+                                        <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                            <span style={{ color: '#64748b' }}>{label}</span>
+                                            <span style={{ fontWeight: 700, color: color || '#1e293b' }}>{val}</span>
+                                        </div>
+                                    ))}
+                                    <div style={{ background: '#f1f5f9', borderRadius: 3, height: 4, marginTop: 4 }}>
+                                        <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: col, borderRadius: 3, transition: 'width 0.5s' }} />
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {selYears.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: 13 }}>
+                    Selecciona al menos un año para ver el comparativo
+                </div>
+            )}
+
+            {selYears.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 16, marginBottom: 24 }}>
+                <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Tasa de Enlace PAC mensual (%)</div>
+                    <div style={{ height: 220 }}>
+                        <Line data={lineData} options={{
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top', labels: { font: { size: 11 } } },
+                                tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y ?? '—'}%` } },
+                            },
+                            scales: {
+                                y: { min: 0, max: 100, ticks: { callback: v => `${v}%`, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+                                x: { ticks: { font: { size: 11 } }, grid: { display: false } },
+                            },
+                        }} />
+                    </div>
+                </div>
+                <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Distribución Tipo de Compra</div>
+                    <div style={{ height: 220 }}>
+                        <Bar data={tipoChartData} options={{
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'top', labels: { font: { size: 10 }, boxWidth: 10 } },
+                                tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` } },
+                            },
+                            scales: {
+                                x: { stacked: true, ticks: { font: { size: 12 } } },
+                                y: { stacked: true, max: 100, ticks: { callback: v => `${v}%`, font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+                            },
+                        }} />
+                    </div>
+                </div>
+            </div>}
+
+            {selYears.length > 0 && <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Resumen Mensual</div>
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                        <thead>
+                            <tr>
+                                <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '2px solid #e2e8f0', color: '#64748b' }}>Mes</th>
+                                {selYears.map(y => (
+                                    <React.Fragment key={y}>
+                                        <th style={{ color: anioColor(y, availableYears), textAlign: 'right', padding: '6px 8px', borderBottom: '2px solid #e2e8f0' }}>{y} · N°OC</th>
+                                        <th style={{ color: anioColor(y, availableYears), textAlign: 'right', padding: '6px 8px', borderBottom: '2px solid #e2e8f0' }}>{y} · % PAC</th>
+                                        <th style={{ color: anioColor(y, availableYears), textAlign: 'right', padding: '6px 8px', borderBottom: '2px solid #e2e8f0' }}>{y} · Neto</th>
+                                    </React.Fragment>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {MESES.map((mes, i) => {
+                                const anyData = selYears.some(y => (stats[y]?.[i]?.total ?? 0) > 0);
+                                if (!anyData) return null;
+                                return (
+                                    <tr key={mes} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                        <td style={{ fontWeight: 600, padding: '5px 8px' }}>{mes}</td>
+                                        {selYears.map(y => {
+                                            const m = stats[y]?.[i];
+                                            const pct = m?.total ? (m.enlazadas / m.total * 100).toFixed(1) : null;
+                                            const pctColor = pct !== null
+                                                ? (parseFloat(pct) >= 70 ? '#16a34a' : parseFloat(pct) >= 50 ? '#ca8a04' : '#dc2626')
+                                                : '#94a3b8';
+                                            return (
+                                                <React.Fragment key={y}>
+                                                    <td style={{ textAlign: 'right', padding: '5px 8px' }}>{m?.total ?? '—'}</td>
+                                                    <td style={{ textAlign: 'right', padding: '5px 8px', fontWeight: 600, color: pctColor }}>{pct !== null ? `${pct}%` : '—'}</td>
+                                                    <td style={{ textAlign: 'right', padding: '5px 8px' }}>{m?.neto ? fmtM(m.neto) : '—'}</td>
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>}
+
+            {/* ── ANÁLISIS POR MONTO ($) ──────────────────────────────────────── */}
+            {selYears.length > 0 && <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '28px 0 16px' }}>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                    <span style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', whiteSpace: 'nowrap' }}>💰 Análisis por Monto ($)</span>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                </div>
+
+                {/* Chips concentración */}
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${selYears.length}, 1fr)`, gap: 12, marginBottom: 20 }}>
+                    {concentracion.map(({ y, pctQ4, mesPicoNeto, ticket }) => {
+                        const col = anioColor(y, availableYears);
+                        return (
+                            <div key={y} style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', border: `2px solid ${col}28`, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                                <div style={{ color: col, fontWeight: 800, fontSize: 14, marginBottom: 10 }}>{y}</div>
+                                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                                    {[
+                                        ['% gasto Oct–Dic', `${pctQ4.toFixed(1)}%`, pctQ4 > 40 ? '#dc2626' : '#16a34a'],
+                                        ['Mes pico $',       mesPicoNeto,            null],
+                                        ['Ticket promedio',  fmtM(ticket),           null],
+                                    ].map(([label, val, color]) => (
+                                        <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                            <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>{label}</span>
+                                            <span style={{ fontSize: 13, fontWeight: 700, color: color || '#1e293b' }}>{val}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Barras mensuales monto + acumulado */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+                    <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Monto Neto mensual por año</div>
+                        <div style={{ height: 220 }}>
+                            <Bar data={montoBarData} options={{
+                                responsive: true, maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'top', labels: { font: { size: 11 } } },
+                                    tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtM(c.parsed.y)}` } },
+                                },
+                                scales: {
+                                    x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+                                    y: { ticks: { callback: v => new Intl.NumberFormat('es-CL', { notation: 'compact', compactDisplay: 'short' }).format(v), font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+                                },
+                            }} />
+                        </div>
+                    </div>
+                    <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Gasto acumulado anual</div>
+                        <div style={{ height: 220 }}>
+                            <Line data={acumuladoData} options={{
+                                responsive: true, maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'top', labels: { font: { size: 11 } } },
+                                    tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtM(c.parsed.y)}` } },
+                                },
+                                scales: {
+                                    x: { ticks: { font: { size: 11 } }, grid: { display: false } },
+                                    y: { ticks: { callback: v => new Intl.NumberFormat('es-CL', { notation: 'compact', compactDisplay: 'short' }).format(v), font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+                                },
+                            }} />
+                        </div>
+                    </div>
+                </div>
+            </>}
+
+            {/* ── ANÁLISIS POR CANTIDAD DE OC ─────────────────────────────────── */}
+            {selYears.length > 0 && <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0 16px' }}>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                    <span style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', whiteSpace: 'nowrap' }}>📦 Análisis por Cantidad de OC</span>
+                    <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+                </div>
+
+                {/* Barras mensuales cantidad + ticket promedio */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+                    <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>N° OC emitidas por mes</div>
+                        <div style={{ height: 220 }}>
+                            <Bar data={cantBarData} options={{
+                                responsive: true, maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'top', labels: { font: { size: 11 } } },
+                                    tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y} OC` } },
+                                },
+                                scales: {
+                                    x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+                                    y: { ticks: { font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+                                },
+                            }} />
+                        </div>
+                    </div>
+                    <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Ticket promedio por OC mensual</div>
+                        <div style={{ height: 220 }}>
+                            <Line data={ticketData} options={{
+                                responsive: true, maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'top', labels: { font: { size: 11 } } },
+                                    tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtM(c.parsed.y)}` } },
+                                },
+                                scales: {
+                                    x: { ticks: { font: { size: 11 } }, grid: { display: false } },
+                                    y: { ticks: { callback: v => new Intl.NumberFormat('es-CL', { notation: 'compact', compactDisplay: 'short' }).format(v), font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+                                },
+                            }} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Tabla resumen anual combinada */}
+                <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#1e293b', marginBottom: 12 }}>Resumen Anual Comparativo</div>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc' }}>
+                                    {['Año','N° OC','Monto Neto','Ticket Promedio','Mes pico $','Mes pico Q','% gasto Oct–Dic'].map(h => (
+                                        <th key={h} style={{ textAlign: h === 'Año' ? 'left' : 'right', padding: '7px 10px', borderBottom: '2px solid #e2e8f0', color: '#64748b', fontWeight: 600, fontSize: 11 }}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {summary.map(({ y, total, neto }, idx) => {
+                                    const c = concentracion[idx] || {};
+                                    const col = anioColor(y, availableYears);
+                                    return (
+                                        <tr key={y} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '7px 10px', fontWeight: 800, color: col }}>{y}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right' }}>{total.toLocaleString('es-CL')}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600 }}>{fmtM(neto)}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right' }}>{fmtM(c.ticket ?? 0)}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right' }}>{c.mesPicoNeto ?? '—'}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right' }}>{c.mesPicoCant ?? '—'}</td>
+                                            <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: (c.pctQ4 ?? 0) > 40 ? '#dc2626' : '#16a34a' }}>{(c.pctQ4 ?? 0).toFixed(1)}%</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </>}
+        </div>
+    );
+}
+
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 
 const TABS = [
@@ -1758,6 +2256,7 @@ const TABS = [
     { id: 'Enlace PAC',     icon: '🔗' },
     { id: 'OC Corregibles', icon: '🛠️' },
     { id: 'No Enlazadas',   icon: '🔴' },
+    { id: 'Comparativo',    icon: '📅' },
 ];
 
 export function OrdenesCompraResumen() {
@@ -1875,6 +2374,7 @@ export function OrdenesCompraResumen() {
             {activeTab === 'Enlace PAC'     && <TabEnlacePAC data={filtered} />}
             {activeTab === 'OC Corregibles' && <TabOCCorregibles data={filtered} proyectosMap={proyectosMap} allOrdenes={ordenes} />}
             {activeTab === 'No Enlazadas'   && <TabNoEnlazadas data={filtered} />}
+            {activeTab === 'Comparativo'    && <TabComparativoAnual data={ordenes} />}
         </div>
     );
 }
