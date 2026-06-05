@@ -384,27 +384,48 @@ function TabEnlacePAC({ data }) {
     const evolChart = {
         labels: MESES,
         datasets: [
-            { label: 'Enlazada', data: Array.from({ length: 12 }, (_, i) => mesMap[i]?.enl ?? 0), backgroundColor: '#006FB3', borderRadius: 3 },
+            { label: 'Enlazada',    data: Array.from({ length: 12 }, (_, i) => mesMap[i]?.enl   ?? 0), backgroundColor: '#16a34a', borderRadius: 3 },
             { label: 'No Enlazada', data: Array.from({ length: 12 }, (_, i) => mesMap[i]?.noEnl ?? 0), backgroundColor: '#FE6565', borderRadius: 3 },
         ],
     };
 
     // Semestral
-    const s1Enl  = enlazadas.filter(oc => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() < 6).reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
-    const s2Enl  = enlazadas.filter(oc => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() >= 6).reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
+    const s1Enl   = enlazadas.filter(oc  => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() < 6).reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
+    const s2Enl   = enlazadas.filter(oc  => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() >= 6).reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
     const s1NoEnl = noEnlazadas.filter(oc => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() < 6).reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
     const s2NoEnl = noEnlazadas.filter(oc => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() >= 6).reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
     const semChart = {
         labels: ['S1 (Ene–Jun)', 'S2 (Jul–Dic)'],
         datasets: [
-            { label: 'Enlazada',    data: [s1Enl, s2Enl],    backgroundColor: '#006FB3', borderRadius: 3 },
+            { label: 'Enlazada',    data: [s1Enl, s2Enl],    backgroundColor: '#16a34a', borderRadius: 3 },
             { label: 'No Enlazada', data: [s1NoEnl, s2NoEnl], backgroundColor: '#FE6565', borderRadius: 3 },
         ],
     };
 
-    // No enlazadas por TipoCompraInterna
+    // Mapeo de TipoCompraInterna: convierte códigos numéricos (carga anterior) y abreviaturas
+    // a nombres legibles. Los valores 0-6 provienen de una versión previa del ETL.
+    const TIPO_COMPRA_LABEL = v => {
+        if (v === null || v === undefined || v === '') return 'Sin tipo';
+        const MAPA = {
+            '0': 'Sin tipo',       '1': 'Licitación',
+            '2': 'Convenio Marco', '3': 'Trato Directo',
+            '4': 'Compra Ágil',    '5': 'Microcompra',
+            '6': 'Otro',
+            // Claves string del ETL actual
+            'Compra Ágil': 'Compra Ágil',     'Convenio Marco': 'Convenio Marco',
+            'Trato Directo': 'Trato Directo',  'Licitación': 'Licitación',
+            'Otro': 'Otro',                    'Sin tipo': 'Sin tipo',
+            // Códigos TipoOC directos
+            'AG': 'Compra Ágil',  'CM': 'Convenio Marco',
+            'TD': 'Trato Directo', 'MC': 'Microcompra',
+            'OC': 'Orden Directa',
+        };
+        return MAPA[String(v).trim()] ?? String(v);
+    };
+
+    // No enlazadas por TipoCompraInterna (con normalización de etiquetas)
     const tcMap = noEnlazadas.reduce((acc, oc) => {
-        const k = oc.TipoCompraInterna || 'Sin tipo';
+        const k = TIPO_COMPRA_LABEL(oc.TipoCompraInterna);
         acc[k] = (acc[k] || 0) + (Number(oc.TotalNeto) || 0);
         return acc;
     }, {});

@@ -530,10 +530,7 @@ function ModalFechasOC({ onIniciar, onCancelar, iniciando }) {
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
-const TABS = [{ id: 'resumen', label: '🏠 Resumen OC' }];
-
 export default function OrdenesCompraDashboard() {
-    const [activeTab, setActiveTab]   = useState('resumen');
     const [showModal, setShowModal]   = useState(false);
     const [showPanel, setShowPanel]   = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
@@ -609,17 +606,8 @@ export default function OrdenesCompraDashboard() {
                 </button>
             </div>
 
-            {/* Tabs */}
-            <div className="tabs-bar">
-                {TABS.map(tab => (
-                    <button key={tab.id} className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
-
             <div className="tab-container">
-                {activeTab === 'resumen' && <OrdenesCompraResumen key={refreshKey} />}
+                <OrdenesCompraResumen key={refreshKey} />
             </div>
         </>
     );
