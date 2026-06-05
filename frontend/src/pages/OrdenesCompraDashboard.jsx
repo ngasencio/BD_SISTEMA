@@ -299,14 +299,18 @@ function OCBar({ pct, active, color, indeterminate }) {
     );
 }
 
-function BannerOC({ tarea, onVerCambios, onCerrar }) {
+function BannerOC({ tarea, onVerCambios, onCerrar, onCancelar }) {
     const logRef = useRef(null);
+    const [confirmando, setConfirmando] = useState(false);
     useEffect(() => {
         if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
     }, [tarea.logs_recientes]);
 
-    const puedesCerrar = ['completado', 'error'].includes(tarea.status);
-    const colorH = tarea.status === 'error' ? '#dc2626' : '#15803d';
+    const enProceso = ['iniciado', 'en_proceso'].includes(tarea.status);
+    const colorH = tarea.status === 'error' ? '#dc2626' : tarea.status === 'cancelado' ? '#64748b' : '#15803d';
+
+    const handleXClick = () => { if (enProceso) setConfirmando(true); else onCerrar(); };
+    const handleConfirmar = async () => { setConfirmando(false); await onCancelar(); };
 
     const fmtF = iso => { if (!iso) return '?'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
 
@@ -333,18 +337,30 @@ function BannerOC({ tarea, onVerCambios, onCerrar }) {
                 @keyframes oc-indet   { 0%{left:-40%} 60%{left:100%} 100%{left:100%} }
             `}</style>
 
+            {/* Diálogo de confirmación de cancelación */}
+            {confirmando && (
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.88)', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14 }}>
+                    <div style={{ background: '#fff', borderRadius: 10, padding: '22px 20px', textAlign: 'center', width: 300, margin: '0 16px' }}>
+                        <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', marginBottom: 6 }}>¿Detener la actualización?</div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 18, lineHeight: 1.5 }}>Se interrumpirá el proceso en curso. Los datos descargados hasta ahora se descartarán.</div>
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                            <button onClick={() => setConfirmando(false)} style={{ padding: '8px 18px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: 13, color: '#64748b', fontWeight: 600 }}>No, continuar</button>
+                            <button onClick={handleConfirmar} style={{ padding: '8px 18px', borderRadius: 7, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Sí, detener</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Cabecera */}
             <div style={{ background: colorH, padding: '11px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ color: '#fff', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {tarea.status === 'completado'
-                        ? '✅ Actualización completada'
-                        : tarea.status === 'error'
-                            ? '❌ Error en actualización'
-                            : <><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid rgba(255,255,255,0.5)', borderTopColor: '#fff', borderRadius: '50%', animation: 'oc-spin 0.8s linear infinite' }} /> Actualizando Órdenes de Compra</>}
+                    {tarea.status === 'completado' ? '✅ Actualización completada'
+                        : tarea.status === 'cancelado' ? '⛔ Actualización cancelada'
+                        : tarea.status === 'error'    ? '❌ Error en actualización'
+                        : <><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid rgba(255,255,255,0.5)', borderTopColor: '#fff', borderRadius: '50%', animation: 'oc-spin 0.8s linear infinite' }} /> Actualizando Órdenes de Compra</>}
                 </div>
-                {puedesCerrar && (
-                    <button onClick={onCerrar} style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14, borderRadius: 4, padding: '2px 7px', fontWeight: 700 }}>✕</button>
-                )}
+                <button onClick={handleXClick} style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14, borderRadius: 4, padding: '2px 7px', fontWeight: 700 }}>✕</button>
             </div>
 
             <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -444,6 +460,15 @@ function BannerOC({ tarea, onVerCambios, onCerrar }) {
                     </div>
                 )}
 
+                {/* Cancelado */}
+                {tarea.status === 'cancelado' && (
+                    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 13px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 20, marginBottom: 4 }}>⛔</div>
+                        <div style={{ fontWeight: 600, color: '#475569', fontSize: 13 }}>Actualización cancelada</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>El proceso fue detenido por el usuario.</div>
+                    </div>
+                )}
+
                 {/* Error */}
                 {tarea.status === 'error' && (
                     <div style={{ background: '#fef2f2', borderRadius: 8, padding: '10px 13px' }}>
@@ -516,7 +541,7 @@ export default function OrdenesCompraDashboard() {
     // Al completar el ETL → abre el panel de cambios automáticamente
     const handleCompletado = useCallback(() => setShowPanel(true), []);
 
-    const { tarea, iniciando, iniciar, cerrar } = useActualizarOC(handleCompletado);
+    const { tarea, iniciando, iniciar, cancelar, cerrar } = useActualizarOC(handleCompletado);
 
     // Cerrar panel + banner y recargar tabla
     const handleCerrarPanel = useCallback(() => {
@@ -560,6 +585,7 @@ export default function OrdenesCompraDashboard() {
                     tarea={tarea}
                     onVerCambios={() => setShowPanel(true)}
                     onCerrar={handleCerrarBanner}
+                    onCancelar={cancelar}
                 />
             )}
 

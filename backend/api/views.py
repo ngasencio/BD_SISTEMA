@@ -1,3 +1,4 @@
+import ctypes
 import logging
 import re
 import subprocess
@@ -960,6 +961,8 @@ class _ETLLiveStream:
         self._logs: list = []
 
     def write(self, text: str):
+        if _tareas_actualizacion_ca.get(self._tid, {}).get("status") == "cancelado":
+            raise SystemExit("Cancelado por el usuario")
         self._partial += text
         while "\n" in self._partial:
             line, self._partial = self._partial.split("\n", 1)
@@ -1068,8 +1071,10 @@ def _ejecutar_actualizacion_compraagil(task_id: str, fecha_desde_str: str, fecha
             oc_total_ps=None, oc_metodo1=None,
             maestro_resumen_total=None,
             tablas_sync=0, progreso_sync_pct=0, ultima_tabla_sync=None,
+            diff=None,
         )
 
+        _tareas_actualizacion_ca[task_id]["thread_id"] = threading.current_thread().ident
         stream = _ETLLiveStream(task_id, total_dias)
 
         # ── Paso 1: refresh (descarga + enlace OC al final) ──
@@ -1080,6 +1085,21 @@ def _ejecutar_actualizacion_compraagil(task_id: str, fecha_desde_str: str, fecha
         with contextlib.redirect_stdout(stream):
             ag.refresh_base_datos(d1, d2)
 
+        # ── Snapshot pre-sync: estado actual de la BD ──
+        from django.db import close_old_connections as _close_ca
+        _close_ca()
+        snap_pre_ca: dict = {}
+        try:
+            snap_pre_ca = {
+                r["codigocompraagil"]: {
+                    "estado": r["estadoglosa"] or "",
+                    "oc":     r["oc_codigo"] or "",
+                }
+                for r in CompraAgilResumen.objects.values("codigocompraagil", "estadoglosa", "oc_codigo")
+            }
+        except Exception:
+            pass
+
         _tareas_actualizacion_ca[task_id].update(
             paso=2, progreso_pct=100,
             paso_desc="Sincronizando con base de datos...",
@@ -1089,10 +1109,72 @@ def _ejecutar_actualizacion_compraagil(task_id: str, fecha_desde_str: str, fecha
         with contextlib.redirect_stdout(stream):
             ag.sincronizar_con_servidor()
 
+        # ── Diff post-sync ──
+        _tareas_actualizacion_ca[task_id].update(paso_desc="Calculando cambios detectados...")
+        diff_ca: dict = {
+            "nuevas": [], "cambiadas": [], "oc_vinculadas": [],
+            "nuevas_count": 0, "cambiadas_count": 0, "oc_vinculadas_count": 0,
+            "total_antes": len(snap_pre_ca), "total_despues": 0,
+        }
+        try:
+            _close_ca()
+            campos_ca = ("codigocompraagil", "estadoglosa", "estadocodigo",
+                         "nombre", "unidadcompra", "presupuestoestimado",
+                         "montodisponibleclp", "oc_codigo", "fechacierre",
+                         "totalofertasrecibidas")
+            snap_post_ca = {
+                r["codigocompraagil"]: r
+                for r in CompraAgilResumen.objects.values(*campos_ca)
+            }
+            diff_ca["total_despues"] = len(snap_post_ca)
+
+            nuevas_ca, cambiadas_ca, oc_vinculadas_ca = [], [], []
+
+            for cod, det in snap_post_ca.items():
+                base = {
+                    "codigo":    cod,
+                    "nombre":    det.get("nombre") or "",
+                    "unidad":    det.get("unidadcompra") or "",
+                    "monto":     str(det.get("presupuestoestimado") or det.get("montodisponibleclp") or ""),
+                    "oc_codigo": det.get("oc_codigo") or "",
+                    "cierre":    str(det.get("fechacierre") or ""),
+                    "ofertas":   str(det.get("totalofertasrecibidas") or ""),
+                }
+                if cod not in snap_pre_ca:
+                    nuevas_ca.append({**base, "estado": det.get("estadoglosa") or ""})
+                else:
+                    pre = snap_pre_ca[cod]
+                    estado_nuevo = det.get("estadoglosa") or ""
+                    if pre["estado"] != estado_nuevo:
+                        cambiadas_ca.append({**base,
+                            "estado_anterior": pre["estado"],
+                            "estado_nuevo":    estado_nuevo,
+                        })
+                    # OC recién vinculada: antes sin OC, ahora con OC
+                    oc_nueva = det.get("oc_codigo") or ""
+                    if not pre["oc"] and oc_nueva:
+                        oc_vinculadas_ca.append({**base, "estado": estado_nuevo})
+
+            nuevas_ca.sort(key=lambda x: x.get("cierre", "") or "", reverse=True)
+            cambiadas_ca.sort(key=lambda x: x["codigo"])
+            oc_vinculadas_ca.sort(key=lambda x: x["codigo"])
+
+            diff_ca.update({
+                "nuevas":            nuevas_ca,
+                "cambiadas":         cambiadas_ca,
+                "oc_vinculadas":     oc_vinculadas_ca,
+                "nuevas_count":      len(nuevas_ca),
+                "cambiadas_count":   len(cambiadas_ca),
+                "oc_vinculadas_count": len(oc_vinculadas_ca),
+            })
+        except Exception as exc_diff:
+            diff_ca["error_diff"] = str(exc_diff)
+
         _tareas_actualizacion_ca[task_id].update(
             status="completado", paso=3,
             paso_desc="Completado exitosamente",
             progreso_sync_pct=100,
+            diff=diff_ca,
         )
 
     except Exception as exc:
@@ -1162,6 +1244,8 @@ def estado_actualizacion_compraagil(request, task_id):
         "maestro_resumen_total": tarea.get("maestro_resumen_total"),
         # Log en tiempo real
         "logs_recientes": tarea.get("logs_recientes", []),
+        # Diff de cambios (disponible al completar)
+        "diff": tarea.get("diff"),
         "error": tarea.get("error"),
     })
 
@@ -1194,10 +1278,11 @@ class _ETLLiveStream_OC:
         self._logs: list = []
 
     def write(self, text: str):
+        if _tareas_actualizacion_oc.get(self._tid, {}).get("status") == "cancelado":
+            raise SystemExit("Cancelado por el usuario")
         self._partial += text
         while "\n" in self._partial:
             raw_line, self._partial = self._partial.split("\n", 1)
-            # Tomar último segmento del carriage-return (líneas de progreso in-place)
             if "\r" in raw_line:
                 raw_line = raw_line.split("\r")[-1]
             self._handle(raw_line.strip())
@@ -1314,10 +1399,13 @@ def _ejecutar_actualizacion_oc(task_id: str, fecha_desde_str: str, fecha_hasta_s
             progreso_sync_pct=0, diff=None,
         )
 
+        _tareas_actualizacion_oc[task_id]["thread_id"] = threading.current_thread().ident
         stream = _ETLLiveStream_OC(task_id, total_dias)
         progress_state: dict = {"days_done": set()}
 
         def _on_progress(fecha, codigo_oc, done, total):
+            if _tareas_actualizacion_oc.get(task_id, {}).get("status") == "cancelado":
+                raise SystemExit("Cancelado por el usuario")
             if total > 0 and done >= total:
                 progress_state["days_done"].add(fecha)
             dias_ok = len(progress_state["days_done"])
@@ -1487,3 +1575,388 @@ def estado_actualizacion_oc(request, task_id):
         "diff": tarea.get("diff"),
         "error": tarea.get("error"),
     })
+
+
+# ─── Actualización Licitaciones desde el dashboard ────────────────────────────
+
+_tareas_actualizacion_li: dict = {}
+
+
+class _ETLLiveStream_LI:
+    """
+    Reemplaza sys.stdout durante el ETL de Licitaciones.
+    Parsea líneas relevantes y actualiza el dict de tarea en tiempo real.
+    Maneja \\n y \\r (progreso in-place del ThreadPoolExecutor).
+    """
+
+    _SKIP = re.compile(
+        r"^\s*(?:={3,}|─{3,}|-{3,}"
+        r"|EXTRACTOR LICITACIONES|GESTIÓN TOTAL"
+        r"|── Descarga|── Maestros|── Sincronización"
+        r"|\s*)$"
+    )
+    _KEEP = re.compile(
+        r"[✅✨📊🔄🔗❌⚠️🚀💾]|>>>"
+        r"|licitaciones|Guardado|REFRESH|Maestro|actualizado|COMPLETADO"
+        r"|Vaciando|Insertando|TOTAL EN BD|Sin licitaciones"
+    )
+
+    def __init__(self, task_id: str, total_dias: int):
+        self._tid = task_id
+        self._total = max(total_dias, 1)
+        self._partial = ""
+        self._logs: list = []
+
+    def write(self, text: str):
+        if _tareas_actualizacion_li.get(self._tid, {}).get("status") == "cancelado":
+            raise SystemExit("Cancelado por el usuario")
+        self._partial += text
+        while "\n" in self._partial:
+            raw, self._partial = self._partial.split("\n", 1)
+            if "\r" in raw:
+                raw = raw.split("\r")[-1]
+            self._handle(raw.strip())
+
+    def flush(self):
+        pass
+
+    def _handle(self, line: str):
+        t = _tareas_actualizacion_li.get(self._tid)
+        if not t or not line:
+            return
+
+        upd: dict = {}
+
+        # Día siendo procesado
+        m = re.search(r"LICITACIONES SSO[:\s]+(\d{2}/\d{2}/\d{4})", line)
+        if m:
+            upd["paso_desc"] = f"Procesando {m.group(1)}..."
+
+        # Conteo encontrado en el día
+        m = re.search(r"encontraron\s+(\d+)\s+licitaciones", line)
+        if m:
+            upd["lics_encontradas_dia"] = int(m.group(1))
+
+        # Sin datos este día
+        if "Sin licitaciones" in line or "sin licitaciones" in line:
+            upd["paso_desc"] = "Sin licitaciones este día, continuando..."
+
+        # Integración maestros
+        if "INTEGRANDO NUEVOS DATOS" in line:
+            upd["paso_desc"] = "Integrando datos en maestros..."
+
+        m = re.search(r"Maestro Resumen actualizado.*?(\d+)", line)
+        if m:
+            upd["maestro_resumen_total"] = int(m.group(1))
+
+        m = re.search(r"Maestro Detalle actualizado.*?(\d+)", line)
+        if m:
+            upd["maestro_detalles_total"] = int(m.group(1))
+
+        # Sincronización
+        if "CARGANDO CSVs" in line or "SINCRONIZACIÓN MASIVA" in line:
+            upd["paso_desc"] = "Preparando carga a base de datos..."
+
+        if "Vaciando la base de datos" in line:
+            upd["paso_desc"] = "Vaciando registros anteriores..."
+            upd["progreso_sync_pct"] = 20
+
+        m = re.search(r"Insertando\s+(\d[\d,]*)\s+Licitaciones\s+en BD", line)
+        if m:
+            n = int(m.group(1).replace(",", ""))
+            upd["lics_subidas"] = n
+            upd["paso_desc"] = f"Insertando {n:,} licitaciones..."
+            upd["progreso_sync_pct"] = 50
+
+        m = re.search(r"Insertando\s+(\d[\d,]*)\s+Detalles\s+en BD", line)
+        if m:
+            n = int(m.group(1).replace(",", ""))
+            upd["detalles_subidos"] = n
+            upd["paso_desc"] = f"Insertando {n:,} líneas de detalle..."
+            upd["progreso_sync_pct"] = 75
+
+        if "Sincronización masiva finalizada" in line:
+            upd["progreso_sync_pct"] = 100
+            upd["paso_desc"] = "Sincronización completada."
+
+        m = re.search(r"TOTAL EN BD:\s*(\d+)\s*Licitaciones.*?(\d+)\s*Detalles", line)
+        if m:
+            upd["lics_en_bd"]      = int(m.group(1))
+            upd["detalles_en_bd"]  = int(m.group(2))
+
+        # Log visual
+        if not self._SKIP.match(line) and self._KEEP.search(line):
+            self._logs.append(line)
+            if len(self._logs) > 12:
+                self._logs.pop(0)
+            upd["logs_recientes"] = list(self._logs)
+
+        if upd:
+            t.update(upd)
+
+
+def _ejecutar_actualizacion_li(task_id: str, fecha_desde_str: str, fecha_hasta_str: str):
+    """Ejecuta el ETL de Licitaciones en un hilo daemon con progreso en tiempo real."""
+    import contextlib
+    import datetime as _dt
+
+    api_path = str(_RUTA_AG_SERVIDOR)
+    if api_path not in sys.path:
+        sys.path.insert(0, api_path)
+
+    try:
+        import LI_SSO_SERVER as li
+    except ImportError as exc:
+        _tareas_actualizacion_li[task_id].update(
+            status="error", error=f"No se pudo cargar LI_SSO_SERVER: {exc}"
+        )
+        return
+
+    try:
+        d1 = _dt.datetime.strptime(fecha_desde_str, "%Y-%m-%d").date()
+        d2 = _dt.datetime.strptime(fecha_hasta_str, "%Y-%m-%d").date()
+        total_dias = (d2 - d1).days + 1
+
+        _tareas_actualizacion_li[task_id].update(
+            total_dias=total_dias, dias_completados=0, progreso_pct=0,
+            dia_actual=None, lics_dia=0, total_lics_dia=0,
+            logs_recientes=[], maestro_resumen_total=None,
+            maestro_detalles_total=None,
+            lics_subidas=None, detalles_subidos=None,
+            lics_en_bd=None, detalles_en_bd=None,
+            progreso_sync_pct=0, diff=None,
+        )
+
+        _tareas_actualizacion_li[task_id]["thread_id"] = threading.current_thread().ident
+        stream = _ETLLiveStream_LI(task_id, total_dias)
+        progress_state: dict = {"days_done": set()}
+
+        def _on_progress(fecha, codigo_li, done, total):
+            if _tareas_actualizacion_li.get(task_id, {}).get("status") == "cancelado":
+                raise SystemExit("Cancelado por el usuario")
+            if total > 0 and done >= total:
+                progress_state["days_done"].add(fecha)
+            dias_ok = len(progress_state["days_done"])
+            frac = (dias_ok + (done / max(total, 1))) / max(total_dias, 1)
+            pct = min(99, round(frac * 100))
+            _tareas_actualizacion_li[task_id].update(
+                dia_actual=fecha.strftime("%d-%m-%Y"),
+                lics_dia=done,
+                total_lics_dia=total,
+                progreso_pct=pct,
+                dias_completados=dias_ok,
+                paso_desc=f"Procesando {fecha.strftime('%d-%m-%Y')} — {done}/{total} licitaciones",
+            )
+
+        # ── Paso 1: refresh (descarga + maestros) ──
+        _tareas_actualizacion_li[task_id].update(
+            status="en_proceso", paso=1,
+            paso_desc="Iniciando descarga de Licitaciones...",
+        )
+        with contextlib.redirect_stdout(stream):
+            li.refresh_base_datos(d1, d2, progress_callback=_on_progress)
+
+        # ── Snapshot pre-sync ──
+        from django.db import close_old_connections as _close_li
+        _close_li()
+        snap_pre: dict = {}
+        try:
+            snap_pre = dict(Licitacion.objects.values_list("codigo_licitacion", "Estado"))
+        except Exception:
+            pass
+
+        _tareas_actualizacion_li[task_id].update(
+            paso=2, progreso_pct=100,
+            paso_desc="Sincronizando con base de datos...",
+        )
+
+        # ── Paso 2: subir maestros a Django/MariaDB ──
+        with contextlib.redirect_stdout(stream):
+            li.subir_maestros_a_django()
+
+        # ── Diff post-sync ──
+        _tareas_actualizacion_li[task_id].update(paso_desc="Calculando cambios detectados...")
+        diff: dict = {
+            "nuevas": [], "cambiadas": [], "adjudicadas": [],
+            "nuevas_count": 0, "cambiadas_count": 0, "adjudicadas_count": 0,
+            "total_antes": len(snap_pre), "total_despues": 0,
+        }
+        try:
+            _close_li()
+            campos = ("codigo_licitacion", "Estado", "Nombre", "Tipo",
+                      "MontoEstimado", "FechaCierre", "C_Unidad", "C_NombreOrganismo")
+            snap_post = {r["codigo_licitacion"]: r for r in Licitacion.objects.values(*campos)}
+            diff["total_despues"] = len(snap_post)
+
+            nuevas, cambiadas, adjudicadas = [], [], []
+
+            for cod, det in snap_post.items():
+                base = {
+                    "codigo":    cod,
+                    "nombre":    det.get("Nombre") or "",
+                    "tipo":      det.get("Tipo") or "",
+                    "unidad":    det.get("C_Unidad") or "",
+                    "organismo": det.get("C_NombreOrganismo") or "",
+                    "monto":     str(det.get("MontoEstimado") or ""),
+                    "fecha_cierre": str(det.get("FechaCierre") or ""),
+                }
+                if cod not in snap_pre:
+                    nuevas.append({**base, "estado": det.get("Estado") or ""})
+                elif snap_pre[cod] != (det.get("Estado") or ""):
+                    entry = {**base,
+                        "estado_anterior": snap_pre[cod] or "",
+                        "estado_nuevo":    det.get("Estado") or "",
+                    }
+                    cambiadas.append(entry)
+                    if (det.get("Estado") or "").lower().startswith("adjudic"):
+                        adjudicadas.append(entry)
+
+            nuevas.sort(key=lambda x: x.get("fecha_cierre", "") or "", reverse=True)
+            cambiadas.sort(key=lambda x: x["codigo"])
+
+            diff.update({
+                "nuevas":           nuevas,
+                "cambiadas":        cambiadas,
+                "adjudicadas":      adjudicadas,
+                "nuevas_count":     len(nuevas),
+                "cambiadas_count":  len(cambiadas),
+                "adjudicadas_count": len(adjudicadas),
+            })
+        except Exception as exc_diff:
+            diff["error_diff"] = str(exc_diff)
+
+        _tareas_actualizacion_li[task_id].update(
+            status="completado", paso=3,
+            paso_desc="Completado exitosamente",
+            progreso_sync_pct=100,
+            diff=diff,
+        )
+
+    except Exception as exc:
+        _tareas_actualizacion_li[task_id].update(status="error", error=str(exc))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def iniciar_actualizacion_li(request):
+    """Inicia el ETL de Licitaciones. Body: {fecha_desde, fecha_hasta} en YYYY-MM-DD."""
+    for tarea in _tareas_actualizacion_li.values():
+        if tarea.get("status") in ("iniciado", "en_proceso"):
+            return Response({"error": "Ya hay una actualización de Licitaciones en curso."}, status=409)
+
+    fecha_desde = (request.data.get("fecha_desde") or "").strip()
+    fecha_hasta = (request.data.get("fecha_hasta") or "").strip()
+    if not fecha_desde or not fecha_hasta:
+        return Response(
+            {"error": "Parámetros fecha_desde y fecha_hasta requeridos (YYYY-MM-DD)."},
+            status=400,
+        )
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_actualizacion_li[task_id] = {
+        "status": "iniciado",
+        "paso": 0,
+        "paso_desc": "Iniciando...",
+        "fecha_desde": fecha_desde,
+        "fecha_hasta": fecha_hasta,
+        "error": None,
+    }
+    threading.Thread(
+        target=_ejecutar_actualizacion_li,
+        args=(task_id, fecha_desde, fecha_hasta),
+        daemon=True,
+    ).start()
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def estado_actualizacion_li(request, task_id):
+    """Retorna el estado completo de una tarea de actualización Licitaciones."""
+    tarea = _tareas_actualizacion_li.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id": task_id,
+        "status": tarea["status"],
+        "paso": tarea["paso"],
+        "paso_desc": tarea["paso_desc"],
+        "fecha_desde": tarea.get("fecha_desde"),
+        "fecha_hasta": tarea.get("fecha_hasta"),
+        # Progreso paso 1
+        "total_dias":       tarea.get("total_dias", 0),
+        "dias_completados": tarea.get("dias_completados", 0),
+        "progreso_pct":     tarea.get("progreso_pct", 0),
+        "dia_actual":       tarea.get("dia_actual"),
+        "lics_dia":         tarea.get("lics_dia", 0),
+        "total_lics_dia":   tarea.get("total_lics_dia", 0),
+        # Progreso paso 2
+        "progreso_sync_pct": tarea.get("progreso_sync_pct", 0),
+        # Resultados
+        "maestro_resumen_total":  tarea.get("maestro_resumen_total"),
+        "maestro_detalles_total": tarea.get("maestro_detalles_total"),
+        "lics_subidas":     tarea.get("lics_subidas"),
+        "detalles_subidos": tarea.get("detalles_subidos"),
+        "lics_en_bd":       tarea.get("lics_en_bd"),
+        "detalles_en_bd":   tarea.get("detalles_en_bd"),
+        # Log en tiempo real
+        "logs_recientes": tarea.get("logs_recientes", []),
+        # Diff de cambios (disponible al completar)
+        "diff":  tarea.get("diff"),
+        "error": tarea.get("error"),
+    })
+
+
+# ─── Cancelación de tareas ETL ────────────────────────────────────────────────
+
+def _cancelar_hilo(thread_id: int) -> None:
+    """Envía SystemExit al hilo ETL para detenerlo (best-effort)."""
+    try:
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_ulong(thread_id),
+            ctypes.py_object(SystemExit),
+        )
+    except Exception:
+        pass
+
+
+def _cancelar_tarea(tarea_dict: dict, task_id: str) -> Response:
+    """Lógica común de cancelación para los 3 tipos de ETL."""
+    tarea = tarea_dict.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    if tarea.get("status") not in ("iniciado", "en_proceso"):
+        return Response({"error": "La tarea no está en curso."}, status=409)
+
+    tarea.update(
+        status="cancelado",
+        paso_desc="Cancelado por el usuario.",
+        error="Actualización cancelada por el usuario.",
+    )
+
+    thread_id = tarea.get("thread_id")
+    if thread_id:
+        _cancelar_hilo(thread_id)
+
+    return Response({"status": "cancelado"})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancelar_actualizacion_ca(request, task_id):
+    """Cancela una tarea ETL de Compra Ágil en curso."""
+    return _cancelar_tarea(_tareas_actualizacion_ca, task_id)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancelar_actualizacion_oc(request, task_id):
+    """Cancela una tarea ETL de Órdenes de Compra en curso."""
+    return _cancelar_tarea(_tareas_actualizacion_oc, task_id)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancelar_actualizacion_li(request, task_id):
+    """Cancela una tarea ETL de Licitaciones en curso."""
+    return _cancelar_tarea(_tareas_actualizacion_li, task_id)

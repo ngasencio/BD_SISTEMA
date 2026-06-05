@@ -33,3 +33,6 @@ export const iniciarActualizacionCompraAgil = (fechaDesde, fechaHasta) =>
 
 export const getEstadoActualizacionCompraAgil = (taskId) =>
     apiClient.get(`compraagil/actualizar-estado/${taskId}/`);
+
+export const cancelarActualizacionCompraAgil = (taskId) =>
+    apiClient.post(`compraagil/actualizar-cancelar/${taskId}/`);

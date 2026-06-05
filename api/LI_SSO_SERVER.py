@@ -584,6 +584,13 @@ def guardar_en_django(db_resumen, db_detalles):
                 
         dict_limpio = {k: v for k, v in defaults.items() if k in campos_modelo_lic}
         dict_limpio['codigo_licitacion'] = codigo
+
+        # Campos NOT NULL con default='' en el modelo: si la API devuelve None,
+        # pasar '' en lugar de None para que MySQL no rechace la inserción.
+        for _campo in ('Numero',):
+            if dict_limpio.get(_campo) is None:
+                dict_limpio[_campo] = ''
+
         licitaciones_a_crear.append(Licitacion(**dict_limpio))
         
     print(f"    -> Insertando {len(licitaciones_a_crear)} Licitaciones en BD...")

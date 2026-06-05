@@ -9,3 +9,6 @@ export const iniciarActualizacionOC = (fechaDesde, fechaHasta) =>
 
 export const getEstadoActualizacionOC = (taskId) =>
     apiClient.get(`ordenes-compra/actualizar-estado/${taskId}/`);
+
+export const cancelarActualizacionOC = (taskId) =>
+    apiClient.post(`ordenes-compra/actualizar-cancelar/${taskId}/`);

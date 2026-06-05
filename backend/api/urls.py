@@ -19,6 +19,8 @@ from .views import (
     iniciar_descarga_ofertas, estado_descarga_ofertas,
     iniciar_actualizacion_compraagil, estado_actualizacion_compraagil,
     iniciar_actualizacion_oc, estado_actualizacion_oc,
+    iniciar_actualizacion_li, estado_actualizacion_li,
+    cancelar_actualizacion_ca, cancelar_actualizacion_oc, cancelar_actualizacion_li,
 )
 
 router = DefaultRouter()
@@ -87,6 +89,17 @@ urlpatterns = [
     # Órdenes de Compra — Actualización ETL desde dashboard
     path('ordenes-compra/actualizar/', iniciar_actualizacion_oc, name='iniciar_actualizacion_oc'),
     path('ordenes-compra/actualizar-estado/<str:task_id>/', estado_actualizacion_oc, name='estado_actualizacion_oc'),
+
+    # Licitaciones — Actualización ETL desde dashboard
+    path('licitaciones/actualizar/', iniciar_actualizacion_li, name='iniciar_actualizacion_li'),
+    path('licitaciones/actualizar-estado/<str:task_id>/', estado_actualizacion_li, name='estado_actualizacion_li'),
+    path('licitaciones/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_li, name='cancelar_actualizacion_li'),
+
+    # OC — cancelación
+    path('ordenes-compra/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_oc, name='cancelar_actualizacion_oc'),
+
+    # Compra Ágil — cancelación
+    path('compraagil/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_ca, name='cancelar_actualizacion_ca'),
 
     # Router ViewSets
     path('', include(router.urls)),
