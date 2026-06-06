@@ -24,6 +24,8 @@ from .views import (
     GestionContratoViewSet,
     iniciar_actualizacion_contratos, estado_actualizacion_contratos,
     cancelar_actualizacion_contratos, contratos_stats_view,
+    contratos_evaluaciones_view, contratos_financiero_view,
+    contratos_oc_detalle_view, contratos_plazos_view, contratos_pac_view,
 )
 
 router = DefaultRouter()
@@ -112,6 +114,12 @@ urlpatterns = [
     path('contratos/actualizar/', iniciar_actualizacion_contratos, name='iniciar_actualizacion_contratos'),
     path('contratos/actualizar-estado/<str:task_id>/', estado_actualizacion_contratos, name='estado_actualizacion_contratos'),
     path('contratos/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_contratos, name='cancelar_actualizacion_contratos'),
+    # Gestión de Contratos — analíticos
+    path('contratos/evaluaciones/', contratos_evaluaciones_view, name='contratos_evaluaciones'),
+    path('contratos/financiero/', contratos_financiero_view, name='contratos_financiero'),
+    path('contratos/oc-detalle/', contratos_oc_detalle_view, name='contratos_oc_detalle'),
+    path('contratos/plazos/', contratos_plazos_view, name='contratos_plazos'),
+    path('contratos/pac/', contratos_pac_view, name='contratos_pac'),
 
     # Router ViewSets
     path('', include(router.urls)),

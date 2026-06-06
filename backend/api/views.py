@@ -9,6 +9,8 @@ from pathlib import Path
 
 from django.core.cache import cache
 from django.db.models import Count, Q, Sum
+from django.db.models import DecimalField
+from django.db.models.functions import Cast
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters, viewsets
 from rest_framework.decorators import api_view, permission_classes
@@ -2064,8 +2066,6 @@ def _ejecutar_actualizacion_contratos(task_id: str):
             s = str(v).strip() if v is not None else ""
             return s if s not in ("nan", "None", "") else None
 
-        from .models import GestionContrato
-
         registros = [
             GestionContrato(
                 numero_contrato=_to_str(row["numero_contrato"]) or f"SIN_COD_{idx}",
@@ -2182,9 +2182,6 @@ def cancelar_actualizacion_contratos(request, task_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def contratos_stats_view(request):
-    """KPIs y distribuciones para el dashboard de Gestión de Contratos."""
-    from .models import GestionContrato
-
     qs = GestionContrato.objects.all()
     total = qs.count()
     if total == 0:
@@ -2258,7 +2255,6 @@ def contratos_stats_view(request):
 
 
 class GestionContratoViewSet(viewsets.ReadOnlyModelViewSet):
-    """Lista paginada de contratos con filtros básicos."""
     queryset = GestionContrato.objects.all()
     serializer_class = GestionContratoSerializer
     permission_classes = [IsAuthenticated]
@@ -2266,3 +2262,85 @@ class GestionContratoViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["estado_contrato", "categoria_contrato", "tipo_contrato", "unidad_requirente"]
     search_fields = ["nombre_contrato", "numero_contrato", "nombre_organismo"]
     ordering_fields = ["monto_contrato", "monto_ejecutado", "dias_restantes", "fecha_inicio"]
+
+
+# ── Gestión Contratos — vistas analíticas ────────────────────────────────────
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def contratos_evaluaciones_view(request):
+    from .services import calcular_contratos_evaluaciones
+    cache_key = "contratos_evaluaciones_v1"
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_contratos_evaluaciones()
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def contratos_financiero_view(request):
+    from .services import calcular_contratos_financiero
+    filtros = {
+        'estado_contrato':   request.GET.get('estado_contrato', ''),
+        'categoria_contrato': request.GET.get('categoria_contrato', ''),
+        'tipo_contrato':     request.GET.get('tipo_contrato', ''),
+        'unidad_requirente': request.GET.get('unidad_requirente', ''),
+    }
+    filtros = {k: v for k, v in filtros.items() if v}
+    cache_key = f"contratos_financiero_{'_'.join(f'{k}{v}' for k, v in sorted(filtros.items()))}"
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_contratos_financiero(filtros)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def contratos_oc_detalle_view(request):
+    from .services import calcular_contratos_oc_detalle
+    id_licitacion_oc = request.GET.get("id_licitacion_oc", "").strip()
+    if not id_licitacion_oc:
+        return Response({"error": "Parámetro id_licitacion_oc requerido."}, status=400)
+    cache_key = f"contratos_oc_detalle_{id_licitacion_oc}"
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_contratos_oc_detalle(id_licitacion_oc)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def contratos_plazos_view(request):
+    from .services import calcular_contratos_plazos
+    filtros = {
+        'categoria_contrato': request.GET.get('categoria_contrato', ''),
+        'unidad_requirente':  request.GET.get('unidad_requirente', ''),
+    }
+    filtros = {k: v for k, v in filtros.items() if v}
+    cache_key = f"contratos_plazos_{'_'.join(f'{k}{v}' for k, v in sorted(filtros.items()))}"
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_contratos_plazos(filtros)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def contratos_pac_view(request):
+    from .services import calcular_contratos_pac
+    filtros = {
+        'estado_contrato':    request.GET.get('estado_contrato', ''),
+        'categoria_contrato': request.GET.get('categoria_contrato', ''),
+    }
+    filtros = {k: v for k, v in filtros.items() if v}
+    cache_key = f"contratos_pac_{'_'.join(f'{k}{v}' for k, v in sorted(filtros.items()))}"
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_contratos_pac(filtros)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)

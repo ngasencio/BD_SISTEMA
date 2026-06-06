@@ -106,6 +106,7 @@ Two naming conventions coexist — **do not mix them in new code**:
 | `Comprador` | `T_Comprador` | `id` | Custom table name |
 | `BoletaGarantia` | `T_BoletaGarantia` | `id` | CRUD + file upload |
 | `BoletaGarantiaAudit` | `T_BoletaGarantia_Audit` | `id` | Auto-written on update/delete |
+| `GestionContrato` | `data_gestioncontratos` | `numero_contrato` (PK) | snake_case. `monto_por_ejecutar` nullable (>10^13 → None). `fecha_inicio`/`fecha_termino` malformed strings ("07-00-2026"). Join: `id_licitacion_oc = OrdenCompra.CodigoLicitacion` |
 
 ---
 
@@ -158,9 +159,22 @@ GET   boletas-garantia-audit/             Read-only
 
 # Revisiones OC
 CRUD  revisiones-oc/                      ?codigo_oc=
+
+# Gestión Contratos SSO
+GET   contratos/                          ?estado_contrato=&categoria_contrato=&tipo_contrato=&unidad_requirente=&search=
+GET   contratos/{numero_contrato}/
+GET   contratos/stats/                    Aggregated KPIs (5 min cache)
+POST  contratos/actualizar/               Launches async ETL task → {task_id}
+POST  contratos/actualizar-cancelar/{task_id}/  Cancels running ETL
+GET   contratos/tarea-status/{task_id}/   Polls ETL progress {status, paso_desc, progreso_pct, logs_recientes}
+GET   contratos/evaluaciones/             Res.188 evaluation analysis (5 min cache)
+GET   contratos/financiero/               OC reconciliation + financial projections (5 min cache)
+GET   contratos/oc-detalle/               ?id_licitacion_oc= — OC + productos for one contract (5 min cache per id)
+GET   contratos/plazos/                   Active contracts with alert levels (5 min cache)
+GET   contratos/pac/                      PAC linkage pivot by year (5 min cache)
 ```
 
-**Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`.
+**Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`, `calcular_contratos_evaluaciones`, `calcular_contratos_financiero`, `calcular_contratos_oc_detalle`, `calcular_contratos_plazos`, `calcular_contratos_pac`.
 
 **Cache pattern** — all stat endpoints use `LocMemCache` (volatile — lost on restart, not shared across workers):
 ```python

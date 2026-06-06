@@ -91,6 +91,7 @@ Rol se extrae del JWT payload: `user.role` o `user.groups?.[0]` o `'viewer'` por
 | `/abastecimiento/dashboard` | `features/abastecimiento/components/AbastecimientoDashboard` | admin, abastecimiento, viewer |
 | `/abastecimiento/fsc` | `features/abastecimiento/components/FSCManager` | admin, abastecimiento, viewer |
 | `/abastecimiento/boletas` | `features/abastecimiento/components/BoletasPage` | admin, abastecimiento, viewer |
+| `/abastecimiento/contratos` | `features/abastecimiento/components/GestionContratosPage` | admin, abastecimiento, viewer |
 | `/finanzas/dashboard` | `features/finanzas/components/FinanzasDashboard` | admin, finanzas |
 
 ---
@@ -272,6 +273,7 @@ Si necesitas una clase nueva → agregarla en `frontend/src/index.css`.
 | Boletas de Garantía | `/abastecimiento/boletas` | ✅ Completo | CRUD + auditoría + archivo adjunto |
 | FSC Manager | `/abastecimiento/fsc` | ✅ Funcional | |
 | Dashboard Finanzas | `/finanzas/dashboard` | ⚠️ En desarrollo | Hook mapeado a API real, construcción activa |
+| Gestión Contratos SSO | `/abastecimiento/contratos` | ⚠️ Fase 1 lista | ETL + 4 tabs (Resumen/Estado/Tipo/Garantías). Faltan tabs: Evaluaciones, Seguimiento Financiero, Plazos, Cruce PAC |
 | Gestión Inventario | — | 🔲 Próximo | Placeholder en Sidebar |
 
 ---
@@ -330,6 +332,31 @@ Cuando completado/error → ✕ cierra directamente sin confirmación.
 | Licitaciones | `#1d4ed8` (azul) |
 | OC | `#15803d` (verde oscuro) |
 | Compra Ágil | `#0ea5e9` (celeste) |
+| Gestión Contratos | `#7c3aed` (púrpura) |
+
+---
+
+## Patrón ETL — Gestión Contratos (diferente de LI/OC/CA)
+
+Contratos **no tiene modal de fechas** — el botón "Actualizar" lanza el ETL directamente (sin rango de fechas parametrizable).
+
+| Característica | LI / OC / CA | Gestión Contratos |
+|---|---|---|
+| Modal de fechas | Sí | No — botón directo |
+| Fuente | API Mercado Público | Excel local descargado por Selenium |
+| BannerContratos | Igual (bottom-right, terminal dark, progress, logs, cancelar) | Implementado en `GestionContratosPage.jsx` |
+| Panel de cambios post-ETL | Sí (3 tabs diff) | No implementado aún |
+| Polling | 2s | 2s |
+
+```js
+// Patrón de inicio (sin modal):
+const { data } = await iniciarActualizacionContratos();
+setTarea({ status: 'iniciado', task_id: data.task_id, ... });
+iniciarPolling(data.task_id);
+```
+
+La ruta del archivo Excel en backend: `api/data/data_gestioncontratos/contratos_sso.xlsx`
+Parsing: `pd.read_html(encoding='utf-8')[2]` — el archivo XLS es HTML encubierto; la tabla de datos está en el índice 2.
 
 ---
 

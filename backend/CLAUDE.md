@@ -92,6 +92,7 @@ backend/
 | `Comprador` | `T_Comprador` | `id` | Para módulo garantías |
 | `BoletaGarantia` | `T_BoletaGarantia` | `id` | CRUD completo + auditoría + file upload |
 | `BoletaGarantiaAudit` | `T_BoletaGarantia_Audit` | `id` | Log JSON. `usuario`/`fecha_accion` semánticamente correctos |
+| `GestionContrato` | `data_gestioncontratos` | `numero_contrato` | snake_case. `monto_por_ejecutar` nullable (ETL caps >10^13 to None). `fecha_inicio`/`fecha_termino` malformed strings ("07-00-2026" month=00 — use `dias_restantes`/`dias_vigencia` only). Join: `id_licitacion_oc = OrdenCompra.CodigoLicitacion` (~49% coverage). `TotalBruto` aggregation needs `Cast('TotalBruto', output_field=DecimalField(max_digits=20, decimal_places=2))`. `evaluacion` values: `"Evaluación Pendiente"`, `"--"`, or numeric string `"4"`/`"5"`. `EnlacePAC` values: `"Enlazada"`/`"No Enlazada"` — always compare `== 'Enlazada'`, never truthiness. |
 
 ---
 
@@ -154,6 +155,19 @@ GET    /api/boletas-garantia-audit/            Solo lectura
 # Revisiones OC
 CRUD   /api/revisiones-oc/                     ?codigo_oc=
 
+# Gestión Contratos SSO
+GET    /api/contratos/                         ?estado_contrato=&categoria_contrato=&tipo_contrato=&unidad_requirente=&search=
+GET    /api/contratos/{numero_contrato}/
+GET    /api/contratos/stats/                   Aggregated KPIs (cache 5min)
+POST   /api/contratos/actualizar/              Launches async ETL → {task_id}
+POST   /api/contratos/actualizar-cancelar/{task_id}/  Cancels running ETL (ctypes kill)
+GET    /api/contratos/tarea-status/{task_id}/  Polls ETL progress
+GET    /api/contratos/evaluaciones/            Res.188 evaluation analysis (cache 5min)
+GET    /api/contratos/financiero/              OC reconciliation + financial projections (cache 5min)
+GET    /api/contratos/oc-detalle/              ?id_licitacion_oc= OC+products for one contract (cache 5min per id)
+GET    /api/contratos/plazos/                  Active contracts alert levels (cache 5min)
+GET    /api/contratos/pac/                     PAC linkage pivot by year (cache 5min)
+
 # ETL — Actualización desde dashboard (hilo daemon, polling)
 POST   /api/licitaciones/actualizar/           {fecha_desde, fecha_hasta} YYYY-MM-DD → {task_id}
 GET    /api/licitaciones/actualizar-estado/<id>/  Estado del ETL + diff de cambios
@@ -210,6 +224,11 @@ Funciones clave — nunca duplicar en views:
 | `calcular_oc_stats()` | PAC / OC |
 | `calcular_oc_productos()` | PAC / OC |
 | `calcular_compraagil_ahorro_stats(fecha_desde, fecha_hasta)` | Compra Ágil |
+| `calcular_contratos_evaluaciones()` | Contratos — Res.188 evaluation classification |
+| `calcular_contratos_financiero(filtros)` | Contratos — OC join, reconciliation, financial projection |
+| `calcular_contratos_oc_detalle(id_licitacion_oc)` | Contratos — OC + DetalleOrdenCompra for one contract |
+| `calcular_contratos_plazos(filtros)` | Contratos — active contracts with alerta_tiempo levels |
+| `calcular_contratos_pac(filtros)` | Contratos — PAC linkage pivot (EnlacePAC) by year |
 
 ---
 

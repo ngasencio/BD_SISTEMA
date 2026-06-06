@@ -1,13 +1,13 @@
 from collections import defaultdict
 from datetime import date
 
-from django.db.models import Sum, Count, Q
+from django.db.models import Count, DecimalField, Q, Sum
+from django.db.models.functions import Cast
 
 from .models import (
-    OrdenCompra, DetalleOrdenCompra, PlanerPAC,
-    CompraAgilResumen, CompraAgilProveedor,
-    CompraAgilProductoCotizado,
-    Licitacion, DetalleLicitacion,
+    DetalleOrdenCompra, GestionContrato, Licitacion, DetalleLicitacion,
+    OrdenCompra, PlanerPAC,
+    CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
@@ -1386,4 +1386,476 @@ def calcular_gestion_licitaciones(anio=None):
         },
         'licitaciones': licitaciones_out,
         'por_comprador': por_comprador_list,
+    }
+
+
+# =============================================================================
+# Módulo Gestión de Contratos — Servicios analíticos
+# =============================================================================
+
+_ESTADOS_VIGENTES_CONTRATO = ['En ejecución', 'En ejecución (Modificado)', 'Ampliado']
+_EVAL_PENDIENTE_VALS = frozenset(['--', 'Evaluación Pendiente'])
+
+
+def _anio_contrato(numero_contrato):
+    """Extrae el año del sufijo del código de contrato. 'CL26' → 2026."""
+    import re
+    m = re.search(r'(\d{2})$', (numero_contrato or '').upper().strip())
+    if m:
+        return 2000 + int(m.group(1))
+    return None
+
+
+def calcular_contratos_evaluaciones():
+    """
+    KPIs y detalle de evaluaciones Res.188.
+    Pendiente = estado empieza con 'Terminado' AND evaluacion in {'--, 'Evaluación Pendiente'}
+    Evaluado  = evaluacion es número (nota)
+    No aplica = contrato vigente con '--'
+    """
+    todos = list(GestionContrato.objects.values(
+        'numero_contrato', 'nombre_contrato', 'estado_contrato',
+        'evaluacion', 'monto_contrato', 'unidad_requirente',
+    ))
+
+    kpi_ev = 0
+    kpi_pend = 0
+    kpi_term = 0
+    notas = []
+    por_anio = {}
+    por_estado_term = {}
+    detalle_pend = []
+
+    for c in todos:
+        estado = c['estado_contrato'] or ''
+        evaluacion = c['evaluacion'] or ''
+        es_terminado = estado.startswith('Terminado')
+        monto = int(c['monto_contrato'] or 0)
+
+        try:
+            nota = float(evaluacion)
+            es_evaluado = True
+        except (ValueError, TypeError):
+            nota = None
+            es_evaluado = False
+
+        anio = _anio_contrato(c['numero_contrato'])
+        bucket = por_anio.setdefault(
+            anio or 0,
+            {'anio': anio or 0, 'total': 0, 'evaluados': 0, 'pendientes': 0, 'monto': 0}
+        )
+
+        if es_terminado:
+            kpi_term += 1
+            bucket['total'] += 1
+            bucket['monto'] += monto
+            est_b = por_estado_term.setdefault(estado, {'estado': estado, 'pendientes': 0, 'monto': 0})
+
+            if es_evaluado:
+                kpi_ev += 1
+                notas.append(nota)
+                bucket['evaluados'] += 1
+            elif evaluacion in _EVAL_PENDIENTE_VALS:
+                kpi_pend += 1
+                bucket['pendientes'] += 1
+                est_b['pendientes'] += 1
+                est_b['monto'] += monto
+                detalle_pend.append({
+                    'numero_contrato': c['numero_contrato'],
+                    'nombre_contrato': c['nombre_contrato'] or '',
+                    'estado_contrato': estado,
+                    'monto_contrato': monto,
+                    'unidad_requirente': c['unidad_requirente'] or '',
+                    'anio': anio,
+                })
+
+    nota_promedio = round(sum(notas) / len(notas), 2) if notas else None
+    pct_pendiente = round(kpi_pend / kpi_term * 100, 1) if kpi_term > 0 else 0.0
+
+    detalle_pend.sort(key=lambda x: x['monto'], reverse=True)
+
+    return {
+        'kpis': {
+            'total_terminados': kpi_term,
+            'evaluados': kpi_ev,
+            'pendientes': kpi_pend,
+            'nota_promedio': nota_promedio,
+            'pct_pendiente': pct_pendiente,
+        },
+        'por_anio': sorted(por_anio.values(), key=lambda x: x['anio'], reverse=True),
+        'por_estado_terminado': sorted(
+            por_estado_term.values(), key=lambda x: x['pendientes'], reverse=True
+        ),
+        'detalle_pendientes': detalle_pend,
+    }
+
+
+def calcular_contratos_financiero(filtros=None):
+    """
+    Tabla maestra de seguimiento financiero. LEFT JOIN con OC de TODOS los años.
+    Cast TotalBruto a Decimal antes de Sum (es TextField).
+    """
+    qs = GestionContrato.objects.all()
+    if filtros:
+        if filtros.get('estado_contrato'):
+            qs = qs.filter(estado_contrato=filtros['estado_contrato'])
+        if filtros.get('categoria_contrato'):
+            qs = qs.filter(categoria_contrato=filtros['categoria_contrato'])
+        if filtros.get('tipo_contrato'):
+            qs = qs.filter(tipo_contrato=filtros['tipo_contrato'])
+        if filtros.get('unidad_requirente'):
+            qs = qs.filter(unidad_requirente__icontains=filtros['unidad_requirente'])
+
+    contratos = list(qs.values(
+        'numero_contrato', 'nombre_contrato', 'id_licitacion_oc',
+        'monto_contrato', 'monto_ejecutado', 'monto_por_ejecutar',
+        'estado_contrato', 'unidad_requirente', 'categoria_contrato',
+        'tipo_contrato', 'dias_vigencia', 'dias_restantes', 'evaluacion',
+    ))
+
+    # Agregar OC por CodigoLicitacion — TODOS los años
+    _decimal_field = DecimalField(max_digits=20, decimal_places=2)
+    oc_agg = list(
+        OrdenCompra.objects
+        .values('CodigoLicitacion')
+        .annotate(
+            suma_bruto=Sum(Cast('TotalBruto', output_field=_decimal_field)),
+            n_oc=Count('codigo_oc'),
+        )
+    )
+    oc_map = {
+        r['CodigoLicitacion']: {'suma_bruto': float(r['suma_bruto'] or 0), 'n_oc': r['n_oc']}
+        for r in oc_agg if r['CodigoLicitacion']
+    }
+
+    resultado = []
+    for c in contratos:
+        id_lic = c['id_licitacion_oc'] or ''
+        oc_data = oc_map.get(id_lic)
+        monto_contrato = int(c['monto_contrato'] or 0)
+        monto_ejecutado = int(c['monto_ejecutado'] or 0)
+        monto_por_ejecutar = c['monto_por_ejecutar']
+        dias_vigencia = int(c['dias_vigencia'] or 0)
+        dias_restantes = int(c['dias_restantes'] or 0)
+        dias_activos = max(dias_vigencia - dias_restantes, 1)
+
+        if oc_data:
+            suma_bruto = oc_data['suma_bruto']
+            n_oc = oc_data['n_oc']
+            if monto_ejecutado > 0:
+                diff_pct = abs(suma_bruto - monto_ejecutado) / monto_ejecutado
+                if diff_pct <= 0.01:
+                    reconciliacion = 'cuadrado'
+                elif diff_pct <= 0.10:
+                    reconciliacion = 'diferencia_menor'
+                else:
+                    reconciliacion = 'revisar'
+            else:
+                reconciliacion = 'sin_ejecutado'
+
+            meses_hasta_agotamiento = None
+            alerta = 'ok'
+            if monto_por_ejecutar is not None and monto_por_ejecutar > 0:
+                tasa_mensual = suma_bruto / (dias_activos / 30)
+                if tasa_mensual > 0:
+                    meses = round(monto_por_ejecutar / tasa_mensual, 1)
+                    meses_hasta_agotamiento = meses
+                    if meses < 3:
+                        alerta = 'critico'
+                    elif meses < 6:
+                        alerta = 'urgente'
+                    elif meses < 12:
+                        alerta = 'atencion'
+        else:
+            suma_bruto = None
+            n_oc = 0
+            reconciliacion = 'sin_datos'
+            meses_hasta_agotamiento = None
+            alerta = 'sin_datos'
+
+        resultado.append({
+            'numero_contrato': c['numero_contrato'],
+            'nombre_contrato': c['nombre_contrato'] or '',
+            'id_licitacion_oc': id_lic,
+            'monto_contrato': monto_contrato,
+            'monto_ejecutado': monto_ejecutado,
+            'monto_por_ejecutar': int(monto_por_ejecutar) if monto_por_ejecutar is not None else None,
+            'estado_contrato': c['estado_contrato'] or '',
+            'unidad_requirente': c['unidad_requirente'] or '',
+            'categoria_contrato': c['categoria_contrato'] or '',
+            'dias_vigencia': dias_vigencia,
+            'dias_restantes': dias_restantes,
+            'suma_bruto_oc': round(suma_bruto, 0) if suma_bruto is not None else None,
+            'n_oc': n_oc,
+            'reconciliacion': reconciliacion,
+            'meses_hasta_agotamiento': meses_hasta_agotamiento,
+            'alerta': alerta,
+        })
+
+    resultado.sort(key=lambda x: x['monto_contrato'], reverse=True)
+    return resultado
+
+
+def calcular_contratos_oc_detalle(id_licitacion_oc):
+    """
+    OC + líneas de detalle para un contrato específico (llamada on-demand al expandir fila).
+    """
+    oc_qs = list(
+        OrdenCompra.objects.filter(CodigoLicitacion=id_licitacion_oc)
+        .values(
+            'codigo_oc', 'NombreOC', 'EstadoOC', 'TotalBruto', 'TotalNeto',
+            'FechaEnvio', 'FechaCreacion', 'C_Unidad', 'P_Nombre', 'P_Rut',
+            'EnlacePAC', 'ID_Proyecto', 'Nombre_Proyecto', 'LinkMP',
+        )
+        .order_by('-FechaEnvio')
+    )
+
+    oc_codigos = [r['codigo_oc'] for r in oc_qs]
+    det_map = defaultdict(list)
+    for d in DetalleOrdenCompra.objects.filter(orden_compra_id__in=oc_codigos).values(
+        'orden_compra_id', 'CodigoCategoria', 'Categoria',
+        'CodigoProducto', 'Producto', 'Cantidad', 'PrecioNeto', 'TotalLinea',
+    ):
+        det_map[d['orden_compra_id']].append({
+            'CodigoCategoria': d['CodigoCategoria'] or '',
+            'Categoria': d['Categoria'] or '',
+            'CodigoProducto': d['CodigoProducto'] or '',
+            'Producto': d['Producto'] or '',
+            'Cantidad': float(d['Cantidad'] or 0),
+            'PrecioNeto': float(d['PrecioNeto'] or 0),
+            'TotalLinea': float(d['TotalLinea'] or 0),
+        })
+
+    proyectos_map = {}
+    oc_out = []
+    for r in oc_qs:
+        try:
+            total_bruto = float(r['TotalBruto'] or 0)
+        except (ValueError, TypeError):
+            total_bruto = 0.0
+        try:
+            total_neto = float(r['TotalNeto'] or 0)
+        except (ValueError, TypeError):
+            total_neto = 0.0
+
+        id_proy = str(r['ID_Proyecto'] or '')
+        nombre_proy = str(r['Nombre_Proyecto'] or '')
+        if id_proy:
+            if id_proy not in proyectos_map:
+                proyectos_map[id_proy] = {
+                    'ID_Proyecto': id_proy, 'Nombre_Proyecto': nombre_proy,
+                    'n_oc': 0, 'suma_bruto': 0.0,
+                }
+            proyectos_map[id_proy]['n_oc'] += 1
+            proyectos_map[id_proy]['suma_bruto'] += total_bruto
+
+        oc_out.append({
+            'codigo_oc': r['codigo_oc'],
+            'NombreOC': r['NombreOC'] or '',
+            'EstadoOC': r['EstadoOC'] or '',
+            'TotalBruto': total_bruto,
+            'TotalNeto': total_neto,
+            'FechaEnvio': str(r['FechaEnvio'])[:10] if r['FechaEnvio'] else '',
+            'FechaCreacion': str(r['FechaCreacion'])[:10] if r['FechaCreacion'] else '',
+            'C_Unidad': r['C_Unidad'] or '',
+            'P_Nombre': r['P_Nombre'] or '',
+            'EnlacePAC': r['EnlacePAC'] or '',
+            'ID_Proyecto': id_proy,
+            'Nombre_Proyecto': nombre_proy,
+            'LinkMP': r['LinkMP'] or '',
+            'productos': det_map.get(r['codigo_oc'], []),
+        })
+
+    proyectos = sorted(proyectos_map.values(), key=lambda x: x['suma_bruto'], reverse=True)
+    return {'oc': oc_out, 'proyectos': proyectos}
+
+
+def calcular_contratos_plazos(filtros=None):
+    """
+    Contratos activos con semáforo de tiempo basado en dias_restantes.
+    Las fechas inicio/termino son strings malformados ('07-00-2026') — no se usan para cálculos.
+    """
+    qs = GestionContrato.objects.filter(estado_contrato__in=_ESTADOS_VIGENTES_CONTRATO)
+    if filtros:
+        if filtros.get('categoria_contrato'):
+            qs = qs.filter(categoria_contrato=filtros['categoria_contrato'])
+        if filtros.get('unidad_requirente'):
+            qs = qs.filter(unidad_requirente__icontains=filtros['unidad_requirente'])
+
+    activos = list(qs.values(
+        'numero_contrato', 'nombre_contrato', 'estado_contrato',
+        'fecha_inicio', 'fecha_termino', 'dias_vigencia', 'dias_restantes',
+        'unidad_requirente', 'id_licitacion_oc', 'monto_contrato', 'categoria_contrato',
+    ))
+
+    id_licitacion_ocs = list({c['id_licitacion_oc'] for c in activos if c['id_licitacion_oc']})
+    proyectos_por_lic = defaultdict(list)
+    seen_proy = set()
+    for r in OrdenCompra.objects.filter(
+        CodigoLicitacion__in=id_licitacion_ocs,
+    ).exclude(ID_Proyecto='').exclude(ID_Proyecto__isnull=True).values(
+        'CodigoLicitacion', 'ID_Proyecto', 'Nombre_Proyecto'
+    ).distinct():
+        key = (r['CodigoLicitacion'], str(r['ID_Proyecto'] or ''))
+        if key not in seen_proy:
+            seen_proy.add(key)
+            proyectos_por_lic[r['CodigoLicitacion']].append({
+                'ID_Proyecto': str(r['ID_Proyecto'] or ''),
+                'Nombre_Proyecto': r['Nombre_Proyecto'] or '',
+            })
+
+    kpis = {'total_activos': 0, 'criticos': 0, 'urgentes': 0, 'atencion': 0, 'ok': 0}
+    resultado = []
+
+    for c in activos:
+        dias_restantes = int(c['dias_restantes'] or 0)
+        dias_vigencia = int(c['dias_vigencia'] or 0)
+        dias_transcurridos = max(dias_vigencia - dias_restantes, 0)
+        pct_tiempo = round(dias_transcurridos / dias_vigencia * 100, 1) if dias_vigencia > 0 else 0.0
+
+        if dias_restantes <= 0:
+            alerta = 'critico'
+        elif dias_restantes <= 90:
+            alerta = 'critico'
+        elif dias_restantes <= 180:
+            alerta = 'urgente'
+        elif dias_restantes <= 365:
+            alerta = 'atencion'
+        else:
+            alerta = 'ok'
+
+        kpis['total_activos'] += 1
+        kpis[alerta] += 1
+
+        resultado.append({
+            'numero_contrato': c['numero_contrato'],
+            'nombre_contrato': c['nombre_contrato'] or '',
+            'estado_contrato': c['estado_contrato'] or '',
+            'fecha_inicio': c['fecha_inicio'] or '',
+            'fecha_termino': c['fecha_termino'] or '',
+            'dias_vigencia': dias_vigencia,
+            'dias_restantes': dias_restantes,
+            'pct_ejecutado_tiempo': pct_tiempo,
+            'alerta_tiempo': alerta,
+            'unidad_requirente': c['unidad_requirente'] or '',
+            'id_licitacion_oc': c['id_licitacion_oc'] or '',
+            'monto_contrato': int(c['monto_contrato'] or 0),
+            'proyectos': proyectos_por_lic.get(c['id_licitacion_oc'] or '', []),
+        })
+
+    resultado.sort(key=lambda x: x['dias_restantes'])
+    return {'activos': resultado, 'kpis': kpis}
+
+
+def calcular_contratos_pac(filtros=None):
+    """
+    Cruce PAC: estado EnlacePAC por contrato y proyecto, todos los años.
+    EnlacePAC valores: 'Enlazada' | 'No Enlazada' — siempre comparar con == 'Enlazada'.
+    """
+    qs = GestionContrato.objects.all()
+    if filtros:
+        if filtros.get('estado_contrato'):
+            qs = qs.filter(estado_contrato=filtros['estado_contrato'])
+        if filtros.get('categoria_contrato'):
+            qs = qs.filter(categoria_contrato=filtros['categoria_contrato'])
+
+    contratos = list(qs.values(
+        'numero_contrato', 'nombre_contrato', 'monto_contrato',
+        'id_licitacion_oc', 'estado_contrato', 'categoria_contrato',
+    ))
+
+    id_lics = list({c['id_licitacion_oc'] for c in contratos if c['id_licitacion_oc']})
+    oc_raw = list(
+        OrdenCompra.objects.filter(CodigoLicitacion__in=id_lics)
+        .exclude(FechaEnvio__isnull=True)
+        .extra(select={'anio': 'YEAR(FechaEnvio)'})
+        .values('CodigoLicitacion', 'ID_Proyecto', 'Nombre_Proyecto', 'EnlacePAC', 'anio')
+        .annotate(n_oc=Count('codigo_oc'))
+    )
+
+    # cod_lic → {id_proy → {anio → {enlazadas, no_enlazadas, Nombre_Proyecto}}}
+    oc_by_lic = defaultdict(lambda: defaultdict(lambda: defaultdict(
+        lambda: {'enlazadas': 0, 'no_enlazadas': 0, 'Nombre_Proyecto': ''}
+    )))
+    for r in oc_raw:
+        cod = r['CodigoLicitacion'] or ''
+        if not cod:
+            continue
+        proy = str(r['ID_Proyecto'] or 'Sin proyecto')
+        anio = r['anio'] or 0
+        n = r['n_oc'] or 0
+        oc_by_lic[cod][proy][anio]['Nombre_Proyecto'] = r['Nombre_Proyecto'] or ''
+        if r['EnlacePAC'] == 'Enlazada':
+            oc_by_lic[cod][proy][anio]['enlazadas'] += n
+        else:
+            oc_by_lic[cod][proy][anio]['no_enlazadas'] += n
+
+    pivot = defaultdict(lambda: {'Enlazada': 0, 'No Enlazada': 0})
+    kpis = {
+        'contratos_100pct_enlazados': 0, 'contratos_sin_oc': 0, 'contratos_sin_pac': 0,
+    }
+    resumen = []
+
+    for c in contratos:
+        id_lic = c['id_licitacion_oc'] or ''
+        proy_data = oc_by_lic.get(id_lic)
+
+        if not proy_data:
+            kpis['contratos_sin_oc'] += 1
+            n_enlazada = n_total = 0
+            proyectos_list = []
+        else:
+            n_enlazada = n_total = 0
+            proyectos_list = []
+            for proy, anios in proy_data.items():
+                for anio, st in anios.items():
+                    enl = st['enlazadas']
+                    no_enl = st['no_enlazadas']
+                    n_enlazada += enl
+                    n_total += enl + no_enl
+                    proyectos_list.append({
+                        'ID_Proyecto': proy,
+                        'Nombre_Proyecto': st['Nombre_Proyecto'],
+                        'anio': anio,
+                        'enlazadas': enl,
+                        'no_enlazadas': no_enl,
+                    })
+                    pivot[anio]['Enlazada'] += enl
+                    pivot[anio]['No Enlazada'] += no_enl
+
+        n_no_enlazada = n_total - n_enlazada
+        pct_enl = round(n_enlazada / n_total * 100, 1) if n_total > 0 else 0.0
+
+        if n_total > 0 and n_no_enlazada == 0:
+            kpis['contratos_100pct_enlazados'] += 1
+        if n_total > 0 and n_enlazada == 0:
+            kpis['contratos_sin_pac'] += 1
+
+        resumen.append({
+            'numero_contrato': c['numero_contrato'],
+            'nombre_contrato': c['nombre_contrato'] or '',
+            'monto_contrato': int(c['monto_contrato'] or 0),
+            'estado_contrato': c['estado_contrato'] or '',
+            'categoria_contrato': c['categoria_contrato'] or '',
+            'id_licitacion_oc': id_lic,
+            'n_oc_total': n_total,
+            'n_oc_enlazada': n_enlazada,
+            'n_oc_no_enlazada': n_no_enlazada,
+            'pct_enlazada': pct_enl,
+            'proyectos': proyectos_list,
+        })
+
+    resumen.sort(key=lambda x: x['n_oc_total'], reverse=True)
+    total_enl_global = sum(r['n_oc_enlazada'] for r in resumen)
+    total_oc_global = sum(r['n_oc_total'] for r in resumen)
+    pct_global = round(total_enl_global / total_oc_global * 100, 1) if total_oc_global > 0 else 0.0
+
+    return {
+        'resumen': resumen,
+        'kpis': {**kpis, 'pct_enlazado_global': pct_global},
+        'pivot_anio_estado': sorted(
+            [{'anio': k, 'Enlazada': v['Enlazada'], 'No Enlazada': v['No Enlazada']}
+             for k, v in pivot.items()],
+            key=lambda x: x['anio'],
+        ),
     }
