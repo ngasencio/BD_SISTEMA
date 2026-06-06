@@ -71,7 +71,265 @@ function KpiCard({ label, value, sub, color, tooltip }) {
     );
 }
 
-// ── FilaExpandida (sin cambios) ───────────────────────────────────────────────
+// ── Radiografía de salud — helper puro ───────────────────────────────────────
+function calcularRadiografia(r) {
+    const mc               = r.monto_contrato  || 0;
+    const me               = r.monto_ejecutado || 0;
+    const diasVigencia     = r.dias_vigencia   || 0;
+    const diasRestantes    = r.dias_restantes  || 0;
+    const diasTranscurridos = Math.max(0, diasVigencia - diasRestantes);
+
+    const pctFinanciero     = mc > 0 ? (me / mc) * 100 : 0;
+    const pctTiempo         = diasVigencia > 0 ? (diasTranscurridos / diasVigencia) * 100 : null;
+
+    const ritmoDiarioReal     = diasTranscurridos > 0 ? me / diasTranscurridos : null;
+    const ritmoDiarioEsperado = diasVigencia     > 0 ? mc / diasVigencia      : null;
+
+    const proyeccionCierre = ritmoDiarioReal != null && diasVigencia > 0 ? ritmoDiarioReal * diasVigencia : null;
+    const pctProyeccion    = proyeccionCierre != null && mc > 0 ? (proyeccionCierre / mc) * 100 : null;
+
+    const delta    = pctTiempo !== null ? pctFinanciero - pctTiempo : null;
+    const velocidad = (ritmoDiarioReal != null && ritmoDiarioEsperado != null && ritmoDiarioEsperado > 0)
+        ? (ritmoDiarioReal / ritmoDiarioEsperado) * 100 : null;
+
+    // Diagnóstico según delta
+    let diagnostico, colorDiag, iconoDiag;
+    if (me === 0) {
+        diagnostico = 'Sin ejecución registrada'; colorDiag = '#94a3b8'; iconoDiag = '⬜';
+    } else if (delta === null) {
+        diagnostico = 'Sin datos temporales';     colorDiag = '#94a3b8'; iconoDiag = '⬜';
+    } else if (delta > 20) {
+        diagnostico = 'Gasto acelerado — riesgo de sobreejecutar'; colorDiag = '#dc2626'; iconoDiag = '🔴';
+    } else if (delta > 10) {
+        diagnostico = 'Por encima del ritmo esperado';              colorDiag = '#ea580c'; iconoDiag = '🟠';
+    } else if (delta >= -10) {
+        diagnostico = 'En línea con el tiempo transcurrido';        colorDiag = '#16a34a'; iconoDiag = '🟢';
+    } else if (delta >= -20) {
+        diagnostico = 'Subejecutado para el avance temporal';       colorDiag = '#b45309'; iconoDiag = '🟡';
+    } else {
+        diagnostico = 'Muy por debajo — revisar ejecución';         colorDiag = '#7c3aed'; iconoDiag = '🔵';
+    }
+
+    // Proyección de cierre
+    let proyeccionTexto, proyeccionColor, proyeccionIcono;
+    if (pctProyeccion === null) {
+        proyeccionTexto = 'Sin proyección disponible'; proyeccionColor = '#94a3b8'; proyeccionIcono = '—';
+    } else if (pctProyeccion > 110) {
+        proyeccionTexto = `Sobreejecutará ~${pctProyeccion.toFixed(0)}%`; proyeccionColor = '#dc2626'; proyeccionIcono = '⚠️';
+    } else if (pctProyeccion > 95) {
+        proyeccionTexto = `Cierre equilibrado ~${pctProyeccion.toFixed(0)}%`; proyeccionColor = '#16a34a'; proyeccionIcono = '✅';
+    } else if (pctProyeccion > 70) {
+        proyeccionTexto = `Subejecución moderada ~${pctProyeccion.toFixed(0)}%`; proyeccionColor = '#b45309'; proyeccionIcono = '⚠️';
+    } else {
+        proyeccionTexto = `Subejecución grave ~${pctProyeccion.toFixed(0)}%`; proyeccionColor = '#7c3aed'; proyeccionIcono = '⚠️';
+    }
+
+    return {
+        diasTranscurridos, pctFinanciero, pctTiempo,
+        ritmoDiarioReal, ritmoDiarioEsperado, velocidad,
+        pctProyeccion, delta,
+        diagnostico, colorDiag, iconoDiag,
+        proyeccionTexto, proyeccionColor, proyeccionIcono,
+    };
+}
+
+// ── Radiografía de salud — componente ────────────────────────────────────────
+function RadiografiaContrato({ r }) {
+    const {
+        diasTranscurridos, pctFinanciero, pctTiempo,
+        ritmoDiarioReal, ritmoDiarioEsperado, velocidad,
+        pctProyeccion, delta,
+        diagnostico, colorDiag, iconoDiag,
+        proyeccionTexto, proyeccionColor, proyeccionIcono,
+    } = calcularRadiografia(r);
+
+    const colorBarraFinan = pctFinanciero >= 90 ? '#dc2626' : pctFinanciero >= 75 ? '#f59e0b' : '#7c3aed';
+    const barraProyWidth  = pctProyeccion != null ? Math.min(pctProyeccion, 100) : 0;
+    const textoProyDentro = barraProyWidth >= 25;
+
+    return (
+        <div style={{
+            background: 'linear-gradient(135deg, #f5f3ff 0%, #faf5ff 100%)',
+            border: '1px solid #ddd6fe', borderRadius: 10,
+            padding: '14px 16px', marginBottom: 14,
+        }}>
+            {/* Encabezado con badge de diagnóstico */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#4c1d95' }}>📊 Radiografía de Salud del Contrato</span>
+                <span style={{
+                    background: colorDiag + '18', color: colorDiag,
+                    border: `1px solid ${colorDiag}40`,
+                    borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 600,
+                }}>
+                    {iconoDiag} {diagnostico}
+                </span>
+                {delta !== null && (
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                        Δ {delta > 0 ? '+' : ''}{delta.toFixed(1)}% respecto al tiempo
+                    </span>
+                )}
+            </div>
+
+            {/* 3 zonas */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+
+                {/* ── ZONA 1: Barras comparadas ─────────────────────────── */}
+                <div style={{ background: '#fff', borderRadius: 8, padding: '10px 12px', border: '1px solid #ede9fe' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#6d28d9', marginBottom: 10 }}>Comparación temporal</div>
+
+                    {/* Barra tiempo */}
+                    <div style={{ marginBottom: 10 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 3 }}>
+                            <span>⏱ Tiempo transcurrido</span>
+                            <span style={{ fontWeight: 600 }}>{pctTiempo !== null ? `${pctTiempo.toFixed(1)}%` : 'N/D'}</span>
+                        </div>
+                        <div style={{ background: '#ddd6fe', borderRadius: 4, height: 10 }}>
+                            {pctTiempo !== null && (
+                                <div style={{ width: `${Math.min(pctTiempo, 100)}%`, height: '100%', borderRadius: 4, background: 'linear-gradient(90deg,#6d28d9,#a78bfa)', transition: 'width .4s' }} />
+                            )}
+                        </div>
+                        <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>
+                            {pctTiempo !== null ? `${diasTranscurridos} días de ${r.dias_vigencia}` : 'Datos de fecha no disponibles'}
+                        </div>
+                    </div>
+
+                    {/* Barra financiero */}
+                    <div style={{ marginBottom: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 3 }}>
+                            <span>💰 Gasto ejecutado</span>
+                            <span style={{ fontWeight: 600, color: colorBarraFinan }}>{pctFinanciero.toFixed(1)}%</span>
+                        </div>
+                        <div style={{ background: '#e9d5ff', borderRadius: 4, height: 10 }}>
+                            <div style={{ width: `${Math.min(pctFinanciero, 100)}%`, height: '100%', borderRadius: 4, background: `linear-gradient(90deg,${colorBarraFinan},${colorBarraFinan}bb)`, transition: 'width .4s' }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>
+                            {fmt(r.monto_ejecutado)} de {fmt(r.monto_contrato)}
+                        </div>
+                    </div>
+
+                    {/* Delta badge */}
+                    {delta !== null && r.monto_ejecutado > 0 && (
+                        <div style={{ padding: '5px 8px', background: colorDiag + '12', borderRadius: 6, border: `1px solid ${colorDiag}28`, marginTop: 4 }}>
+                            <span style={{ fontSize: 11, color: colorDiag, fontWeight: 600 }}>
+                                {delta > 0 ? '▲' : delta < 0 ? '▼' : '●'} {delta > 0 ? '+' : ''}{delta.toFixed(1)}%
+                                <span style={{ fontWeight: 400, marginLeft: 4 }}>
+                                    {delta > 0 ? 'adelantado' : delta < 0 ? 'atrasado' : 'exacto'} respecto al tiempo
+                                </span>
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── ZONA 2: Ritmo de gasto ────────────────────────────── */}
+                <div style={{ background: '#fff', borderRadius: 8, padding: '10px 12px', border: '1px solid #ede9fe' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#6d28d9', marginBottom: 10 }}>Ritmo de gasto</div>
+
+                    {ritmoDiarioReal != null ? (
+                        <>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                                <div style={{ background: '#faf5ff', borderRadius: 6, padding: '7px 9px' }}>
+                                    <div style={{ fontSize: 10, color: '#94a3b8' }}>Real (diario)</div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{fmtB(ritmoDiarioReal)}</div>
+                                </div>
+                                <div style={{ background: '#f8fafc', borderRadius: 6, padding: '7px 9px' }}>
+                                    <div style={{ fontSize: 10, color: '#94a3b8' }}>Esperado (diario)</div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>{fmtB(ritmoDiarioEsperado)}</div>
+                                </div>
+                            </div>
+
+                            {/* Velocidad relativa */}
+                            {velocidad != null && (
+                                <div style={{ padding: '6px 9px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', marginBottom: 8 }}>
+                                    <div style={{ fontSize: 10, color: '#64748b', marginBottom: 2 }}>Velocidad relativa</div>
+                                    <div style={{ background: '#e2e8f0', borderRadius: 4, height: 8, marginBottom: 3 }}>
+                                        <div style={{
+                                            width: `${Math.min(velocidad, 150) / 150 * 100}%`, height: '100%', borderRadius: 4,
+                                            background: velocidad > 110 ? '#dc2626' : velocidad < 80 ? '#b45309' : '#16a34a',
+                                            transition: 'width .4s',
+                                        }} />
+                                    </div>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: velocidad > 110 ? '#dc2626' : velocidad < 80 ? '#b45309' : '#16a34a' }}>
+                                        {velocidad.toFixed(0)}% del ritmo esperado
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Agotamiento */}
+                            {r.meses_hasta_agotamiento != null && (
+                                <div style={{ padding: '5px 9px', background: (ALERTA_CFG[r.alerta]?.color || '#94a3b8') + '12', borderRadius: 6 }}>
+                                    <div style={{ fontSize: 10, color: '#64748b' }}>Agotamiento presupuesto</div>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: ALERTA_CFG[r.alerta]?.color || '#94a3b8' }}>
+                                        {ALERTA_CFG[r.alerta]?.label} — en {r.meses_hasta_agotamiento}m
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div style={{ color: '#94a3b8', fontSize: 11, lineHeight: 1.5 }}>
+                            {diasTranscurridos === 0
+                                ? '⏳ Contrato reciente sin días ejecutados — el ritmo estará disponible pronto'
+                                : '— Sin datos de ritmo disponibles'}
+                        </div>
+                    )}
+                </div>
+
+                {/* ── ZONA 3: Proyección de cierre ─────────────────────── */}
+                <div style={{ background: '#fff', borderRadius: 8, padding: '10px 12px', border: '1px solid #ede9fe' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#6d28d9', marginBottom: 10 }}>Proyección de cierre</div>
+
+                    {pctProyeccion !== null ? (
+                        <>
+                            <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 6 }}>
+                                Al ritmo actual, al cierre del contrato se habrá ejecutado:
+                            </div>
+
+                            {/* Barra de proyección */}
+                            <div style={{ background: '#e9d5ff', borderRadius: 6, height: 20, position: 'relative', marginBottom: 4 }}>
+                                <div style={{
+                                    width: `${barraProyWidth}%`, height: '100%', borderRadius: 6,
+                                    background: `linear-gradient(90deg,${proyeccionColor},${proyeccionColor}bb)`,
+                                    transition: 'width .4s',
+                                }} />
+                                {textoProyDentro ? (
+                                    <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', fontSize: 10, fontWeight: 700, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.4)', whiteSpace: 'nowrap' }}>
+                                        {pctProyeccion.toFixed(0)}% del contrato
+                                    </span>
+                                ) : (
+                                    <span style={{ position: 'absolute', left: `calc(${barraProyWidth}% + 6px)`, top: '50%', transform: 'translateY(-50%)', fontSize: 10, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap' }}>
+                                        {pctProyeccion.toFixed(0)}%
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Badge resultado */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                                <span style={{ fontSize: 11 }}>{proyeccionIcono}</span>
+                                <span style={{ fontSize: 11, color: proyeccionColor, fontWeight: 600 }}>{proyeccionTexto}</span>
+                            </div>
+
+                            {/* Monto restante */}
+                            {r.monto_por_ejecutar != null && (
+                                <div style={{ padding: '5px 9px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                                    <div style={{ fontSize: 10, color: '#64748b' }}>Sin ejecutar hoy</div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{fmt(r.monto_por_ejecutar)}</div>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div style={{ color: '#94a3b8', fontSize: 11, lineHeight: 1.5 }}>
+                            {r.monto_por_ejecutar == null
+                                ? '— Monto por ejecutar no disponible (contrato especial)'
+                                : '— Sin días ejecutados para proyectar'}
+                        </div>
+                    )}
+                </div>
+
+            </div>
+        </div>
+    );
+}
+
+// ── FilaExpandida ─────────────────────────────────────────────────────────────
 function FilaExpandida({ idLic, contratoData }) {
     const [detalle, setDetalle] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -85,22 +343,22 @@ function FilaExpandida({ idLic, contratoData }) {
             .finally(() => setLoading(false));
     }, [idLic]);
 
-    const mc = contratoData.monto_contrato || 0;
-    const me = contratoData.monto_ejecutado || 0;
+    const mc  = contratoData.monto_contrato  || 0;
+    const me  = contratoData.monto_ejecutado || 0;
     const mpe = contratoData.monto_por_ejecutar;
     const moOC = contratoData.suma_bruto_oc;
-    const pctEjec = mc > 0 ? Math.min((me / mc) * 100, 100) : 0;
 
     return (
         <tr>
             <td colSpan={10} style={{ padding: 0, background: '#faf5ff' }}>
                 <div style={{ padding: '16px 20px', borderTop: '1px solid #c4b5fd', borderBottom: '1px solid #e5e7eb' }}>
+                    {/* KPIs mini */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: 10, marginBottom: 14 }}>
                         {[
-                            { label: 'Monto Contrato',       valor: fmt(mc),                                    color: '#7c3aed' },
-                            { label: 'Monto Ejecutado',      valor: fmt(me),                                    color: '#0ea5e9' },
-                            { label: 'Por Ejecutar',         valor: mpe != null ? fmt(mpe) : 'N/D',             color: '#f59e0b' },
-                            { label: 'Monto OC (sistema)',   valor: moOC != null ? fmt(moOC) : '—',             color: '#16a34a' },
+                            { label: 'Monto Contrato',     valor: fmt(mc),                          color: '#7c3aed' },
+                            { label: 'Monto Ejecutado',    valor: fmt(me),                          color: '#0ea5e9' },
+                            { label: 'Por Ejecutar',       valor: mpe != null ? fmt(mpe) : 'N/D',   color: '#f59e0b' },
+                            { label: 'Monto OC (sistema)', valor: moOC != null ? fmt(moOC) : '—',   color: '#16a34a' },
                         ].map(kpi => (
                             <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 13px', borderTop: `3px solid ${kpi.color}` }}>
                                 <div style={{ fontSize: 10, color: '#6b7280' }}>{kpi.label}</div>
@@ -109,23 +367,8 @@ function FilaExpandida({ idLic, contratoData }) {
                         ))}
                     </div>
 
-                    <div style={{ marginBottom: 14 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }}>
-                            Avance financiero — {pctEjec.toFixed(1)}%
-                        </div>
-                        <div style={{ background: '#e9d5ff', borderRadius: 6, height: 14, position: 'relative' }}>
-                            <div style={{
-                                width: `${pctEjec}%`, height: '100%', borderRadius: 6,
-                                background: pctEjec >= 90 ? '#dc2626' : pctEjec >= 75 ? '#f59e0b' : '#7c3aed',
-                                transition: 'width 0.4s',
-                            }} />
-                        </div>
-                        {contratoData.meses_hasta_agotamiento != null && (
-                            <div style={{ marginTop: 5, fontSize: 11, color: ALERTA_CFG[contratoData.alerta]?.color }}>
-                                {ALERTA_CFG[contratoData.alerta]?.label} — Proyección agotamiento: {contratoData.meses_hasta_agotamiento}m
-                            </div>
-                        )}
-                    </div>
+                    {/* Radiografía de salud */}
+                    <RadiografiaContrato r={contratoData} />
 
                     {!idLic ? (
                         <div style={{ color: '#9ca3af', fontSize: 12 }}>Sin código de licitación — no se pueden buscar OC.</div>
