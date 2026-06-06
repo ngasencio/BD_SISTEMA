@@ -164,6 +164,45 @@ export function GestionContratosPage() {
                 </div>
             </div>
 
+            {/* ── Banner filtros activos ── */}
+            {filtrosActivos && (
+                <div style={{
+                    background: '#fef9c3', border: '1px solid #fcd34d', borderRadius: 8,
+                    padding: '10px 16px', marginBottom: 12,
+                    display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13,
+                }}>
+                    <span style={{ fontSize: 16 }}>🔔</span>
+                    <span style={{ color: '#92400e', fontWeight: 600 }}>Filtros activos:</span>
+                    {filtros.estado_contrato && (
+                        <span style={{ background: '#fff', border: '1px solid #fcd34d', borderRadius: 20, padding: '2px 10px', fontSize: 12, color: '#92400e' }}>
+                            Estado: <strong>{filtros.estado_contrato}</strong>
+                        </span>
+                    )}
+                    {filtros.categoria_contrato && (
+                        <span style={{ background: '#fff', border: '1px solid #fcd34d', borderRadius: 20, padding: '2px 10px', fontSize: 12, color: '#92400e' }}>
+                            Categoría: <strong>{filtros.categoria_contrato}</strong>
+                        </span>
+                    )}
+                    {filtros.tipo_contrato && (
+                        <span style={{ background: '#fff', border: '1px solid #fcd34d', borderRadius: 20, padding: '2px 10px', fontSize: 12, color: '#92400e' }}>
+                            Tipo: <strong>{filtros.tipo_contrato}</strong>
+                        </span>
+                    )}
+                    {filtros.unidad_requirente && (
+                        <span style={{ background: '#fff', border: '1px solid #fcd34d', borderRadius: 20, padding: '2px 10px', fontSize: 12, color: '#92400e' }}>
+                            Unidad: <em>"{filtros.unidad_requirente}"</em>
+                        </span>
+                    )}
+                    <div style={{ flex: 1 }} />
+                    <button
+                        onClick={() => setFiltros(FILTROS_VACIO)}
+                        style={{ background: '#fcd34d', border: 'none', borderRadius: 6, padding: '4px 12px', fontSize: 12, color: '#78350f', cursor: 'pointer', fontWeight: 700 }}
+                    >
+                        ✕ Limpiar filtros
+                    </button>
+                </div>
+            )}
+
             {/* ── Tabs ── */}
             <div style={{ display: 'flex', gap: 2, marginBottom: 20, borderBottom: '2px solid #e5e7eb', flexWrap: 'wrap' }}>
                 {TABS.map(t => (

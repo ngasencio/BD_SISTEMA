@@ -22,10 +22,12 @@ function InfoTooltip({ text }) {
                     position: 'absolute', bottom: '130%', left: '50%',
                     transform: 'translateX(-50%)',
                     background: '#1e293b', color: '#f8fafc',
-                    fontSize: 11, padding: '7px 11px', borderRadius: 7,
-                    whiteSpace: 'normal', maxWidth: 240, textAlign: 'center',
-                    zIndex: 200, lineHeight: 1.6,
-                    boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+                    fontSize: 11.5, padding: '9px 14px', borderRadius: 8,
+                    whiteSpace: 'pre-wrap',
+                    minWidth: 220, maxWidth: 320,
+                    width: 'max-content',
+                    textAlign: 'left', zIndex: 200, lineHeight: 1.7,
+                    boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
                     pointerEvents: 'none',
                 }}>
                     {text}
@@ -230,7 +232,7 @@ export function TabEvaluaciones() {
                         </span>
                         <InfoTooltip text={`Calculado como: (contratos evaluados / total terminados) × 100.\nUn contrato se considera evaluado si tiene una nota numérica en el campo "evaluación" de Mercado Público.`} />
                     </div>
-                    <div style={{ background: '#e2e8f0', borderRadius: 8, height: 22, position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ background: '#e2e8f0', borderRadius: 8, height: 22, position: 'relative' }}>
                         <div style={{
                             width: `${pctEvaluado}%`,
                             background: pctEvaluado < 20
@@ -239,15 +241,31 @@ export function TabEvaluaciones() {
                                     ? 'linear-gradient(90deg,#d97706,#f59e0b)'
                                     : 'linear-gradient(90deg,#16a34a,#4ade80)',
                             height: '100%', borderRadius: 8, transition: 'width 0.6s ease',
+                            minWidth: pctEvaluado > 0 ? 4 : 0,
                         }} />
-                        <span style={{
-                            position: 'absolute', left: '50%', top: '50%',
-                            transform: 'translate(-50%,-50%)',
-                            fontSize: 11, fontWeight: 700, color: '#fff',
-                            textShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                        }}>
-                            {pctEvaluado.toFixed(1)}% evaluado
-                        </span>
+                        {/* Texto: dentro si hay espacio, fuera (derecha del relleno) si es muy pequeño */}
+                        {pctEvaluado >= 15 ? (
+                            <span style={{
+                                position: 'absolute', left: '50%', top: '50%',
+                                transform: 'translate(-50%,-50%)',
+                                fontSize: 11, fontWeight: 700,
+                                color: pctEvaluado < 20 ? '#fff' : pctEvaluado < 60 ? '#fff' : '#fff',
+                                textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                                whiteSpace: 'nowrap',
+                            }}>
+                                {pctEvaluado.toFixed(1)}% evaluado
+                            </span>
+                        ) : (
+                            <span style={{
+                                position: 'absolute',
+                                left: `calc(${pctEvaluado}% + 8px)`, top: '50%',
+                                transform: 'translateY(-50%)',
+                                fontSize: 11, fontWeight: 700, color: '#374151',
+                                whiteSpace: 'nowrap',
+                            }}>
+                                {pctEvaluado.toFixed(1)}% evaluado
+                            </span>
+                        )}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: '#6b7280' }}>
                         <span>✅ Evaluados: <strong>{fmtN(kpis.evaluados)}</strong></span>
