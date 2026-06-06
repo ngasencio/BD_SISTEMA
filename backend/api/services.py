@@ -1472,7 +1472,7 @@ def calcular_contratos_evaluaciones():
     nota_promedio = round(sum(notas) / len(notas), 2) if notas else None
     pct_pendiente = round(kpi_pend / kpi_term * 100, 1) if kpi_term > 0 else 0.0
 
-    detalle_pend.sort(key=lambda x: x['monto'], reverse=True)
+    detalle_pend.sort(key=lambda x: x['monto_contrato'], reverse=True)
 
     return {
         'kpis': {
@@ -1704,7 +1704,7 @@ def calcular_contratos_plazos(filtros=None):
                 'Nombre_Proyecto': r['Nombre_Proyecto'] or '',
             })
 
-    kpis = {'total_activos': 0, 'criticos': 0, 'urgentes': 0, 'atencion': 0, 'ok': 0}
+    kpis = {'total_activos': 0, 'critico': 0, 'urgente': 0, 'atencion': 0, 'ok': 0}
     resultado = []
 
     for c in activos:
