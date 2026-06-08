@@ -104,6 +104,7 @@ function KpiCard({ label, value, sub, color, tooltip }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function TabResumenVisual({ activos, kpis }) {
     const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
+    const [mesSeleccionado, setMesSeleccionado] = useState(null);
 
     const kpisExtra = useMemo(() => {
         const en30d  = activos.filter(r => r.dias_restantes >= 0 && r.dias_restantes <= 30).length;
@@ -126,15 +127,20 @@ function TabResumenVisual({ activos, kpis }) {
             const { fin } = derivarFechas(r);
             if (!fin) return;
             const key = `${fin.getFullYear()}-${fin.getMonth()}`;
-            if (!mapa[key]) mapa[key] = { anio: fin.getFullYear(), mes: fin.getMonth(), count: 0, monto: 0, alerta: 'ok', contratos: [] };
+            if (!mapa[key]) mapa[key] = { key, anio: fin.getFullYear(), mes: fin.getMonth(), count: 0, monto: 0, alerta: 'ok', contratos: [] };
             mapa[key].count += 1;
             mapa[key].monto += r.monto_contrato || 0;
             const orden = ['critico','urgente','atencion','ok'];
             if (orden.indexOf(r.alerta_tiempo) < orden.indexOf(mapa[key].alerta)) mapa[key].alerta = r.alerta_tiempo;
-            mapa[key].contratos.push(r.nombre_contrato);
+            mapa[key].contratos.push(r);
         });
         return Object.values(mapa).sort((a,b) => a.anio !== b.anio ? a.anio - b.anio : a.mes - b.mes);
     }, [activos]);
+
+    const burbujaSeleccionada = useMemo(
+        () => burbujas.find(b => b.key === mesSeleccionado) || null,
+        [burbujas, mesSeleccionado]
+    );
 
     // Línea de tiempo: 24 meses desde hoy
     const meses = useMemo(() => {
@@ -223,10 +229,13 @@ function TabResumenVisual({ activos, kpis }) {
                                 const burbuja = burbujas.find(b => b.anio === m.anio && b.mes === m.mes);
                                 const cfg = burbuja ? ALERTA_CFG[burbuja.alerta] : null;
                                 const size = burbuja ? Math.min(16 + burbuja.count * 6, 56) : 0;
+                                const seleccionada = burbuja && burbuja.key === mesSeleccionado;
                                 return (
                                     <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 60 }}>
                                         {burbuja ? (
-                                            <div title={`${burbuja.count} contratos\n${burbuja.contratos.slice(0,3).join('\n')}${burbuja.contratos.length > 3 ? `\n+${burbuja.contratos.length-3} más` : ''}`}
+                                            <div
+                                                title={`${burbuja.count} contratos — clic para ver detalle\n${burbuja.contratos.slice(0,3).map(c => c.nombre_contrato).join('\n')}${burbuja.contratos.length > 3 ? `\n+${burbuja.contratos.length-3} más` : ''}`}
+                                                onClick={() => setMesSeleccionado(seleccionada ? null : burbuja.key)}
                                                 style={{
                                                     width: size, height: size,
                                                     borderRadius: '50%',
@@ -234,9 +243,10 @@ function TabResumenVisual({ activos, kpis }) {
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     fontSize: size >= 28 ? 11 : 9,
                                                     fontWeight: 700, color: '#fff',
-                                                    boxShadow: `0 2px 8px ${cfg.color}50`,
-                                                    cursor: 'default', userSelect: 'none',
-                                                    transition: 'all .3s',
+                                                    boxShadow: seleccionada ? `0 0 0 3px ${cfg.color}55, 0 2px 8px ${cfg.color}50` : `0 2px 8px ${cfg.color}50`,
+                                                    cursor: 'pointer', userSelect: 'none',
+                                                    transition: 'all .2s',
+                                                    transform: seleccionada ? 'scale(1.12)' : 'scale(1)',
                                                 }}>
                                                 {burbuja.count}
                                             </div>
@@ -263,6 +273,65 @@ function TabResumenVisual({ activos, kpis }) {
                         )}
                     </div>
                 </div>
+
+                {/* Tabla de detalle — contratos del mes seleccionado */}
+                {burbujaSeleccionada && (
+                    <div style={{ marginTop: 16, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                                Contratos que vencen en {MES_LABEL[burbujaSeleccionada.mes]} {burbujaSeleccionada.anio}
+                                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>
+                                    {fmtN(burbujaSeleccionada.count)} contratos · {fmtB(burbujaSeleccionada.monto)} en total
+                                </span>
+                            </div>
+                            <button onClick={() => setMesSeleccionado(null)}
+                                style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 6, padding: '3px 10px', fontSize: 11, color: '#64748b', cursor: 'pointer' }}>
+                                ✕ Cerrar
+                            </button>
+                        </div>
+                        <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                <thead>
+                                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                                        <th style={{ textAlign: 'left',  padding: '8px 12px', color: '#475569', fontWeight: 600 }}>Contrato</th>
+                                        <th style={{ textAlign: 'left',  padding: '8px 12px', color: '#475569', fontWeight: 600 }}>Unidad requirente</th>
+                                        <th style={{ textAlign: 'right', padding: '8px 12px', color: '#475569', fontWeight: 600 }}>Días restantes</th>
+                                        <th style={{ textAlign: 'right', padding: '8px 12px', color: '#475569', fontWeight: 600 }}>Monto contrato</th>
+                                        <th style={{ textAlign: 'right', padding: '8px 12px', color: '#475569', fontWeight: 600 }}>% tiempo ejecutado</th>
+                                        <th style={{ textAlign: 'left',  padding: '8px 12px', color: '#475569', fontWeight: 600 }}>Alerta</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {burbujaSeleccionada.contratos
+                                        .slice()
+                                        .sort((a, b) => (a.dias_restantes ?? 0) - (b.dias_restantes ?? 0))
+                                        .map((c, i) => {
+                                            const cfg = ALERTA_CFG[c.alerta_tiempo] || ALERTA_CFG.ok;
+                                            return (
+                                                <tr key={c.numero_contrato} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                                                    <td style={{ padding: '8px 12px' }}>
+                                                        <div style={{ fontWeight: 600, color: '#374151' }}>{c.nombre_contrato}</div>
+                                                        <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>{c.numero_contrato}</div>
+                                                    </td>
+                                                    <td style={{ padding: '8px 12px', color: '#64748b' }}>{c.unidad_requirente || '—'}</td>
+                                                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: cfg.color }}>
+                                                        {c.dias_restantes > 0 ? `${fmtN(c.dias_restantes)}d` : 'Vencido'}
+                                                    </td>
+                                                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, color: '#374151' }}>{fmtB(c.monto_contrato)}</td>
+                                                    <td style={{ padding: '8px 12px', textAlign: 'right', color: '#64748b' }}>{c.pct_ejecutado_tiempo != null ? `${c.pct_ejecutado_tiempo}%` : '—'}</td>
+                                                    <td style={{ padding: '8px 12px' }}>
+                                                        <span style={{ background: cfg.bg, color: cfg.color, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4 }}>
+                                                            {cfg.label}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Unidad más crítica */}
@@ -536,7 +605,7 @@ function TabGantt({ activos }) {
                     </div>
 
                     {/* Radiografía reutilizada */}
-                    <RadiografiaContrato r={panelContrato} />
+                    <RadiografiaContrato r={panelContrato} compact />
 
                     {/* Proyectos PAC */}
                     {panelContrato.proyectos?.length > 0 && (

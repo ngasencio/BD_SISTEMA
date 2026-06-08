@@ -95,7 +95,7 @@ function InfoTooltip({ text }) {
     );
 }
 
-export function RadiografiaContrato({ r }) {
+export function RadiografiaContrato({ r, compact = false }) {
     const {
         diasTranscurridos, pctFinanciero, pctTiempo,
         ritmoDiarioReal, ritmoDiarioEsperado, velocidad,
@@ -130,7 +130,7 @@ export function RadiografiaContrato({ r }) {
                 )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : 'repeat(3,1fr)', gap: 12 }}>
 
                 {/* Zona 1 */}
                 <div style={{ background: '#fff', borderRadius: 8, padding: '10px 12px', border: '1px solid #ede9fe' }}>
