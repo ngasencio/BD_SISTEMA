@@ -936,6 +936,30 @@ class FormularioFSCDerivado(models.Model):
         return f"FSC derivado {self.folio}/{self.anho} — {self.comprador}"
 
 
+class FormularioFSCEstadoLog(models.Model):
+    """Historial de bandejas de visación por las que pasa un FSC.
+
+    El Panel SSO solo expone el estado *actual* (campo `estado` en FormularioFSC),
+    no su historial de cambios. Esta tabla la construye el ETL desde 2026-06-08:
+    en cada sincronización compara el estado vigente contra el último registrado
+    aquí y, si cambió (o es la primera vez que se ve el formulario), agrega una
+    fila nueva con la fecha de detección. Así, con el tiempo, se puede calcular
+    cuántos días estuvo un FSC en cada bandeja — algo imposible de reconstruir
+    retroactivamente.
+    """
+    formulario    = models.ForeignKey(FormularioFSC, related_name='historial_estados', on_delete=models.CASCADE)
+    estado        = models.CharField(max_length=20, db_index=True)
+    fecha_registro = models.DateField(db_index=True)
+
+    class Meta:
+        db_table = 'data_formularios_fsc_estado_log'
+        ordering = ['formulario_id', 'fecha_registro']
+        indexes = [models.Index(fields=['formulario', 'fecha_registro'])]
+
+    def __str__(self):
+        return f"FSC {self.formulario_id} → {self.estado} ({self.fecha_registro})"
+
+
 class FormularioFSCProducto(models.Model):
     """Líneas de producto del carro de compra FSC — reporte 'total_carro_fsc' del Panel SS Osorno."""
     folio                = models.IntegerField(db_index=True)

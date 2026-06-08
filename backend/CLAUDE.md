@@ -96,6 +96,7 @@ backend/
 | `FormularioFSC` | `data_formularios_fsc` | `id` | snake_case. Formularios Solicitud de Compra sincronizados desde Panel SSO (Selenium). `monto_estimado` es **BigIntegerField** — el origen lo trae como string con separador de miles ("672.000"), convertir con `.replace(".", "")`. **No tiene clave natural única** — `folio`/`folio+anho` se repiten (~33% colisión); el ETL usa `folio+anho+unidad_requirente+fecha_solicitud` para upsert. |
 | `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Superset de columnas de `FormularioFSC` + `comprador`/`estado_compra`/`fecha_derivado`. Misma regla de clave compuesta para upsert. |
 | `FormularioFSCProducto` | `data_formularios_fsc_productos` | `id` | snake_case. Líneas de producto del "carro" de cada FSC. `tipo_formulario` usa `db_column='t_form'`. Clave de upsert: `folio+anho+tipo_formulario+categoria+producto+descripcion`. |
+| `FormularioFSCEstadoLog` | `data_formularios_fsc_estado_log` | `id` | snake_case. Agregado 2026-06-08. Historial diferencial de bandejas de visación: FK→`FormularioFSC` (`related_name='historial_estados'`), `(estado, fecha_registro)`. Una fila nueva **solo** cuando `estado` difiere del último registrado para ese FSC — append-only, escrito por `_registrar_cambio_estado()` en `page_data_panel.py` tras cada upsert. Confiable solo desde `2026-06-08` (el origen no expone transiciones pasadas). |
 
 ---
 
@@ -173,9 +174,10 @@ GET    /api/contratos/pac/                     PAC linkage pivot by year (cache 
 
 # Formularios FSC (Panel Documental SS Osorno — sincronizado vía Selenium, NO Excel)
 GET    /api/formularios/stats/                 KPIs + distribuciones (cache 5min)
-GET    /api/formularios-fsc/                   ?anho=&unidad_requirente=&estado=&search=
-GET    /api/formularios-fsc-derivados/         ?anho=&estado_compra=&search=
-GET    /api/formularios-fsc-productos/         ?anho=&categoria=
+GET    /api/formularios/flujo/                 ?anho= Pipeline P→AC + rechazados + días en trámite/bandeja (cache 5min)
+GET    /api/formularios-fsc/                   ?anho=&unidad_requirente=&estado=&search=&ordering=
+GET    /api/formularios-fsc-derivados/         ?anho=&estado_compra=&search=&ordering=
+GET    /api/formularios-fsc-productos/         ?anho=&categoria=&tipo_formulario=
 POST   /api/formularios/actualizar/            {rut, dv, clave} → {task_id} (credenciales Panel SSO, no persistidas)
 GET    /api/formularios/actualizar-estado/<id>/
 POST   /api/formularios/actualizar-cancelar/<id>/
@@ -242,6 +244,8 @@ Funciones clave — nunca duplicar en views:
 | `calcular_contratos_plazos(filtros)` | Contratos — active contracts with alerta_tiempo levels |
 | `calcular_contratos_pac(filtros)` | Contratos — PAC linkage pivot (EnlacePAC) by year |
 | `calcular_formularios_stats(anho=None)` | Formularios FSC — KPIs (total, derivados, monto estimado, % derivados) + distribuciones por estado/unidad/estado_compra |
+| `calcular_formularios_flujo(anho=None)` | Formularios FSC — pipeline de bandejas P→AC + rechazados, con `dias_en_tramite`/`dias_en_estado_actual` por formulario (usa `FormularioFSCEstadoLog`). Alimenta el sub-tab "Flujo de Visación" |
+| `generar_id_formulario(folio, anho, tipo_formulario=None, formulario_texto=None)` | Formularios FSC — construye el ID corto `Fn-XXX-AA` (tipo+folio+año); usado por los 3 serializers FSC vía `SerializerMethodField` |
 
 ---
 

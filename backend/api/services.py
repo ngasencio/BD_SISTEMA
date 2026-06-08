@@ -1,14 +1,15 @@
+import re
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
-from django.db.models import Count, DecimalField, Q, Sum
+from django.db.models import Count, DecimalField, Max, Q, Sum
 from django.db.models.functions import Cast
 
 from .models import (
     DetalleOrdenCompra, GestionContrato, Licitacion, DetalleLicitacion,
     OrdenCompra, PlanerPAC,
     CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado,
-    FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
+    FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
@@ -2050,6 +2051,43 @@ def calcular_contratos_pac_detalle_oc(filtros=None):
 # Formularios FSC (Panel SS Osorno)
 # =============================================================================
 
+_RE_TIPO_FORMULARIO = re.compile(r'Nro\s*(\d+)', re.IGNORECASE)
+
+# Bandejas de visación en el orden en que recorre un FSC, desde que el
+# requirente lo crea (P) hasta que llega al comprador (AC). "R" (Rechazado)
+# queda fuera del pipeline — es una salida lateral, no una bandeja de tránsito.
+PIPELINE_ESTADOS_FSC = [
+    ('P',    'Pendiente Firmas'),
+    ('FR',   'Revisor Finanzas'),
+    ('FA',   'Autorizador Finanzas'),
+    ('ASDA', 'Autorizador Sub Director Administrativo'),
+    ('ADIR', 'Autorizador Director'),
+    ('AA',   'Autorizador Abastecimiento'),
+    ('DC',   'Derivación Compras'),
+    ('AC',   'A Comprador'),
+]
+
+
+def generar_id_formulario(folio, anho, tipo_formulario=None, formulario_texto=None):
+    """ID corto y legible para un FSC: "Fn-XXX-AA".
+
+    n = tipo de formulario (1-5, extraído de "Formulario Solicitud de Compra Nro N"
+        o pasado directo cuando ya se conoce, p.ej. FormularioFSCProducto.tipo_formulario)
+    XXX = folio relleno a 3 dígitos
+    AA  = año en 2 dígitos
+
+    Ej.: folio 1, "...Nro 1", 2026 → "F1-001-26". Mismo formato en FSC, Derivados
+    y Productos para que se puedan cruzar de un vistazo (y a futuro con sus OC).
+    """
+    n = tipo_formulario
+    if n is None and formulario_texto:
+        m = _RE_TIPO_FORMULARIO.search(formulario_texto)
+        n = int(m.group(1)) if m else None
+    if n is None or folio is None or anho is None:
+        return None
+    return f"F{n}-{folio:03d}-{anho % 100:02d}"
+
+
 def calcular_formularios_stats(anho=None):
     """KPIs agregados de Formularios FSC para el tab 'Formularios' de Abastecimiento."""
     fsc_qs = FormularioFSC.objects.all()
@@ -2100,4 +2138,85 @@ def calcular_formularios_stats(anho=None):
         ],
         'por_estado_compra': [{'estado': r['estado_compra'], 'total': r['total']} for r in por_estado_compra],
         'anios_disponibles': anios_disponibles,
+    }
+
+
+def calcular_formularios_flujo(anho=None):
+    """Pipeline de visación de FSC 'en camino' (P → AC) para el sub-tab de Flujo.
+
+    Para cada formulario informa:
+      - dias_en_tramite: días desde `fecha_solicitud` hasta hoy. Es la única medida
+        retroactiva posible — el Panel SSO no expone historial de cambios de estado.
+      - dias_en_estado_actual: días desde que `FormularioFSCEstadoLog` detectó el
+        estado vigente. Solo disponible para FSC cuyo cambio fue capturado desde
+        2026-06-08 (cuando se empezó a registrar el historial); None si aún no hay dato.
+    """
+    qs = FormularioFSC.objects.all()
+    if anho:
+        qs = qs.filter(anho=anho)
+
+    hoy = date.today()
+    codigos_pipeline = [c for c, _ in PIPELINE_ESTADOS_FSC]
+
+    # Última fecha en que se detectó un cambio de estado por FSC — al solo registrarse
+    # cambios, esa fecha corresponde al estado vigente (ver _registrar_cambio_estado en el ETL)
+    ultima_fecha_por_fsc = dict(
+        FormularioFSCEstadoLog.objects
+        .filter(formulario__in=qs)
+        .values('formulario_id')
+        .annotate(ultima_fecha=Max('fecha_registro'))
+        .values_list('formulario_id', 'ultima_fecha')
+    )
+
+    def _serializar(fsc):
+        dias_tramite = None
+        if fsc.fecha_solicitud:
+            try:
+                fecha = datetime.strptime(fsc.fecha_solicitud, '%Y-%m-%d').date()
+                dias_tramite = (hoy - fecha).days
+            except (ValueError, TypeError):
+                pass
+        ultima_fecha = ultima_fecha_por_fsc.get(fsc.id)
+        return {
+            'id': fsc.id,
+            'id_formulario': generar_id_formulario(fsc.folio, fsc.anho, formulario_texto=fsc.formulario),
+            'folio': fsc.folio,
+            'anho': fsc.anho,
+            'unidad_requirente': fsc.unidad_requirente,
+            'usuario_requirente': fsc.usuario_requirente,
+            'fecha_solicitud': fsc.fecha_solicitud,
+            'monto_estimado': float(fsc.monto_estimado or 0),
+            'estado': fsc.estado,
+            'dias_en_tramite': dias_tramite,
+            'dias_en_estado_actual': (hoy - ultima_fecha).days if ultima_fecha else None,
+        }
+
+    agrupado = defaultdict(list)
+    for fsc in qs.filter(estado__in=codigos_pipeline + ['R']).order_by('-fecha_solicitud'):
+        agrupado[fsc.estado].append(_serializar(fsc))
+
+    estados_pipeline = [
+        {
+            'codigo': codigo,
+            'nombre': nombre,
+            'cantidad': len(agrupado.get(codigo, [])),
+            'formularios': agrupado.get(codigo, []),
+        }
+        for codigo, nombre in PIPELINE_ESTADOS_FSC
+    ]
+    rechazados = agrupado.get('R', [])
+
+    dias_validos = [
+        f['dias_en_tramite']
+        for estado in estados_pipeline
+        for f in estado['formularios']
+        if f['dias_en_tramite'] is not None
+    ]
+
+    return {
+        'estados_pipeline': estados_pipeline,
+        'rechazados': {'cantidad': len(rechazados), 'formularios': rechazados},
+        'total_en_camino': sum(e['cantidad'] for e in estados_pipeline),
+        'promedio_dias_tramite': round(sum(dias_validos) / len(dias_validos), 1) if dias_validos else 0,
+        'historial_disponible_desde': '2026-06-08',
     }

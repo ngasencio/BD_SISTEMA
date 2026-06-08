@@ -5121,6 +5121,31 @@ select.boleta-input {
 /* Card subtitle */
 .card-subtitle { font-size: 12px; color: #9ca3af; margin: -8px 0 12px; }
 
+/* Flujo de Visación FSC — pipeline de bandejas en círculos */
+.flujo-pipeline { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 28px 16px 8px; }
+.flujo-nodo {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    background: none; border: none; cursor: pointer; padding: 6px 8px; border-radius: 14px;
+    transition: transform .15s ease, background .15s ease;
+}
+.flujo-nodo:hover { background: #f8fafc; transform: translateY(-2px); }
+.flujo-nodo.activo { background: #eff6ff; }
+.flujo-nodo-circulo {
+    width: 60px; height: 60px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; color: #fff;
+    background: var(--nodo-color, #94a3b8);
+    border: 3px solid rgba(255,255,255,0.7);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15), inset 0 0 0 2px var(--nodo-color, #94a3b8);
+}
+.flujo-nodo.activo .flujo-nodo-circulo {
+    box-shadow: 0 0 0 5px rgba(59,130,246,0.18), 0 4px 14px rgba(0,0,0,0.22), inset 0 0 0 2px var(--nodo-color, #94a3b8);
+}
+.flujo-nodo-label { font-size: 11px; font-weight: 700; color: #475569; letter-spacing: .5px; }
+.flujo-flecha { font-size: 18px; color: #cbd5e1; padding: 0 2px; }
+.flujo-flecha-rama { color: #fca5a5; font-size: 16px; }
+.flujo-detalle { margin-top: 16px; }
+
 /* Panel Res.188 */
 .res188-panel { border-left: 4px solid #1d4ed8; }
 .res188-body { display: flex; flex-direction: column; gap: 12px; }

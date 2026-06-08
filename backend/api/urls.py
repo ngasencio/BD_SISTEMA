@@ -29,7 +29,7 @@ from .views import (
     contratos_pac_detalle_oc_view,
     FormularioFSCViewSet, FormularioFSCDerivadoViewSet, FormularioFSCProductoViewSet,
     iniciar_actualizacion_formularios, estado_actualizacion_formularios,
-    cancelar_actualizacion_formularios, formularios_stats_view,
+    cancelar_actualizacion_formularios, formularios_stats_view, formularios_flujo_view,
 )
 
 router = DefaultRouter()
@@ -133,6 +133,7 @@ urlpatterns = [
 
     # Formularios FSC — ETL desde dashboard
     path('formularios/stats/', formularios_stats_view, name='formularios_stats'),
+    path('formularios/flujo/', formularios_flujo_view, name='formularios_flujo'),
     path('formularios/actualizar/', iniciar_actualizacion_formularios, name='iniciar_actualizacion_formularios'),
     path('formularios/actualizar-estado/<str:task_id>/', estado_actualizacion_formularios, name='estado_actualizacion_formularios'),
     path('formularios/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_formularios, name='cancelar_actualizacion_formularios'),

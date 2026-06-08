@@ -2502,14 +2502,32 @@ def formularios_stats_view(request):
     return Response(data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def formularios_flujo_view(request):
+    """Pipeline de bandejas de visación (P→AC) + rechazados, para el sub-tab 'Flujo de Visación'."""
+    from .services import calcular_formularios_flujo
+    anho = request.GET.get("anho", "").strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    cache_key = f"formularios_flujo_v1_{anho_int or 'todos'}"
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_formularios_flujo(anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
 class FormularioFSCViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = FormularioFSC.objects.all()
     serializer_class = FormularioFSCSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ["estado", "anho", "unidad_requirente"]
-    search_fields = ["formulario", "objetivo_compra", "usuario_requirente"]
-    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_solicitud"]
+    search_fields = [
+        "folio", "anho", "formulario", "objetivo_compra", "usuario_requirente",
+        "unidad_requirente", "encargado", "jefe", "correo", "requerimiento", "estado",
+    ]
+    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_solicitud", "unidad_requirente", "estado"]
 
 
 class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
@@ -2518,8 +2536,11 @@ class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ["estado_compra", "anho", "unidad_requirente", "comprador"]
-    search_fields = ["formulario", "objetivo_compra", "comprador"]
-    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_derivado"]
+    search_fields = [
+        "folio", "anho", "formulario", "objetivo_compra", "usuario_requirente",
+        "unidad_requirente", "comprador", "estado_compra", "encargado", "jefe", "correo",
+    ]
+    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_derivado", "unidad_requirente", "estado_compra"]
 
 
 class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):
@@ -2527,7 +2548,7 @@ class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = FormularioFSCProductoSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
-    filterset_fields = ["anho", "folio", "categoria"]
+    filterset_fields = ["anho", "folio", "categoria", "tipo_formulario"]
     search_fields = ["producto", "descripcion"]
     ordering_fields = ["folio", "anho", "monto", "cantidad"]
 

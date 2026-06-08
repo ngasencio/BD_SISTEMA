@@ -11,6 +11,7 @@ from .models import (
     RevisionOCCorregible, GestionContrato,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
 )
+from .services import generar_id_formulario
 
 ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
 
@@ -351,18 +352,33 @@ class GestionContratoSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 class FormularioFSCSerializer(serializers.ModelSerializer):
+    id_formulario = serializers.SerializerMethodField()
+
     class Meta:
         model = FormularioFSC
         fields = '__all__'
 
+    def get_id_formulario(self, obj):
+        return generar_id_formulario(obj.folio, obj.anho, formulario_texto=obj.formulario)
+
 
 class FormularioFSCDerivadoSerializer(serializers.ModelSerializer):
+    id_formulario = serializers.SerializerMethodField()
+
     class Meta:
         model = FormularioFSCDerivado
         fields = '__all__'
 
+    def get_id_formulario(self, obj):
+        return generar_id_formulario(obj.folio, obj.anho, formulario_texto=obj.formulario)
+
 
 class FormularioFSCProductoSerializer(serializers.ModelSerializer):
+    id_formulario = serializers.SerializerMethodField()
+
     class Meta:
         model = FormularioFSCProducto
         fields = '__all__'
+
+    def get_id_formulario(self, obj):
+        return generar_id_formulario(obj.folio, obj.anho, tipo_formulario=obj.tipo_formulario)

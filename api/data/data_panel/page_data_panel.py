@@ -198,7 +198,8 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
     import pandas as pd
     from django.core.exceptions import MultipleObjectsReturned
     from django.db import transaction, close_old_connections
-    from api.models import FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto
+    from datetime import date
+    from api.models import FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog
 
     def _avisar(log=None, paso_desc=None, progreso_pct=None):
         if progress_callback:
@@ -229,16 +230,37 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         return s if s not in ("nan", "None", "") else None
 
     def _upsert(modelo, lookup, defaults):
-        """update_or_create tolerante a colisiones de clave (raras, pero existen en el origen)."""
+        """update_or_create tolerante a colisiones de clave (raras, pero existen en el origen).
+
+        Devuelve (objeto, creado) — el objeto se necesita para registrar el
+        historial de bandejas de visación (ver _registrar_cambio_estado).
+        """
         try:
-            _, creado = modelo.objects.update_or_create(defaults=defaults, **lookup)
-            return creado
+            obj, creado = modelo.objects.update_or_create(defaults=defaults, **lookup)
+            return obj, creado
         except MultipleObjectsReturned:
             obj = modelo.objects.filter(**lookup).first()
             for campo, valor in defaults.items():
                 setattr(obj, campo, valor)
             obj.save(update_fields=list(defaults.keys()))
-            return False
+            return obj, False
+
+    hoy = date.today()
+
+    def _registrar_cambio_estado(fsc):
+        """Agrega una entrada al historial de bandejas SOLO si el estado cambió desde
+        la última vez que se vio este FSC (o si nunca se había registrado).
+
+        El Panel SSO no expone historial de cambios de estado — esta es la única forma
+        de empezar a construirlo: comparando snapshot actual vs. el último guardado.
+        No reconstruye el pasado, pero desde 2026-06-08 en adelante permite calcular
+        cuántos días pasó un FSC en cada bandeja de visación.
+        """
+        if not fsc.estado:
+            return
+        ultimo = fsc.historial_estados.order_by('-fecha_registro').first()
+        if ultimo is None or ultimo.estado != fsc.estado:
+            FormularioFSCEstadoLog.objects.create(formulario=fsc, estado=fsc.estado, fecha_registro=hoy)
 
     columnas_fsc = [
         "fecha_solicitud", "folio", "formulario", "anho", "unidad_requirente",
@@ -311,7 +333,8 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
             for i, (_, row) in enumerate(tabla.iterrows()):
                 campos = _campos_comunes(row)
                 lookup = _clave_fsc(campos)
-                creado = _upsert(FormularioFSC, lookup, campos)
+                fsc, creado = _upsert(FormularioFSC, lookup, campos)
+                _registrar_cambio_estado(fsc)
                 resumen["fsc"]["nuevos" if creado else "actualizados"] += 1
                 if (i + 1) % 300 == 0:
                     _avisar(log=f"FSC: {i + 1}/{len(tabla)} procesados...")
@@ -332,7 +355,7 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                     item_presupuestario=_to_str(row["item_presupuestario"]),
                     folio_requerimiento=_to_str(row["folio_requerimiento"]),
                 )
-                creado = _upsert(FormularioFSCDerivado, lookup, campos)
+                _, creado = _upsert(FormularioFSCDerivado, lookup, campos)
                 resumen["derivados"]["nuevos" if creado else "actualizados"] += 1
                 if (i + 1) % 300 == 0:
                     _avisar(log=f"Derivados: {i + 1}/{len(tabla)} procesados...")
@@ -357,7 +380,7 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                     cantidad=_to_int(row["cantidad"]),
                     item_presupuestario=_to_str(row["item_presupuestario"]),
                 )
-                creado = _upsert(FormularioFSCProducto, lookup, defaults)
+                _, creado = _upsert(FormularioFSCProducto, lookup, defaults)
                 resumen["carro"]["nuevos" if creado else "actualizados"] += 1
                 if (i + 1) % 500 == 0:
                     _avisar(log=f"Carro: {i + 1}/{len(tabla)} procesados...")
