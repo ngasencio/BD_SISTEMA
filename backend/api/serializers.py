@@ -9,6 +9,7 @@ from .models import (
     PlanerPAC, CompraAgilResumen, CompraAgilDocumento,
     CompraAgilProducto, CompraAgilProductoCotizado, CompraAgilProveedor,
     RevisionOCCorregible, GestionContrato,
+    FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
 )
 
 ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
@@ -342,4 +343,26 @@ class RevisionOCCorregibleSerializer(serializers.ModelSerializer):
 class GestionContratoSerializer(serializers.ModelSerializer):
     class Meta:
         model = GestionContrato
+        fields = '__all__'
+
+
+# =============================================================================
+# Formularios FSC (Panel SS Osorno)
+# =============================================================================
+
+class FormularioFSCSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FormularioFSC
+        fields = '__all__'
+
+
+class FormularioFSCDerivadoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FormularioFSCDerivado
+        fields = '__all__'
+
+
+class FormularioFSCProductoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FormularioFSCProducto
         fields = '__all__'

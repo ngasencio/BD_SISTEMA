@@ -26,6 +26,10 @@ from .views import (
     cancelar_actualizacion_contratos, contratos_stats_view,
     contratos_evaluaciones_view, contratos_financiero_view,
     contratos_oc_detalle_view, contratos_plazos_view, contratos_pac_view,
+    contratos_pac_detalle_oc_view,
+    FormularioFSCViewSet, FormularioFSCDerivadoViewSet, FormularioFSCProductoViewSet,
+    iniciar_actualizacion_formularios, estado_actualizacion_formularios,
+    cancelar_actualizacion_formularios, formularios_stats_view,
 )
 
 router = DefaultRouter()
@@ -52,6 +56,11 @@ router.register(r'revisiones-oc', RevisionOCCorregibleViewSet)
 
 # Módulo Gestión de Contratos
 router.register(r'contratos', GestionContratoViewSet, basename='contrato')
+
+# Módulo Formularios FSC (Panel SS Osorno)
+router.register(r'formularios-fsc', FormularioFSCViewSet, basename='formulariofsc')
+router.register(r'formularios-fsc-derivados', FormularioFSCDerivadoViewSet, basename='formulariofscderivado')
+router.register(r'formularios-fsc-productos', FormularioFSCProductoViewSet, basename='formulariofscproducto')
 
 urlpatterns = [
     # Autenticación JWT
@@ -120,6 +129,13 @@ urlpatterns = [
     path('contratos/oc-detalle/', contratos_oc_detalle_view, name='contratos_oc_detalle'),
     path('contratos/plazos/', contratos_plazos_view, name='contratos_plazos'),
     path('contratos/pac/', contratos_pac_view, name='contratos_pac'),
+    path('contratos/pac-detalle-oc/', contratos_pac_detalle_oc_view, name='contratos_pac_detalle_oc'),
+
+    # Formularios FSC — ETL desde dashboard
+    path('formularios/stats/', formularios_stats_view, name='formularios_stats'),
+    path('formularios/actualizar/', iniciar_actualizacion_formularios, name='iniciar_actualizacion_formularios'),
+    path('formularios/actualizar-estado/<str:task_id>/', estado_actualizacion_formularios, name='estado_actualizacion_formularios'),
+    path('formularios/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_formularios, name='cancelar_actualizacion_formularios'),
 
     # Router ViewSets
     path('', include(router.urls)),

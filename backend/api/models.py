@@ -853,3 +853,105 @@ class GestionContrato(models.Model):
 
     def __str__(self):
         return f"{self.numero_contrato} — {self.nombre_contrato}"
+
+
+class FormularioFSC(models.Model):
+    """Formulario Solicitud de Compra (FSC) — reporte 'total_fsc_anho' del Panel SS Osorno."""
+    fecha_solicitud             = models.CharField(max_length=20, blank=True, null=True)
+    folio                       = models.IntegerField(db_index=True)
+    formulario                  = models.CharField(max_length=200, blank=True, null=True)
+    anho                        = models.IntegerField(db_index=True)
+    unidad_requirente           = models.CharField(max_length=200, blank=True, null=True, db_index=True)
+    usuario_requirente          = models.CharField(max_length=200, blank=True, null=True)
+    anexo                       = models.IntegerField(null=True, blank=True)
+    correo                      = models.CharField(max_length=200, blank=True, null=True)
+    encargado                   = models.CharField(max_length=200, blank=True, null=True)
+    jefe                        = models.CharField(max_length=200, blank=True, null=True)
+    requerimiento               = models.TextField(blank=True, null=True)
+    fecha_entrega               = models.CharField(max_length=20, blank=True, null=True)
+    objetivo_compra             = models.TextField(blank=True, null=True)
+    especificaciones_tecnicas   = models.TextField(blank=True, null=True)
+    cotizacion                  = models.CharField(max_length=200, blank=True, null=True)
+    monto_estimado              = models.BigIntegerField(null=True, blank=True)
+    moneda                      = models.CharField(max_length=20, blank=True, null=True)
+    tipo_monto                  = models.CharField(max_length=50, blank=True, null=True)
+    plan_anual                  = models.CharField(max_length=50, blank=True, null=True)
+    id_plan                     = models.CharField(max_length=100, blank=True, null=True)
+    justificacion               = models.TextField(blank=True, null=True)
+    validacion_tecnica          = models.CharField(max_length=50, blank=True, null=True)
+    unidad_validadora           = models.CharField(max_length=200, blank=True, null=True)
+    justificacion_no_validacion = models.TextField(blank=True, null=True)
+    fuente_financiamiento       = models.CharField(max_length=200, blank=True, null=True)
+    estado                      = models.CharField(max_length=20, blank=True, null=True, db_index=True)
+
+    class Meta:
+        db_table = 'data_formularios_fsc'
+        indexes = [models.Index(fields=['anho', 'estado'])]
+        ordering = ['-anho', '-folio']
+
+    def __str__(self):
+        return f"FSC {self.folio}/{self.anho} — {self.unidad_requirente}"
+
+
+class FormularioFSCDerivado(models.Model):
+    """FSC derivado a comprador — reporte 'total_fsc_anho_derivadas' del Panel SS Osorno (superset de columnas de FormularioFSC)."""
+    fecha_solicitud             = models.CharField(max_length=20, blank=True, null=True)
+    folio                       = models.IntegerField(db_index=True)
+    formulario                  = models.CharField(max_length=200, blank=True, null=True)
+    anho                        = models.IntegerField(db_index=True)
+    unidad_requirente           = models.CharField(max_length=200, blank=True, null=True, db_index=True)
+    usuario_requirente          = models.CharField(max_length=200, blank=True, null=True)
+    anexo                       = models.IntegerField(null=True, blank=True)
+    correo                      = models.CharField(max_length=200, blank=True, null=True)
+    encargado                   = models.CharField(max_length=200, blank=True, null=True)
+    jefe                        = models.CharField(max_length=200, blank=True, null=True)
+    requerimiento               = models.TextField(blank=True, null=True)
+    fecha_entrega               = models.CharField(max_length=20, blank=True, null=True)
+    objetivo_compra             = models.TextField(blank=True, null=True)
+    especificaciones_tecnicas   = models.TextField(blank=True, null=True)
+    cotizacion                  = models.CharField(max_length=200, blank=True, null=True)
+    monto_estimado              = models.BigIntegerField(null=True, blank=True)
+    moneda                      = models.CharField(max_length=20, blank=True, null=True)
+    tipo_monto                  = models.CharField(max_length=50, blank=True, null=True)
+    plan_anual                  = models.CharField(max_length=50, blank=True, null=True)
+    id_plan                     = models.CharField(max_length=100, blank=True, null=True)
+    justificacion               = models.TextField(blank=True, null=True)
+    validacion_tecnica          = models.CharField(max_length=50, blank=True, null=True)
+    unidad_validadora           = models.CharField(max_length=200, blank=True, null=True)
+    justificacion_no_validacion = models.TextField(blank=True, null=True)
+    fuente_financiamiento       = models.CharField(max_length=200, blank=True, null=True)
+    estado                      = models.CharField(max_length=20, blank=True, null=True, db_index=True)
+    fecha_derivado              = models.CharField(max_length=20, blank=True, null=True)
+    comprador                   = models.CharField(max_length=200, blank=True, null=True)
+    estado_compra               = models.CharField(max_length=100, blank=True, null=True, db_index=True)
+    item_presupuestario         = models.CharField(max_length=200, blank=True, null=True)
+    folio_requerimiento         = models.CharField(max_length=200, blank=True, null=True)
+
+    class Meta:
+        db_table = 'data_formularios_fsc_derivados'
+        indexes = [models.Index(fields=['anho', 'estado_compra'])]
+        ordering = ['-anho', '-folio']
+
+    def __str__(self):
+        return f"FSC derivado {self.folio}/{self.anho} — {self.comprador}"
+
+
+class FormularioFSCProducto(models.Model):
+    """Líneas de producto del carro de compra FSC — reporte 'total_carro_fsc' del Panel SS Osorno."""
+    folio                = models.IntegerField(db_index=True)
+    tipo_formulario      = models.IntegerField(null=True, blank=True, db_column='t_form')
+    anho                 = models.IntegerField(db_index=True)
+    categoria            = models.CharField(max_length=200, blank=True, null=True)
+    producto             = models.TextField(blank=True, null=True)
+    monto                = models.BigIntegerField(null=True, blank=True)
+    cantidad             = models.IntegerField(null=True, blank=True)
+    descripcion          = models.TextField(blank=True, null=True)
+    item_presupuestario  = models.CharField(max_length=300, blank=True, null=True)
+
+    class Meta:
+        db_table = 'data_formularios_fsc_productos'
+        indexes = [models.Index(fields=['anho', 'folio'])]
+        ordering = ['-anho', '-folio']
+
+    def __str__(self):
+        return f"Producto FSC {self.folio}/{self.anho} — {self.producto}"

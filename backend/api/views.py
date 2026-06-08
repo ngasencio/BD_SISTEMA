@@ -35,6 +35,7 @@ from .models import (
     Factura, Licitacion, OrdenCompra, Proveedor,
     PlanerPAC, CompraAgilResumen, CompraAgilProducto, CompraAgilProveedor,
     RevisionOCCorregible, GestionContrato,
+    FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
@@ -45,6 +46,7 @@ from .serializers import (
     PlanerPACSerializer, CompraAgilResumenSerializer, CompraAgilCalendarioSerializer,
     CompraAgilProductoSerializer, CompraAgilProveedorSerializer,
     RevisionOCCorregibleSerializer, GestionContratoSerializer,
+    FormularioFSCSerializer, FormularioFSCDerivadoSerializer, FormularioFSCProductoSerializer,
 )
 
 # Campos de fecha que mapea EVENT_CFG en CalendarioSect.jsx (17 campos)
@@ -2344,3 +2346,185 @@ def contratos_pac_view(request):
     data = calcular_contratos_pac(filtros)
     cache.set(cache_key, data, timeout=300)
     return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def contratos_pac_detalle_oc_view(request):
+    from .services import calcular_contratos_pac_detalle_oc
+    filtros = {
+        'estado_contrato':    request.GET.get('estado_contrato', ''),
+        'categoria_contrato': request.GET.get('categoria_contrato', ''),
+    }
+    filtros = {k: v for k, v in filtros.items() if v}
+    cache_key = f"contratos_pac_detalle_oc_{'_'.join(f'{k}{v}' for k, v in sorted(filtros.items()))}"
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_contratos_pac_detalle_oc(filtros)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+# =============================================================================
+# Módulo Formularios FSC (Panel SS Osorno)
+# =============================================================================
+
+_tareas_actualizacion_formularios: dict = {}
+
+_RUTA_DATA_PANEL = Path(__file__).parent.parent.parent / "api" / "data" / "data_panel"
+
+
+def _ejecutar_actualizacion_formularios(task_id: str, rut: str, dv: str, clave: str):
+    """Descarga (Selenium) y carga los reportes FSC del Panel SS Osorno delegando en page_data_panel."""
+    panel_path = str(_RUTA_DATA_PANEL)
+    if panel_path not in sys.path:
+        sys.path.insert(0, panel_path)
+
+    try:
+        import page_data_panel as panel_etl
+    except ImportError as exc:
+        _tareas_actualizacion_formularios[task_id].update(
+            status="error", error=f"No se pudo cargar page_data_panel: {exc}"
+        )
+        return
+
+    logs = []
+
+    def _cb(paso=None, paso_desc=None, progreso_pct=None, log=None):
+        upd = {}
+        if paso is not None:
+            upd["paso"] = paso
+        if paso_desc is not None:
+            upd["paso_desc"] = paso_desc
+        if progreso_pct is not None:
+            upd["progreso_pct"] = progreso_pct
+        if log:
+            logs.append(log)
+            upd["logs_recientes"] = logs[-30:]
+        if upd:
+            _tareas_actualizacion_formularios[task_id].update(**upd)
+
+    try:
+        _tareas_actualizacion_formularios[task_id].update(status="en_proceso")
+        _cb(paso=1, paso_desc="Iniciando navegador y autenticando...", progreso_pct=5,
+            log="Iniciando descarga de reportes desde el Panel SS Osorno...")
+
+        resumen = panel_etl.ejecutar_proceso_completo(rut, dv, clave, progress_callback=_cb)
+
+        cache.delete("formularios_stats_v1_todos")
+        _tareas_actualizacion_formularios[task_id].update(
+            status="completado", paso=4,
+            paso_desc=f"Completado: {resumen['total']} registros cargados.",
+            total_cargados=resumen["total"],
+            logs_recientes=logs[-30:],
+            progreso_pct=100,
+        )
+
+    except Exception as exc:
+        logger.exception("Error actualizando formularios FSC")
+        _tareas_actualizacion_formularios[task_id].update(
+            status="error", error=str(exc), logs_recientes=logs[-30:],
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def iniciar_actualizacion_formularios(request):
+    """Inicia la descarga y carga de Formularios FSC desde el Panel SS Osorno."""
+    for tarea in _tareas_actualizacion_formularios.values():
+        if tarea.get("status") in ("iniciado", "en_proceso"):
+            return Response({"error": "Ya hay una actualización en curso."}, status=409)
+
+    rut = str(request.data.get("rut", "")).strip()
+    dv = str(request.data.get("dv", "")).strip()
+    clave = str(request.data.get("clave", "")).strip()
+    if not rut or not dv or not clave:
+        return Response({"error": "Debe indicar RUT, DV y contraseña del Panel SS Osorno."}, status=400)
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_actualizacion_formularios[task_id] = {
+        "status": "iniciado",
+        "paso": 0,
+        "paso_desc": "Iniciando...",
+        "error": None,
+        "logs_recientes": [],
+        "total_cargados": 0,
+        "progreso_pct": 0,
+    }
+    threading.Thread(
+        target=_ejecutar_actualizacion_formularios,
+        args=(task_id, rut, dv, clave),
+        daemon=True,
+    ).start()
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def estado_actualizacion_formularios(request, task_id):
+    """Retorna el estado de una tarea de actualización de Formularios FSC."""
+    tarea = _tareas_actualizacion_formularios.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id":        task_id,
+        "status":         tarea["status"],
+        "paso":           tarea["paso"],
+        "paso_desc":      tarea["paso_desc"],
+        "total_cargados": tarea.get("total_cargados", 0),
+        "progreso_pct":   tarea.get("progreso_pct", 0),
+        "logs_recientes": tarea.get("logs_recientes", []),
+        "error":          tarea.get("error"),
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancelar_actualizacion_formularios(request, task_id):
+    """Cancela una tarea de actualización de Formularios FSC en curso."""
+    return _cancelar_tarea(_tareas_actualizacion_formularios, task_id)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def formularios_stats_view(request):
+    from .services import calcular_formularios_stats
+    anho = request.GET.get("anho", "").strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    cache_key = f"formularios_stats_v1_{anho_int or 'todos'}"
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_formularios_stats(anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+class FormularioFSCViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = FormularioFSC.objects.all()
+    serializer_class = FormularioFSCSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    filterset_fields = ["estado", "anho", "unidad_requirente"]
+    search_fields = ["formulario", "objetivo_compra", "usuario_requirente"]
+    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_solicitud"]
+
+
+class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = FormularioFSCDerivado.objects.all()
+    serializer_class = FormularioFSCDerivadoSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    filterset_fields = ["estado_compra", "anho", "unidad_requirente", "comprador"]
+    search_fields = ["formulario", "objetivo_compra", "comprador"]
+    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_derivado"]
+
+
+class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = FormularioFSCProducto.objects.all()
+    serializer_class = FormularioFSCProductoSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    filterset_fields = ["anho", "folio", "categoria"]
+    search_fields = ["producto", "descripcion"]
+    ordering_fields = ["folio", "anho", "monto", "cantidad"]
+

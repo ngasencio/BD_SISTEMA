@@ -13,11 +13,10 @@ export default function Sidebar() {
         finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas'),
     });
     const [openMods, setOpenMods] = useState({
-        mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra') || path.startsWith('/compra-agil'),
+        mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra') || path.startsWith('/compra-agil') || path.startsWith('/abastecimiento/contratos') || path.startsWith('/abastecimiento/formularios'),
         pac: path.startsWith('/pac'),
         inventario: false,
         garantias: path.startsWith('/abastecimiento/boletas'),
-        contratos: path.startsWith('/abastecimiento/contratos'),
         finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas'),
     });
     const pacTab = path === '/pac' ? (new URLSearchParams(location.search).get('tab') || 'indicadores') : null;
@@ -84,6 +83,20 @@ export default function Sidebar() {
                                     <span>⚡</span>
                                     <span className="nav-item-text">Compra Ágil</span>
                                 </div>
+                                <div
+                                    className={`nav-item ${isActive('/abastecimiento/contratos') ? 'active' : ''}`}
+                                    onClick={() => goTo('/abastecimiento/contratos', 'abast', 'mp')}
+                                >
+                                    <span>📋</span>
+                                    <span className="nav-item-text">Contratos SSO</span>
+                                </div>
+                                <div
+                                    className={`nav-item ${isActive('/abastecimiento/formularios') ? 'active' : ''}`}
+                                    onClick={() => goTo('/abastecimiento/formularios', 'abast', 'mp')}
+                                >
+                                    <span>🗂️</span>
+                                    <span className="nav-item-text">Formularios</span>
+                                </div>
 
                             </div>
                         </div>
@@ -141,23 +154,6 @@ export default function Sidebar() {
                                     onClick={() => goTo('/abastecimiento/boletas', 'abast', 'garantias')}
                                 >
                                     <span>📄</span> <span className="nav-item-text">Boletas de Garantía</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Gestión Contratos */}
-                        <div className={`nav-mod ${openMods.contratos ? 'open' : ''}`}>
-                            <div className="nav-mod-title" onClick={() => toggleMod('contratos')}>
-                                <span style={{ fontSize: 14 }}>📋</span>
-                                <span className="nav-mod-title-text">Gestión Contratos</span>
-                                <span className="nav-mod-arrow" style={{ transform: openMods.contratos ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
-                            </div>
-                            <div className="nav-mod-items" style={{ display: openMods.contratos ? 'block' : 'none' }}>
-                                <div
-                                    className={`nav-item ${isActive('/abastecimiento/contratos') ? 'active' : ''}`}
-                                    onClick={() => goTo('/abastecimiento/contratos', 'abast', 'contratos')}
-                                >
-                                    <span>📄</span> <span className="nav-item-text">Contratos SSO</span>
                                 </div>
                             </div>
                         </div>

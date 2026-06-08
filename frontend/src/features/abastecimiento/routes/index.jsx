@@ -17,6 +17,9 @@ const BoletasPage = lazy(() =>
 const GestionContratosPage = lazy(() =>
     import('../components/GestionContratosPage').then(m => ({ default: m.GestionContratosPage }))
 );
+const FormulariosPage = lazy(() =>
+    import('../components/FormulariosPage').then(m => ({ default: m.FormulariosPage }))
+);
 
 const Loading = () => <div className="loading-spinner">Cargando módulo...</div>;
 
@@ -37,6 +40,10 @@ export const abastecimientoRoutes = (
         <Route
             path="/abastecimiento/contratos"
             element={<Suspense fallback={<Loading />}><GestionContratosPage /></Suspense>}
+        />
+        <Route
+            path="/abastecimiento/formularios"
+            element={<Suspense fallback={<Loading />}><FormulariosPage /></Suspense>}
         />
     </>
 );

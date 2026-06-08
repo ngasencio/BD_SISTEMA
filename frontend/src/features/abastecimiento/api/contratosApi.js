@@ -13,3 +13,4 @@ export const getContratosFinanciero   = (params = {})  => apiClient.get('contrat
 export const getContratosOCDetalle    = (idLic)        => apiClient.get('contratos/oc-detalle/', { params: { id_licitacion_oc: idLic } });
 export const getContratosPlazos       = (params = {})  => apiClient.get('contratos/plazos/', { params });
 export const getContratosPAC          = (params = {})  => apiClient.get('contratos/pac/', { params });
+export const getContratosPACDetalleOC = (params = {})  => apiClient.get('contratos/pac-detalle-oc/', { params });

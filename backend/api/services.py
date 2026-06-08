@@ -8,6 +8,7 @@ from .models import (
     DetalleOrdenCompra, GestionContrato, Licitacion, DetalleLicitacion,
     OrdenCompra, PlanerPAC,
     CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado,
+    FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
@@ -1768,8 +1769,8 @@ def calcular_contratos_pac(filtros=None):
     oc_raw = list(
         OrdenCompra.objects.filter(CodigoLicitacion__in=id_lics)
         .exclude(FechaEnvio__isnull=True)
-        .extra(select={'anio': 'YEAR(FechaEnvio)'})
-        .values('CodigoLicitacion', 'ID_Proyecto', 'Nombre_Proyecto', 'EnlacePAC', 'anio')
+        .extra(select={'anio': 'YEAR(FechaEnvio)', 'mes': 'MONTH(FechaEnvio)'})
+        .values('CodigoLicitacion', 'ID_Proyecto', 'Nombre_Proyecto', 'EnlacePAC', 'anio', 'mes')
         .annotate(n_oc=Count('codigo_oc'))
     )
 
@@ -1777,22 +1778,29 @@ def calcular_contratos_pac(filtros=None):
     oc_by_lic = defaultdict(lambda: defaultdict(lambda: defaultdict(
         lambda: {'enlazadas': 0, 'no_enlazadas': 0, 'Nombre_Proyecto': ''}
     )))
+    # (anio, mes) → {Enlazada, No Enlazada} — para el gráfico de evolución mensual
+    pivot_mes = defaultdict(lambda: {'Enlazada': 0, 'No Enlazada': 0})
     for r in oc_raw:
         cod = r['CodigoLicitacion'] or ''
         if not cod:
             continue
         proy = str(r['ID_Proyecto'] or 'Sin proyecto')
         anio = r['anio'] or 0
+        mes = r['mes'] or 0
         n = r['n_oc'] or 0
         oc_by_lic[cod][proy][anio]['Nombre_Proyecto'] = r['Nombre_Proyecto'] or ''
+        clave_mes = pivot_mes[(anio, mes)]
         if r['EnlacePAC'] == 'Enlazada':
             oc_by_lic[cod][proy][anio]['enlazadas'] += n
+            clave_mes['Enlazada'] += n
         else:
             oc_by_lic[cod][proy][anio]['no_enlazadas'] += n
+            clave_mes['No Enlazada'] += n
 
     pivot = defaultdict(lambda: {'Enlazada': 0, 'No Enlazada': 0})
     kpis = {
         'contratos_100pct_enlazados': 0, 'contratos_sin_oc': 0, 'contratos_sin_pac': 0,
+        'contratos_parcialmente_enlazados': 0,
     }
     resumen = []
 
@@ -1830,6 +1838,8 @@ def calcular_contratos_pac(filtros=None):
             kpis['contratos_100pct_enlazados'] += 1
         if n_total > 0 and n_enlazada == 0:
             kpis['contratos_sin_pac'] += 1
+        if n_total > 0 and 0 < n_enlazada < n_total:
+            kpis['contratos_parcialmente_enlazados'] += 1
 
         resumen.append({
             'numero_contrato': c['numero_contrato'],
@@ -1850,6 +1860,8 @@ def calcular_contratos_pac(filtros=None):
     total_oc_global = sum(r['n_oc_total'] for r in resumen)
     pct_global = round(total_enl_global / total_oc_global * 100, 1) if total_oc_global > 0 else 0.0
 
+    MESES_ABREV = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
     return {
         'resumen': resumen,
         'kpis': {**kpis, 'pct_enlazado_global': pct_global},
@@ -1858,4 +1870,234 @@ def calcular_contratos_pac(filtros=None):
              for k, v in pivot.items()],
             key=lambda x: x['anio'],
         ),
+        'pivot_mes_estado': sorted(
+            [
+                {
+                    'periodo': f"{anio:04d}-{mes:02d}",
+                    'anio': anio,
+                    'mes': mes,
+                    'mes_label': MESES_ABREV[mes] if 1 <= mes <= 12 else '—',
+                    'Enlazada': v['Enlazada'],
+                    'No Enlazada': v['No Enlazada'],
+                }
+                for (anio, mes), v in pivot_mes.items() if anio and mes
+            ],
+            key=lambda x: (x['anio'], x['mes']),
+        ),
+    }
+
+
+def calcular_contratos_pac_detalle_oc(filtros=None):
+    """
+    Cruce PAC a nivel de OC individual: una fila por cada OC ligada a un contrato,
+    con su código PAC (ID_Proyecto), nombre de proyecto y estado de enlace.
+    Permite responder "¿con qué código PAC quedó esta OC?" y la inversa
+    "¿qué OC están enlazadas al código PAC X?".
+    EnlacePAC valores: 'Enlazada' | 'No Enlazada' — siempre comparar con == 'Enlazada'.
+    """
+    qs = GestionContrato.objects.all()
+    if filtros:
+        if filtros.get('estado_contrato'):
+            qs = qs.filter(estado_contrato=filtros['estado_contrato'])
+        if filtros.get('categoria_contrato'):
+            qs = qs.filter(categoria_contrato=filtros['categoria_contrato'])
+
+    contratos = list(qs.values(
+        'numero_contrato', 'nombre_contrato', 'id_licitacion_oc', 'estado_contrato',
+    ))
+    contrato_by_lic = {c['id_licitacion_oc']: c for c in contratos if c['id_licitacion_oc']}
+    id_lics = list(contrato_by_lic.keys())
+
+    oc_qs = (
+        OrdenCompra.objects.filter(CodigoLicitacion__in=id_lics)
+        .exclude(FechaEnvio__isnull=True)
+        .extra(select={'anio': 'YEAR(FechaEnvio)'})
+        .values(
+            'codigo_oc', 'CodigoLicitacion', 'NombreOC', 'EstadoOC', 'TotalBruto',
+            'FechaEnvio', 'C_Unidad', 'EnlacePAC', 'ID_Proyecto', 'Nombre_Proyecto',
+            'LinkMP', 'anio',
+        )
+    )
+
+    filas = []
+    for oc in oc_qs:
+        contrato = contrato_by_lic.get(oc['CodigoLicitacion'] or '')
+        if not contrato:
+            continue
+        try:
+            total_bruto = float(oc['TotalBruto'] or 0)
+        except (ValueError, TypeError):
+            total_bruto = 0.0
+
+        filas.append({
+            'codigo_oc': oc['codigo_oc'],
+            'nombre_oc': oc['NombreOC'] or '',
+            'estado_oc': oc['EstadoOC'] or '',
+            'total_bruto': total_bruto,
+            'fecha_envio': oc['FechaEnvio'].strftime('%Y-%m-%d') if oc['FechaEnvio'] else None,
+            'anio': oc['anio'] or 0,
+            'unidad': oc['C_Unidad'] or '',
+            'link_mp': oc['LinkMP'] or '',
+            'enlace_pac': oc['EnlacePAC'] or 'No Enlazada',
+            'codigo_pac': str(oc['ID_Proyecto']) if oc['ID_Proyecto'] else '',
+            'nombre_proyecto': oc['Nombre_Proyecto'] or '',
+            'codigo_licitacion': oc['CodigoLicitacion'] or '',
+            'numero_contrato': contrato['numero_contrato'],
+            'nombre_contrato': contrato['nombre_contrato'] or '',
+            'estado_contrato': contrato['estado_contrato'] or '',
+        })
+
+    filas.sort(key=lambda f: f['fecha_envio'] or '', reverse=True)
+
+    # Agregación por código PAC — para sub-tab "Detalle por Código PAC"
+    pac_map = defaultdict(lambda: {
+        'nombre_proyecto': '', 'n_oc': 0, 'n_enlazada': 0, 'monto_total': 0.0,
+        'contratos': set(), 'anios': set(),
+    })
+    for f in filas:
+        if not f['codigo_pac']:
+            continue
+        p = pac_map[f['codigo_pac']]
+        p['nombre_proyecto'] = p['nombre_proyecto'] or f['nombre_proyecto']
+        p['n_oc'] += 1
+        if f['enlace_pac'] == 'Enlazada':
+            p['n_enlazada'] += 1
+        p['monto_total'] += f['total_bruto']
+        p['contratos'].add(f['numero_contrato'])
+        if f['anio']:
+            p['anios'].add(f['anio'])
+
+    codigos_pac = sorted([
+        {
+            'codigo_pac': k,
+            'nombre_proyecto': v['nombre_proyecto'],
+            'n_oc': v['n_oc'],
+            'n_enlazada': v['n_enlazada'],
+            'n_contratos': len(v['contratos']),
+            'monto_total': round(v['monto_total'], 0),
+            'anios': sorted(v['anios']),
+        }
+        for k, v in pac_map.items()
+    ], key=lambda x: x['n_oc'], reverse=True)
+
+    # Agregación por código de licitación — para el explorador del sub-tab "Buscador"
+    lic_map = defaultdict(lambda: {
+        'numero_contrato': '', 'nombre_contrato': '', 'estado_contrato': '',
+        'n_oc': 0, 'n_enlazada': 0, 'monto_total': 0.0,
+        'codigos_pac': defaultdict(lambda: {'n_oc': 0, 'n_enlazada': 0, 'nombre_proyecto': ''}),
+    })
+    for f in filas:
+        if not f['codigo_licitacion']:
+            continue
+        l = lic_map[f['codigo_licitacion']]
+        l['numero_contrato'] = f['numero_contrato']
+        l['nombre_contrato'] = f['nombre_contrato']
+        l['estado_contrato'] = f['estado_contrato']
+        l['n_oc'] += 1
+        l['monto_total'] += f['total_bruto']
+        if f['enlace_pac'] == 'Enlazada':
+            l['n_enlazada'] += 1
+        if f['codigo_pac']:
+            cp = l['codigos_pac'][f['codigo_pac']]
+            cp['n_oc'] += 1
+            cp['nombre_proyecto'] = cp['nombre_proyecto'] or f['nombre_proyecto']
+            if f['enlace_pac'] == 'Enlazada':
+                cp['n_enlazada'] += 1
+
+    licitaciones = sorted([
+        {
+            'codigo_licitacion': k,
+            'numero_contrato': v['numero_contrato'],
+            'nombre_contrato': v['nombre_contrato'],
+            'estado_contrato': v['estado_contrato'],
+            'n_oc': v['n_oc'],
+            'n_enlazada': v['n_enlazada'],
+            'n_no_enlazada': v['n_oc'] - v['n_enlazada'],
+            'monto_total': round(v['monto_total'], 0),
+            'n_codigos_pac': len(v['codigos_pac']),
+            'codigos_pac': sorted([
+                {
+                    'codigo_pac': cp_k,
+                    'nombre_proyecto': cp_v['nombre_proyecto'],
+                    'n_oc': cp_v['n_oc'],
+                    'n_enlazada': cp_v['n_enlazada'],
+                }
+                for cp_k, cp_v in v['codigos_pac'].items()
+            ], key=lambda x: x['n_oc'], reverse=True),
+        }
+        for k, v in lic_map.items()
+    ], key=lambda x: x['n_oc'], reverse=True)
+
+    kpis = {
+        'total_oc': len(filas),
+        'total_enlazadas': sum(1 for f in filas if f['enlace_pac'] == 'Enlazada'),
+        'total_no_enlazadas': sum(1 for f in filas if f['enlace_pac'] != 'Enlazada'),
+        'total_codigos_pac': len(codigos_pac),
+        'total_licitaciones': len(licitaciones),
+        'monto_enlazado': round(sum(f['total_bruto'] for f in filas if f['enlace_pac'] == 'Enlazada'), 0),
+        'monto_no_enlazado': round(sum(f['total_bruto'] for f in filas if f['enlace_pac'] != 'Enlazada'), 0),
+    }
+
+    return {
+        'filas': filas,
+        'codigos_pac': codigos_pac,
+        'licitaciones': licitaciones,
+        'kpis': kpis,
+    }
+
+
+# =============================================================================
+# Formularios FSC (Panel SS Osorno)
+# =============================================================================
+
+def calcular_formularios_stats(anho=None):
+    """KPIs agregados de Formularios FSC para el tab 'Formularios' de Abastecimiento."""
+    fsc_qs = FormularioFSC.objects.all()
+    derivados_qs = FormularioFSCDerivado.objects.all()
+    if anho:
+        fsc_qs = fsc_qs.filter(anho=anho)
+        derivados_qs = derivados_qs.filter(anho=anho)
+
+    total_formularios = fsc_qs.count()
+    total_derivados = derivados_qs.count()
+
+    monto_total_estimado = fsc_qs.aggregate(total=Sum('monto_estimado'))['total'] or 0
+
+    por_estado = list(
+        fsc_qs.values('estado')
+        .annotate(total=Count('id'))
+        .order_by('-total')
+    )
+
+    por_unidad = list(
+        fsc_qs.values('unidad_requirente')
+        .annotate(total=Count('id'), monto=Sum('monto_estimado'))
+        .order_by('-total')[:10]
+    )
+
+    por_estado_compra = list(
+        derivados_qs.exclude(estado_compra__isnull=True)
+        .values('estado_compra')
+        .annotate(total=Count('id'))
+        .order_by('-total')
+    )
+
+    anios_disponibles = list(
+        FormularioFSC.objects.order_by('-anho').values_list('anho', flat=True).distinct()
+    )
+
+    return {
+        'kpis': {
+            'total_formularios': total_formularios,
+            'total_derivados': total_derivados,
+            'monto_total_estimado': float(monto_total_estimado),
+            'pct_derivados': round(total_derivados / total_formularios * 100, 1) if total_formularios else 0,
+        },
+        'por_estado': [{'estado': r['estado'] or 'Sin estado', 'total': r['total']} for r in por_estado],
+        'por_unidad_requirente': [
+            {'unidad': r['unidad_requirente'] or 'Sin unidad', 'total': r['total'], 'monto': float(r['monto'] or 0)}
+            for r in por_unidad
+        ],
+        'por_estado_compra': [{'estado': r['estado_compra'], 'total': r['total']} for r in por_estado_compra],
+        'anios_disponibles': anios_disponibles,
     }
