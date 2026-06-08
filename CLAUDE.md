@@ -58,7 +58,7 @@ BD_SISTEMA/
 └── api/              # Python ETL scripts — NOT a web server, run via CLI
     ├── LI_SSO_SERVER.py
     ├── OC_SSO_SERVER.py
-    └── data/         # Static Excel/CSV files (PAC, FSC, facturas) — NOT in DB
+    └── data/         # Static Excel/CSV files (PAC, facturas) — NOT in DB. FSC ya NO vive aquí: se sincroniza en vivo a la DB vía data_panel/page_data_panel.py
 ```
 
 ---
@@ -107,6 +107,9 @@ Two naming conventions coexist — **do not mix them in new code**:
 | `BoletaGarantia` | `T_BoletaGarantia` | `id` | CRUD + file upload |
 | `BoletaGarantiaAudit` | `T_BoletaGarantia_Audit` | `id` | Auto-written on update/delete |
 | `GestionContrato` | `data_gestioncontratos` | `numero_contrato` (PK) | snake_case. `monto_por_ejecutar` nullable (>10^13 → None). `fecha_inicio`/`fecha_termino` malformed strings ("07-00-2026"). Join: `id_licitacion_oc = OrdenCompra.CodigoLicitacion` |
+| `FormularioFSC` | `data_formularios_fsc` | `id` | snake_case. Sin clave natural única — `folio`/`folio+anho` se repiten (~33% colisión); ETL usa `update_or_create` por `folio+anho+unidad_requirente+fecha_solicitud` (no destructivo, preserva historial) |
+| `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Misma clave de upsert que `FormularioFSC` |
+| `FormularioFSCProducto` | `data_formularios_fsc_productos` | `id` | snake_case. `tipo_formulario` usa `db_column='t_form'`. Clave de upsert: `folio+anho+tipo_formulario+categoria+producto+descripcion` |
 
 ---
 
@@ -172,9 +175,18 @@ GET   contratos/financiero/               OC reconciliation + financial projecti
 GET   contratos/oc-detalle/               ?id_licitacion_oc= — OC + productos for one contract (5 min cache per id)
 GET   contratos/plazos/                   Active contracts with alert levels (5 min cache)
 GET   contratos/pac/                      PAC linkage pivot by year (5 min cache)
+
+# Formularios FSC (Panel Documental SS Osorno — sync vía Selenium, reemplaza Excel)
+GET   formularios/stats/                  ?anho= KPIs + distributions (5 min cache)
+POST  formularios/actualizar/             {rut, dv, clave} → launches async ETL task → {task_id}
+POST  formularios/actualizar-cancelar/{task_id}/  Cancels running ETL
+GET   formularios/actualizar-estado/{task_id}/    Polls ETL progress {status, paso_desc, progreso_pct, logs_recientes}
+GET   formularios-fsc/                    ?anho=&unidad_requirente=&estado=&search=
+GET   formularios-fsc-derivados/          ?anho=&estado_compra=&search=
+GET   formularios-fsc-productos/          ?anho=&categoria=
 ```
 
-**Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`, `calcular_contratos_evaluaciones`, `calcular_contratos_financiero`, `calcular_contratos_oc_detalle`, `calcular_contratos_plazos`, `calcular_contratos_pac`.
+**Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`, `calcular_contratos_evaluaciones`, `calcular_contratos_financiero`, `calcular_contratos_oc_detalle`, `calcular_contratos_plazos`, `calcular_contratos_pac`, `calcular_formularios_stats`.
 
 **Cache pattern** — all stat endpoints use `LocMemCache` (volatile — lost on restart, not shared across workers):
 ```python

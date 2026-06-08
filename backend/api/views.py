@@ -2414,7 +2414,10 @@ def _ejecutar_actualizacion_formularios(task_id: str, rut: str, dv: str, clave: 
         cache.delete("formularios_stats_v1_todos")
         _tareas_actualizacion_formularios[task_id].update(
             status="completado", paso=4,
-            paso_desc=f"Completado: {resumen['total']} registros cargados.",
+            paso_desc=(
+                f"Completado: {resumen['nuevos']} nuevos, {resumen['actualizados']} actualizados "
+                f"({resumen['total']} procesados). Historial preservado."
+            ),
             total_cargados=resumen["total"],
             logs_recientes=logs[-30:],
             progreso_pct=100,

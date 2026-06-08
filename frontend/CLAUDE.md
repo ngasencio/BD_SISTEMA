@@ -92,6 +92,7 @@ Rol se extrae del JWT payload: `user.role` o `user.groups?.[0]` o `'viewer'` por
 | `/abastecimiento/fsc` | `features/abastecimiento/components/FSCManager` | admin, abastecimiento, viewer |
 | `/abastecimiento/boletas` | `features/abastecimiento/components/BoletasPage` | admin, abastecimiento, viewer |
 | `/abastecimiento/contratos` | `features/abastecimiento/components/GestionContratosPage` | admin, abastecimiento, viewer |
+| `/abastecimiento/formularios` | `features/abastecimiento/components/FormulariosPage` | admin, abastecimiento, viewer |
 | `/finanzas/dashboard` | `features/finanzas/components/FinanzasDashboard` | admin, finanzas |
 
 ---
@@ -274,6 +275,7 @@ Si necesitas una clase nueva → agregarla en `frontend/src/index.css`.
 | FSC Manager | `/abastecimiento/fsc` | ✅ Funcional | |
 | Dashboard Finanzas | `/finanzas/dashboard` | ⚠️ En desarrollo | Hook mapeado a API real, construcción activa |
 | Gestión Contratos SSO | `/abastecimiento/contratos` | ✅ Fase 2 lista | ETL + 4 tabs analíticos: Evaluaciones, Seguimiento Financiero (RadiografiaContrato), Plazos y Vigencia (Resumen Visual + Carta Gantt + Patrón de Uso), Cruce PAC |
+| Formularios FSC | `/abastecimiento/formularios` | ✅ Funcional | KPIs + 3 tabs (Solicitudes/Derivados/Productos). Reemplaza el Excel `FSC 2025.xlsx` — datos sincronizados en vivo desde Panel SSO vía Selenium. Botón "Actualizar" pide credenciales (rut/dv/clave) por modal — no hay rango de fechas. Sub-grupo propio en Sidebar, al mismo nivel que "Mercado Público" |
 | Gestión Inventario | — | 🔲 Próximo | Placeholder en Sidebar |
 
 ---

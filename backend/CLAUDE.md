@@ -93,6 +93,9 @@ backend/
 | `BoletaGarantia` | `T_BoletaGarantia` | `id` | CRUD completo + auditoría + file upload |
 | `BoletaGarantiaAudit` | `T_BoletaGarantia_Audit` | `id` | Log JSON. `usuario`/`fecha_accion` semánticamente correctos |
 | `GestionContrato` | `data_gestioncontratos` | `numero_contrato` | snake_case. `monto_por_ejecutar` nullable (ETL caps >10^13 to None). `fecha_inicio`/`fecha_termino` malformed strings ("07-00-2026" month=00 — use `dias_restantes`/`dias_vigencia` only). Join: `id_licitacion_oc = OrdenCompra.CodigoLicitacion` (~49% coverage). `TotalBruto` aggregation needs `Cast('TotalBruto', output_field=DecimalField(max_digits=20, decimal_places=2))`. `evaluacion` values: `"Evaluación Pendiente"`, `"--"`, or numeric string `"4"`/`"5"`. `EnlacePAC` values: `"Enlazada"`/`"No Enlazada"` — always compare `== 'Enlazada'`, never truthiness. |
+| `FormularioFSC` | `data_formularios_fsc` | `id` | snake_case. Formularios Solicitud de Compra sincronizados desde Panel SSO (Selenium). `monto_estimado` es **BigIntegerField** — el origen lo trae como string con separador de miles ("672.000"), convertir con `.replace(".", "")`. **No tiene clave natural única** — `folio`/`folio+anho` se repiten (~33% colisión); el ETL usa `folio+anho+unidad_requirente+fecha_solicitud` para upsert. |
+| `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Superset de columnas de `FormularioFSC` + `comprador`/`estado_compra`/`fecha_derivado`. Misma regla de clave compuesta para upsert. |
+| `FormularioFSCProducto` | `data_formularios_fsc_productos` | `id` | snake_case. Líneas de producto del "carro" de cada FSC. `tipo_formulario` usa `db_column='t_form'`. Clave de upsert: `folio+anho+tipo_formulario+categoria+producto+descripcion`. |
 
 ---
 
@@ -168,6 +171,15 @@ GET    /api/contratos/oc-detalle/              ?id_licitacion_oc= OC+products fo
 GET    /api/contratos/plazos/                  Active contracts alert levels (cache 5min)
 GET    /api/contratos/pac/                     PAC linkage pivot by year (cache 5min)
 
+# Formularios FSC (Panel Documental SS Osorno — sincronizado vía Selenium, NO Excel)
+GET    /api/formularios/stats/                 KPIs + distribuciones (cache 5min)
+GET    /api/formularios-fsc/                   ?anho=&unidad_requirente=&estado=&search=
+GET    /api/formularios-fsc-derivados/         ?anho=&estado_compra=&search=
+GET    /api/formularios-fsc-productos/         ?anho=&categoria=
+POST   /api/formularios/actualizar/            {rut, dv, clave} → {task_id} (credenciales Panel SSO, no persistidas)
+GET    /api/formularios/actualizar-estado/<id>/
+POST   /api/formularios/actualizar-cancelar/<id>/
+
 # ETL — Actualización desde dashboard (hilo daemon, polling)
 POST   /api/licitaciones/actualizar/           {fecha_desde, fecha_hasta} YYYY-MM-DD → {task_id}
 GET    /api/licitaciones/actualizar-estado/<id>/  Estado del ETL + diff de cambios
@@ -229,6 +241,7 @@ Funciones clave — nunca duplicar en views:
 | `calcular_contratos_oc_detalle(id_licitacion_oc)` | Contratos — OC + DetalleOrdenCompra for one contract |
 | `calcular_contratos_plazos(filtros)` | Contratos — active contracts with alerta_tiempo levels |
 | `calcular_contratos_pac(filtros)` | Contratos — PAC linkage pivot (EnlacePAC) by year |
+| `calcular_formularios_stats(anho=None)` | Formularios FSC — KPIs (total, derivados, monto estimado, % derivados) + distribuciones por estado/unidad/estado_compra |
 
 ---
 

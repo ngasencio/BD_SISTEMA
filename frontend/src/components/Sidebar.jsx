@@ -13,7 +13,8 @@ export default function Sidebar() {
         finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas'),
     });
     const [openMods, setOpenMods] = useState({
-        mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra') || path.startsWith('/compra-agil') || path.startsWith('/abastecimiento/contratos') || path.startsWith('/abastecimiento/formularios'),
+        mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra') || path.startsWith('/compra-agil') || path.startsWith('/abastecimiento/contratos'),
+        formularios: path.startsWith('/abastecimiento/formularios'),
         pac: path.startsWith('/pac'),
         inventario: false,
         garantias: path.startsWith('/abastecimiento/boletas'),
@@ -90,14 +91,25 @@ export default function Sidebar() {
                                     <span>📋</span>
                                     <span className="nav-item-text">Contratos SSO</span>
                                 </div>
+
+                            </div>
+                        </div>
+
+                        {/* Formularios */}
+                        <div className={`nav-mod ${openMods.formularios ? 'open' : ''}`}>
+                            <div className="nav-mod-title" onClick={() => toggleMod('formularios')}>
+                                <span style={{ fontSize: 14 }}>🗂️</span>
+                                <span className="nav-mod-title-text">Formularios</span>
+                                <span className="nav-mod-arrow" style={{ transform: openMods.formularios ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+                            </div>
+                            <div className="nav-mod-items" style={{ display: openMods.formularios ? 'block' : 'none' }}>
                                 <div
                                     className={`nav-item ${isActive('/abastecimiento/formularios') ? 'active' : ''}`}
-                                    onClick={() => goTo('/abastecimiento/formularios', 'abast', 'mp')}
+                                    onClick={() => goTo('/abastecimiento/formularios', 'abast', 'formularios')}
                                 >
-                                    <span>🗂️</span>
-                                    <span className="nav-item-text">Formularios</span>
+                                    <span>📝</span>
+                                    <span className="nav-item-text">Formularios FSC</span>
                                 </div>
-
                             </div>
                         </div>
 

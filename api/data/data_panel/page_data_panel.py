@@ -174,10 +174,29 @@ def _archivos_locales_mas_recientes():
 
 
 def cargar_formularios_a_django(archivos=None, progress_callback=None):
-    """Lee los reportes (recién descargados o los más recientes en disco) y los carga en la base de datos."""
+    """
+    Lee los reportes (recién descargados o los más recientes en disco) y los **sincroniza**
+    con la base de datos mediante upsert (`update_or_create`) por clave compuesta — nunca
+    borra registros: la base acumula años de formularios y cada descarga del Panel solo
+    trae un subconjunto (p.ej. el año en curso), así que un DELETE+bulk_create destruiría
+    historial.
+
+    Claves de coincidencia ("¿es el mismo FSC que ya tengo?"):
+      - FormularioFSC / FormularioFSCDerivado → folio + anho + unidad_requirente + fecha_solicitud
+      - FormularioFSCProducto                 → folio + anho + tipo_formulario + categoria + producto + descripcion
+
+    Se eligieron estas combinaciones tras inspeccionar los xls reales: ni "folio" ni
+    "folio + anho" identifican un FSC de forma única (se reasignan por unidad/año), pero
+    sumando unidad_requirente + fecha_solicitud la colisión baja a ~0.4% de las filas.
+    Esos pocos casos ambiguos se resuelven actualizando la primera coincidencia (ver _upsert).
+
+    Si encuentra coincidencia → actualiza sus campos (lo "edita"); si no la encuentra →
+    lo inserta como nuevo; los registros que no aparecen en la descarga actual quedan intactos.
+    """
     _setup_django()
     import math
     import pandas as pd
+    from django.core.exceptions import MultipleObjectsReturned
     from django.db import transaction, close_old_connections
     from api.models import FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto
 
@@ -208,6 +227,18 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
     def _to_str(v):
         s = str(v).strip() if v is not None else ""
         return s if s not in ("nan", "None", "") else None
+
+    def _upsert(modelo, lookup, defaults):
+        """update_or_create tolerante a colisiones de clave (raras, pero existen en el origen)."""
+        try:
+            _, creado = modelo.objects.update_or_create(defaults=defaults, **lookup)
+            return creado
+        except MultipleObjectsReturned:
+            obj = modelo.objects.filter(**lookup).first()
+            for campo, valor in defaults.items():
+                setattr(obj, campo, valor)
+            obj.save(update_fields=list(defaults.keys()))
+            return False
 
     columnas_fsc = [
         "fecha_solicitud", "folio", "formulario", "anho", "unidad_requirente",
@@ -255,69 +286,97 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
             estado=_to_str(row["estado"]),
         )
 
-    registros_fsc, registros_derivado, registros_producto = [], [], []
+    def _clave_fsc(campos):
+        """Extrae folio/anho/unidad_requirente/fecha_solicitud como lookup; deja el resto como defaults."""
+        return {
+            "folio": campos.pop("folio"),
+            "anho": campos.pop("anho"),
+            "unidad_requirente": campos.pop("unidad_requirente"),
+            "fecha_solicitud": campos.pop("fecha_solicitud"),
+        }
+
+    resumen = {
+        "fsc": {"nuevos": 0, "actualizados": 0},
+        "derivados": {"nuevos": 0, "actualizados": 0},
+        "carro": {"nuevos": 0, "actualizados": 0},
+    }
+
+    close_old_connections()
 
     if "fsc" in archivos:
         tabla = pd.read_html(str(archivos["fsc"]))[0]
         tabla.columns = columnas_fsc
-        registros_fsc = [FormularioFSC(**_campos_comunes(row)) for _, row in tabla.iterrows()]
-        _avisar(log=f"FSC: {len(registros_fsc)} formularios leídos.")
+        _avisar(paso_desc=f"Sincronizando {len(tabla)} formularios FSC...", progreso_pct=55)
+        with transaction.atomic():
+            for i, (_, row) in enumerate(tabla.iterrows()):
+                campos = _campos_comunes(row)
+                lookup = _clave_fsc(campos)
+                creado = _upsert(FormularioFSC, lookup, campos)
+                resumen["fsc"]["nuevos" if creado else "actualizados"] += 1
+                if (i + 1) % 300 == 0:
+                    _avisar(log=f"FSC: {i + 1}/{len(tabla)} procesados...")
+        _avisar(log=f"FSC → {resumen['fsc']['nuevos']} nuevos, {resumen['fsc']['actualizados']} actualizados.")
 
     if "derivados" in archivos:
         tabla = pd.read_html(str(archivos["derivados"]))[0]
         tabla.columns = columnas_derivado
-        registros_derivado = [
-            FormularioFSCDerivado(
-                **_campos_comunes(row),
-                fecha_derivado=_to_str(row["fecha_derivado"]),
-                comprador=_to_str(row["comprador"]),
-                estado_compra=_to_str(row["estado_compra"]),
-                item_presupuestario=_to_str(row["item_presupuestario"]),
-                folio_requerimiento=_to_str(row["folio_requerimiento"]),
-            )
-            for _, row in tabla.iterrows()
-        ]
-        _avisar(log=f"Derivados: {len(registros_derivado)} formularios leídos.")
+        _avisar(paso_desc=f"Sincronizando {len(tabla)} formularios derivados...", progreso_pct=72)
+        with transaction.atomic():
+            for i, (_, row) in enumerate(tabla.iterrows()):
+                campos = _campos_comunes(row)
+                lookup = _clave_fsc(campos)
+                campos.update(
+                    fecha_derivado=_to_str(row["fecha_derivado"]),
+                    comprador=_to_str(row["comprador"]),
+                    estado_compra=_to_str(row["estado_compra"]),
+                    item_presupuestario=_to_str(row["item_presupuestario"]),
+                    folio_requerimiento=_to_str(row["folio_requerimiento"]),
+                )
+                creado = _upsert(FormularioFSCDerivado, lookup, campos)
+                resumen["derivados"]["nuevos" if creado else "actualizados"] += 1
+                if (i + 1) % 300 == 0:
+                    _avisar(log=f"Derivados: {i + 1}/{len(tabla)} procesados...")
+        _avisar(log=f"Derivados → {resumen['derivados']['nuevos']} nuevos, {resumen['derivados']['actualizados']} actualizados.")
 
     if "carro" in archivos:
         tabla = pd.read_html(str(archivos["carro"]))[0]
         tabla.columns = columnas_producto
-        registros_producto = [
-            FormularioFSCProducto(
-                folio=_to_int(row["folio"]) or 0,
-                tipo_formulario=_to_int(row["tipo_formulario"]),
-                anho=_to_int(row["anho"]) or 0,
-                categoria=_to_str(row["categoria"]),
-                producto=_to_str(row["producto"]),
-                monto=_to_int_monto(row["monto"]),
-                cantidad=_to_int(row["cantidad"]),
-                descripcion=_to_str(row["descripcion"]),
-                item_presupuestario=_to_str(row["item_presupuestario"]),
-            )
-            for _, row in tabla.iterrows()
-        ]
-        _avisar(log=f"Carro: {len(registros_producto)} líneas de producto leídas.")
+        _avisar(paso_desc=f"Sincronizando {len(tabla)} líneas de productos...", progreso_pct=88)
+        with transaction.atomic():
+            for i, (_, row) in enumerate(tabla.iterrows()):
+                lookup = {
+                    "folio": _to_int(row["folio"]) or 0,
+                    "anho": _to_int(row["anho"]) or 0,
+                    "tipo_formulario": _to_int(row["tipo_formulario"]),
+                    "categoria": _to_str(row["categoria"]),
+                    "producto": _to_str(row["producto"]),
+                    "descripcion": _to_str(row["descripcion"]),
+                }
+                defaults = dict(
+                    monto=_to_int_monto(row["monto"]),
+                    cantidad=_to_int(row["cantidad"]),
+                    item_presupuestario=_to_str(row["item_presupuestario"]),
+                )
+                creado = _upsert(FormularioFSCProducto, lookup, defaults)
+                resumen["carro"]["nuevos" if creado else "actualizados"] += 1
+                if (i + 1) % 500 == 0:
+                    _avisar(log=f"Carro: {i + 1}/{len(tabla)} procesados...")
+        _avisar(log=f"Carro → {resumen['carro']['nuevos']} nuevos, {resumen['carro']['actualizados']} actualizados.")
 
-    total = len(registros_fsc) + len(registros_derivado) + len(registros_producto)
-    _avisar(paso_desc=f"Cargando {total} registros en la base de datos...", progreso_pct=85)
-
-    close_old_connections()
-    with transaction.atomic():
-        if registros_fsc:
-            FormularioFSC.objects.all().delete()
-            FormularioFSC.objects.bulk_create(registros_fsc, batch_size=500)
-        if registros_derivado:
-            FormularioFSCDerivado.objects.all().delete()
-            FormularioFSCDerivado.objects.bulk_create(registros_derivado, batch_size=500)
-        if registros_producto:
-            FormularioFSCProducto.objects.all().delete()
-            FormularioFSCProducto.objects.bulk_create(registros_producto, batch_size=500)
-
-    _avisar(log=f"✅ {total} registros cargados exitosamente.", progreso_pct=100)
+    total_nuevos = sum(r["nuevos"] for r in resumen.values())
+    total_actualizados = sum(r["actualizados"] for r in resumen.values())
+    total = total_nuevos + total_actualizados
+    _avisar(
+        log=f"✅ Sincronización completa: {total_nuevos} nuevos, {total_actualizados} actualizados "
+            f"({total} procesados). El historial existente no se eliminó.",
+        progreso_pct=100,
+    )
     return {
-        "fsc": len(registros_fsc),
-        "derivados": len(registros_derivado),
-        "carro": len(registros_producto),
+        "fsc": resumen["fsc"],
+        "derivados": resumen["derivados"],
+        "carro": resumen["carro"],
+        "nuevos": total_nuevos,
+        "actualizados": total_actualizados,
         "total": total,
     }
 
