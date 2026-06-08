@@ -35,6 +35,63 @@ function EstadoFSCBadge({ codigo }) {
     return <span className="estado-badge" style={{ background: info.color }} title={info.nombre}>{codigo || '—'}</span>;
 }
 
+// ─── Tooltip informativo (mismo patrón que TabFinanciero) ────────────────────
+
+function InfoTooltip({ text }) {
+    const [show, setShow] = useState(false);
+    return (
+        <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
+              onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+            <span style={{ cursor: 'help', color: '#94a3b8', fontSize: 12, marginLeft: 4 }}>ⓘ</span>
+            {show && (
+                <span style={{
+                    position: 'absolute', bottom: '130%', left: '50%', transform: 'translateX(-50%)',
+                    background: '#1e293b', color: '#f8fafc', fontSize: 11, padding: '7px 11px',
+                    borderRadius: 7, whiteSpace: 'pre-wrap', minWidth: 200, maxWidth: 300,
+                    width: 'max-content', textAlign: 'left', zIndex: 200, lineHeight: 1.7,
+                    boxShadow: '0 6px 20px rgba(0,0,0,.28)', pointerEvents: 'none',
+                }}>
+                    {text}
+                </span>
+            )}
+        </span>
+    );
+}
+
+// ─── Chip de filtro rápido (mismo patrón que TabFinanciero) ──────────────────
+
+function FiltroChip({ activo, color, bg, onClick, children }) {
+    return (
+        <button onClick={onClick} style={{
+            padding: '3px 10px', borderRadius: 20, fontSize: 11,
+            fontWeight: activo ? 700 : 400,
+            border: activo ? `2px solid ${color || '#7c3aed'}` : '1px solid #e2e8f0',
+            background: activo ? (bg || (color ? `${color}15` : '#ede9fe')) : '#fff',
+            color: activo ? (color || '#7c3aed') : '#64748b',
+            cursor: 'pointer',
+        }}>
+            {children}
+        </button>
+    );
+}
+
+// ─── Sub-tab estilo "Resumen & Gráficos" / "Tabla Detalle" (TabFinanciero) ───
+
+function SubTabBtn({ activo, onClick, children }) {
+    return (
+        <button onClick={onClick} style={{
+            padding: '10px 18px', background: 'none', border: 'none',
+            cursor: 'pointer', fontSize: 12,
+            fontWeight: activo ? 700 : 400,
+            color: activo ? '#7c3aed' : '#64748b',
+            borderBottom: activo ? '2px solid #7c3aed' : '2px solid transparent',
+            marginBottom: -2,
+        }}>
+            {children}
+        </button>
+    );
+}
+
 // ─── Banner de progreso ETL ───────────────────────────────────────────────────
 
 function BannerFormularios({ tarea, onCerrar, onCancelar }) {
@@ -317,7 +374,48 @@ function PanelDetalleEstado({ nodo }) {
     );
 }
 
-function FlujoVisacion({ anioSeleccionado, setAnioSeleccionado, aniosDisponibles }) {
+function ResumenFormularios({ stats, anioSeleccionado }) {
+    const kpis = stats?.kpis;
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {kpis && (
+                <section className="kpi-grid">
+                    <KpiCard
+                        title={<>Total Formularios <InfoTooltip text="Cantidad de solicitudes FSC registradas en el sistema, según el filtro de año aplicado." /></>}
+                        value={fmtN(kpis.total_formularios)}
+                        subtitle="FSC registrados"
+                        icon="📋"
+                        colorVar="--color-primary"
+                    />
+                    <KpiCard
+                        title={<>Derivados a Comprador <InfoTooltip text="Solicitudes que ya fueron derivadas a un comprador para su gestión de compra (bandeja DC en adelante)." /></>}
+                        value={fmtN(kpis.total_derivados)}
+                        subtitle={`${kpis.pct_derivados}% del total`}
+                        icon="➡️"
+                        colorVar="--color-accent"
+                    />
+                    <KpiCard
+                        title={<>Monto Total Estimado <InfoTooltip text="Suma de monto_estimado de todas las solicitudes FSC del filtro actual." /></>}
+                        value={fmtCLP(kpis.monto_total_estimado)}
+                        subtitle="Suma de solicitudes FSC"
+                        icon="💰"
+                        colorVar="--color-success"
+                    />
+                    <KpiCard
+                        title={<>Estados de Compra <InfoTooltip text="Cantidad de categorías distintas de estado_compra observadas entre los formularios derivados." /></>}
+                        value={fmtN(stats.por_estado_compra?.length ?? 0)}
+                        subtitle="Categorías distintas"
+                        icon="🏷️"
+                        colorVar="--color-warning"
+                    />
+                </section>
+            )}
+            <FlujoVisacion anioSeleccionado={anioSeleccionado} />
+        </div>
+    );
+}
+
+function FlujoVisacion({ anioSeleccionado }) {
     const [flujo, setFlujo] = useState(null);
     const [cargando, setCargando] = useState(true);
     const [estadoSel, setEstadoSel] = useState(null);
@@ -343,28 +441,14 @@ function FlujoVisacion({ anioSeleccionado, setAnioSeleccionado, aniosDisponibles
 
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
-                <p style={{ fontSize: 12.5, color: '#64748b', margin: 0, maxWidth: 640 }}>
-                    Recorrido de las solicitudes por las bandejas de visación, desde <strong>P · Pendiente Firmas</strong> hasta{' '}
-                    <strong>AC · A Comprador</strong>. Haz clic en un círculo para ver el detalle de los formularios que se
-                    encuentran ahí y cuántos días llevan en esa bandeja. Historial de avance disponible desde el {flujo.historial_disponible_desde}.
-                </p>
-                {aniosDisponibles?.length > 0 && (
-                    <select className="filtro-select" value={anioSeleccionado || ''} onChange={e => setAnioSeleccionado(e.target.value || null)}>
-                        <option value="">Todos los años</option>
-                        {aniosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                )}
-            </div>
-
-            <section className="kpi-grid" style={{ marginBottom: 18 }}>
-                <KpiCard title="En camino (P → AC)" value={fmtN(flujo.total_en_camino)} subtitle="Formularios activos en alguna bandeja" icon="🔄" colorVar="--color-primary" />
-                <KpiCard title="Promedio días en trámite" value={`${flujo.promedio_dias_tramite} d`} subtitle="Desde la fecha de solicitud" icon="⏱️" colorVar="--color-accent" />
-                <KpiCard title="Rechazados" value={fmtN(flujo.rechazados.cantidad)} subtitle="Formularios con estado 'R'" icon="🚫" colorVar="--color-warning" />
-            </section>
-
             <div className="card">
-                <div className="card-header card-header-accent"><span>🔁</span><span className="card-title">Línea de flujo de visación</span></div>
+                <div className="card-header card-header-accent">
+                    <span>🔁</span>
+                    <span className="card-title">
+                        Línea de flujo de visación
+                        <InfoTooltip text={`Recorrido de las solicitudes por las bandejas de visación, desde P · Pendiente Firmas hasta AC · A Comprador.\nHaz clic en un círculo para ver el detalle de los formularios que se encuentran ahí y cuántos días llevan en esa bandeja.\nHistorial de avance disponible desde el ${flujo.historial_disponible_desde}.`} />
+                    </span>
+                </div>
                 <div className="flujo-pipeline">
                     {nodos.map((nodo, i) => (
                         <React.Fragment key={nodo.codigo}>
@@ -406,30 +490,39 @@ function FlujoVisacion({ anioSeleccionado, setAnioSeleccionado, aniosDisponibles
 
 // ─── Sub-tab "Listado" — tabla de Solicitudes con búsqueda/orden/drill-down ──
 
-function TablaSolicitudes({ filtroEstado, setFiltroEstado }) {
-    const filtros = filtroEstado ? { estado: filtroEstado } : null;
+function TablaSolicitudes({ filtroEstado, setFiltroEstado, anioSeleccionado }) {
+    const filtros = { ...(filtroEstado ? { estado: filtroEstado } : {}), ...(anioSeleccionado ? { anho: anioSeleccionado } : {}) };
     const { search, setSearch, ordering, setOrdering, page, setPage, data, cargando } =
-        useListaServidor(getFormularios, '-fecha_solicitud', filtros);
+        useListaServidor(getFormularios, '-fecha_solicitud', Object.keys(filtros).length ? filtros : null);
     const [expandido, setExpandido] = useState(null);
 
     return (
         <>
-            <div className="table-toolbar">
-                <div className="toolbar-filters">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                     <input
                         className="search-input"
                         placeholder="🔍 Buscar por folio, unidad, usuario, objetivo de compra…"
                         value={search}
-                        onChange={e => setSearch(e.target.value)}
+                        onChange={e => { setSearch(e.target.value); setExpandido(null); }}
+                        style={{ flex: 1 }}
                     />
-                    <select className="filtro-select" value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
-                        <option value="">Todas las bandejas</option>
-                        {Object.entries(ESTADO_FSC_INFO).map(([codigo, info]) => (
-                            <option key={codigo} value={codigo}>{codigo} · {info.nombre}</option>
-                        ))}
-                    </select>
+                    <span className="result-count">{fmtN(data.count)} solicitud(es)</span>
                 </div>
-                <span className="result-count">{fmtN(data.count)} solicitud(es)</span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                        Bandeja
+                        <InfoTooltip text="Filtra las solicitudes por la bandeja de visación donde se encuentran actualmente." />
+                        :
+                    </span>
+                    <FiltroChip activo={!filtroEstado} onClick={() => { setFiltroEstado(''); setExpandido(null); }}>Todas</FiltroChip>
+                    {Object.entries(ESTADO_FSC_INFO).filter(([c]) => c !== 'R').map(([codigo, info]) => (
+                        <FiltroChip key={codigo} activo={filtroEstado === codigo} color={info.color}
+                            onClick={() => { setFiltroEstado(filtroEstado === codigo ? '' : codigo); setExpandido(null); }}>
+                            {codigo} · {info.nombre}
+                        </FiltroChip>
+                    ))}
+                </div>
             </div>
             <div className="table-scroll">
                 <table className="data-table sortable" style={{ width: '100%' }}>
@@ -487,31 +580,44 @@ function TablaSolicitudes({ filtroEstado, setFiltroEstado }) {
 
 // ─── Tabla de Derivados — mismo patrón de búsqueda/orden/drill-down ──────────
 
-function TablaDerivados({ opcionesEstadoCompra }) {
+const COLORES_ESTADO_COMPRA = ['#0ea5e9', '#7c3aed', '#16a34a', '#f59e0b', '#dc2626', '#0891b2', '#9333ea', '#65a30d'];
+
+function TablaDerivados({ opcionesEstadoCompra, anioSeleccionado }) {
     const [filtroEstadoCompra, setFiltroEstadoCompra] = useState('');
-    const filtros = filtroEstadoCompra ? { estado_compra: filtroEstadoCompra } : null;
+    const filtros = { ...(filtroEstadoCompra ? { estado_compra: filtroEstadoCompra } : {}), ...(anioSeleccionado ? { anho: anioSeleccionado } : {}) };
     const { search, setSearch, ordering, setOrdering, page, setPage, data, cargando } =
-        useListaServidor(getFormulariosDerivados, '-fecha_derivado', filtros);
+        useListaServidor(getFormulariosDerivados, '-fecha_derivado', Object.keys(filtros).length ? filtros : null);
     const [expandido, setExpandido] = useState(null);
 
     return (
         <>
-            <div className="table-toolbar">
-                <div className="toolbar-filters">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                     <input
                         className="search-input"
                         placeholder="🔍 Buscar por folio, unidad, comprador, objetivo de compra…"
                         value={search}
-                        onChange={e => setSearch(e.target.value)}
+                        onChange={e => { setSearch(e.target.value); setExpandido(null); }}
+                        style={{ flex: 1 }}
                     />
-                    {opcionesEstadoCompra?.length > 0 && (
-                        <select className="filtro-select" value={filtroEstadoCompra} onChange={e => setFiltroEstadoCompra(e.target.value)}>
-                            <option value="">Todos los estados de compra</option>
-                            {opcionesEstadoCompra.map(e => <option key={e} value={e}>{e}</option>)}
-                        </select>
-                    )}
+                    <span className="result-count">{fmtN(data.count)} derivado(s)</span>
                 </div>
-                <span className="result-count">{fmtN(data.count)} derivado(s)</span>
+                {opcionesEstadoCompra?.length > 0 && (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                            Estado de compra
+                            <InfoTooltip text="Filtra los formularios derivados según el estado de gestión de la compra asignado por el comprador." />
+                            :
+                        </span>
+                        <FiltroChip activo={!filtroEstadoCompra} onClick={() => { setFiltroEstadoCompra(''); setExpandido(null); }}>Todos</FiltroChip>
+                        {opcionesEstadoCompra.map((e, i) => (
+                            <FiltroChip key={e} activo={filtroEstadoCompra === e} color={COLORES_ESTADO_COMPRA[i % COLORES_ESTADO_COMPRA.length]}
+                                onClick={() => { setFiltroEstadoCompra(filtroEstadoCompra === e ? '' : e); setExpandido(null); }}>
+                                {e}
+                            </FiltroChip>
+                        ))}
+                    </div>
+                )}
             </div>
             <div className="table-scroll">
                 <table className="data-table sortable" style={{ width: '100%' }}>
@@ -545,7 +651,7 @@ function TablaDerivados({ opcionesEstadoCompra }) {
                                         <td style={{ maxWidth: 160 }}><div className="truncate-text" title={f.comprador}>{f.comprador || '—'}</div></td>
                                         <td style={{ textAlign: 'right' }}>{fmtCLP(f.monto_estimado)}</td>
                                         <td>{f.estado_compra
-                                            ? <span className="estado-badge" style={{ background: '#0ea5e9' }}>{f.estado_compra}</span>
+                                            ? <span className="estado-badge" style={{ background: COLORES_ESTADO_COMPRA[Math.max(0, opcionesEstadoCompra.indexOf(f.estado_compra)) % COLORES_ESTADO_COMPRA.length] }}>{f.estado_compra}</span>
                                             : <span style={{ color: '#94a3b8' }}>—</span>}
                                         </td>
                                     </tr>
@@ -578,19 +684,20 @@ const TABS = [
     { id: 'productos',   label: 'Carro de Productos', icono: '🛒' },
 ];
 
+// Mismo formato de sub-tabs que Contratos SSO › Seg. Financiero (📊 Resumen & Gráficos | 📋 Tabla Detalle)
 const SUBTABS_SOLICITUDES = [
-    { id: 'flujo',   label: 'Flujo de Visación', icono: '🔁' },
-    { id: 'listado', label: 'Listado de Solicitudes', icono: '📋' },
+    { id: 'resumen', label: '📊 Resumen & Gráficos' },
+    { id: 'detalle', label: '📋 Tabla Detalle' },
 ];
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export function FormulariosPage() {
     const [tab, setTab]                 = useState('solicitudes');
-    const [subTab, setSubTab]           = useState('flujo');
+    const [subTab, setSubTab]           = useState('resumen');
     const [stats, setStats]             = useState(null);
     const [filtroEstado, setFiltroEstado] = useState('');
-    const [anioFlujo, setAnioFlujo]     = useState(null);
+    const [anioGlobal, setAnioGlobal]   = useState(null);
 
     const [filasProductos, setFilasProductos] = useState([]);
     const [cargandoProductos, setCargandoProductos] = useState(false);
@@ -602,10 +709,10 @@ export function FormulariosPage() {
 
     const cargarStats = useCallback(async () => {
         try {
-            const { data } = await getFormulariosStats();
+            const { data } = await getFormulariosStats(anioGlobal ? { anho: anioGlobal } : {});
             setStats(data);
         } catch { /* ignorar */ }
-    }, []);
+    }, [anioGlobal]);
 
     useEffect(() => { cargarStats(); }, [cargarStats]);
 
@@ -662,11 +769,12 @@ export function FormulariosPage() {
     };
 
     const enProceso = tarea?.status === 'iniciado' || tarea?.status === 'en_proceso';
-    const kpis = stats?.kpis;
     const opcionesEstadoCompra = stats?.por_estado_compra?.map(e => e.estado).filter(Boolean) ?? [];
+    const aniosDisponibles = stats?.anios_disponibles;
 
     return (
         <div className="feature-page">
+            {/* ── Título + acción de actualización ── */}
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                     <div className="page-title"><span className="page-title-icon">📋</span> Formularios FSC</div>
@@ -689,40 +797,22 @@ export function FormulariosPage() {
                 </button>
             </div>
 
-            {kpis && (
-                <section className="kpi-grid">
-                    <KpiCard
-                        title="Total Formularios"
-                        value={fmtN(kpis.total_formularios)}
-                        subtitle="FSC registrados"
-                        icon="📋"
-                        colorVar="--color-primary"
-                    />
-                    <KpiCard
-                        title="Derivados a Comprador"
-                        value={fmtN(kpis.total_derivados)}
-                        subtitle={`${kpis.pct_derivados}% del total`}
-                        icon="➡️"
-                        colorVar="--color-accent"
-                    />
-                    <KpiCard
-                        title="Monto Total Estimado"
-                        value={fmtCLP(kpis.monto_total_estimado)}
-                        subtitle="Suma de solicitudes FSC"
-                        icon="💰"
-                        colorVar="--color-success"
-                    />
-                    <KpiCard
-                        title="Estados de Compra"
-                        value={fmtN(stats.por_estado_compra?.length ?? 0)}
-                        subtitle="Categorías distintas"
-                        icon="🏷️"
-                        colorVar="--color-warning"
-                    />
-                </section>
-            )}
+            {/* ── Filtros globales (afectan KPIs, flujo, listados y derivados) ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '14px 0 18px' }}>
+                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+                    Filtros
+                    <InfoTooltip text="El año seleccionado se aplica a los indicadores, al flujo de visación y a los listados de Solicitudes y Derivados." />
+                    :
+                </span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>📅 Año</span>
+                <select className="filtro-select" value={anioGlobal || ''} onChange={e => setAnioGlobal(e.target.value || null)}>
+                    <option value="">Todos los años</option>
+                    {aniosDisponibles?.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+            </div>
 
-            <div style={{ display: 'flex', gap: 6, marginTop: 20, marginBottom: 14, borderBottom: '1px solid #e5e7eb' }}>
+            {/* ── Tabs principales ── */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, borderBottom: '1px solid #e5e7eb' }}>
                 {TABS.map(t => (
                     <button
                         key={t.id}
@@ -736,28 +826,20 @@ export function FormulariosPage() {
 
             {tab === 'solicitudes' && (
                 <>
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                    {/* ── Sub-tabs estilo Contratos SSO › Seg. Financiero ── */}
+                    <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #e5e7eb', marginBottom: 16 }}>
                         {SUBTABS_SOLICITUDES.map(st => (
-                            <button
-                                key={st.id}
-                                onClick={() => setSubTab(st.id)}
-                                className={`tab-btn ${subTab === st.id ? 'active' : ''}`}
-                                style={{ fontSize: 12.5 }}
-                            >
-                                <span style={{ marginRight: 6 }}>{st.icono}</span>{st.label}
-                            </button>
+                            <SubTabBtn key={st.id} activo={subTab === st.id} onClick={() => setSubTab(st.id)}>
+                                {st.label}
+                            </SubTabBtn>
                         ))}
                     </div>
 
-                    {subTab === 'flujo' ? (
-                        <FlujoVisacion
-                            anioSeleccionado={anioFlujo}
-                            setAnioSeleccionado={setAnioFlujo}
-                            aniosDisponibles={stats?.anios_disponibles}
-                        />
+                    {subTab === 'resumen' ? (
+                        <ResumenFormularios stats={stats} anioSeleccionado={anioGlobal} />
                     ) : (
                         <div className="card">
-                            <TablaSolicitudes filtroEstado={filtroEstado} setFiltroEstado={setFiltroEstado} />
+                            <TablaSolicitudes filtroEstado={filtroEstado} setFiltroEstado={setFiltroEstado} anioSeleccionado={anioGlobal} />
                         </div>
                     )}
                 </>
@@ -765,7 +847,7 @@ export function FormulariosPage() {
 
             {tab === 'derivados' && (
                 <div className="card">
-                    <TablaDerivados opcionesEstadoCompra={opcionesEstadoCompra} />
+                    <TablaDerivados opcionesEstadoCompra={opcionesEstadoCompra} anioSeleccionado={anioGlobal} />
                 </div>
             )}
 
