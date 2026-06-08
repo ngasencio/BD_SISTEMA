@@ -273,7 +273,7 @@ Si necesitas una clase nueva → agregarla en `frontend/src/index.css`.
 | Boletas de Garantía | `/abastecimiento/boletas` | ✅ Completo | CRUD + auditoría + archivo adjunto |
 | FSC Manager | `/abastecimiento/fsc` | ✅ Funcional | |
 | Dashboard Finanzas | `/finanzas/dashboard` | ⚠️ En desarrollo | Hook mapeado a API real, construcción activa |
-| Gestión Contratos SSO | `/abastecimiento/contratos` | ⚠️ Fase 1 lista | ETL + 4 tabs (Resumen/Estado/Tipo/Garantías). Faltan tabs: Evaluaciones, Seguimiento Financiero, Plazos, Cruce PAC |
+| Gestión Contratos SSO | `/abastecimiento/contratos` | ✅ Fase 2 lista | ETL + 4 tabs analíticos: Evaluaciones, Seguimiento Financiero (RadiografiaContrato), Plazos y Vigencia (Resumen Visual + Carta Gantt + Patrón de Uso), Cruce PAC |
 | Gestión Inventario | — | 🔲 Próximo | Placeholder en Sidebar |
 
 ---
