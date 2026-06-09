@@ -2488,11 +2488,12 @@ def _ejecutar_actualizacion_formularios(task_id: str, rut: str, dv: str, clave: 
         snap_despues, der_despues, _, _ = _snapshot_fsc()
         diff = _diff_fsc(snap_antes, snap_despues, der_antes, der_despues, hoy, _dias_fn)
 
-        for key in ('formularios_stats_v1_todos',):
+        for key in ('formularios_stats_v1_todos', 'formularios_unificacion_todos'):
             cache.delete(key)
         for yr in range(2024, hoy.year + 2):
             cache.delete(f'formularios_stats_v1_{yr}')
             cache.delete(f'formularios_flujo_v1_{yr}')
+            cache.delete(f'formularios_unificacion_{yr}')
         cache.delete('formularios_flujo_v1_todos')
 
         _tareas_actualizacion_formularios[task_id].update(
@@ -2626,6 +2627,21 @@ def formularios_alertas_view(request):
 
     registros.sort(key=lambda x: -x['dias'])
     return Response({'count': len(registros), 'results': registros})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def formularios_unificacion_view(request):
+    """Análisis de compras conjuntas: agrupa FSC en camino (ASDA→DC) por item_presupuestario."""
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    cache_key = f'formularios_unificacion_{anho_int or "todos"}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    from .services import calcular_formularios_unificacion
+    data = calcular_formularios_unificacion(anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
 
 
 @api_view(["GET"])

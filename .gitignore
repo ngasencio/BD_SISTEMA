@@ -18,6 +18,7 @@ env/
 # Django
 *.sqlite3
 /backend/media/
+/backend/staticfiles/
 
 # Datos ETL (voluminosos, no deben ir en git)
 api/OC_DSSO/DIARIO/

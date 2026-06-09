@@ -2221,3 +2221,161 @@ def calcular_formularios_flujo(anho=None):
         'promedio_dias_tramite': round(sum(dias_validos) / len(dias_validos), 1) if dias_validos else 0,
         'historial_disponible_desde': '2026-06-08',
     }
+
+
+def calcular_formularios_unificacion(anho=None):
+    """Agrupa FSC en camino (ASDA→DC) por item_presupuestario para detectar candidatos
+    de compra conjunta. Segunda capa: agrupación por categoría de productos."""
+    from collections import defaultdict
+
+    ESTADOS_CAMINO = ['ASDA', 'ADIR', 'AA', 'DC']
+
+    qs = FormularioFSC.objects.filter(estado__in=ESTADOS_CAMINO)
+    if anho:
+        qs = qs.filter(anho=anho)
+
+    # Key: (folio, anho, tipo_formulario) — evita colisión cuando mismo folio/año tiene
+    # distintos tipos de formulario (F1-082-26 y F2-082-26 son formularios distintos).
+    fsc_map = {}
+    for f in qs:
+        m_tipo = _RE_TIPO_FORMULARIO.search(f.formulario or '')
+        tipo = int(m_tipo.group(1)) if m_tipo else None
+        key = (f.folio, f.anho, tipo)
+        fsc_map[key] = {
+            'folio': f.folio,
+            'anho': f.anho,
+            'tipo_formulario': tipo,
+            'estado': f.estado,
+            'unidad_requirente': f.unidad_requirente or '',
+            'monto_estimado': int(f.monto_estimado or 0),
+            'destino_actual': f.destino_actual or '',
+            'requerimiento': (f.requerimiento or '')[:100],
+            'usuario_requirente': f.usuario_requirente or '',
+            'fecha_solicitud': f.fecha_solicitud or '',
+            'item_presupuestario': f.item_presupuestario or '',
+            'id_formulario': generar_id_formulario(f.folio, f.anho, tipo_formulario=tipo),
+        }
+
+    if not fsc_map:
+        return {'nodos': [], 'grupos': [], 'grupos_categoria': [], 'grupos_productos': [], 'total_formularios': 0, 'total_monto': 0}
+
+    # Filtrar productos por (folio, anho, tipo_formulario) exacto.
+    # folio__in + anho__in + tipo__in es eficiente; el guard key-not-in-fsc_map
+    # descarta cualquier mezcla cross-year o cross-tipo residual.
+    folios = list({k[0] for k in fsc_map})
+    anhos  = list({k[1] for k in fsc_map})
+    tipos  = [t for t in {k[2] for k in fsc_map} if t is not None]
+    prods  = FormularioFSCProducto.objects.filter(folio__in=folios, anho__in=anhos)
+    if tipos:
+        prods = prods.filter(tipo_formulario__in=tipos)
+
+    item_to_keys = defaultdict(set)
+    key_to_items = defaultdict(set)
+    cat_to_keys  = defaultdict(set)
+
+    for p in prods.values('folio', 'anho', 'tipo_formulario', 'item_presupuestario', 'categoria'):
+        key = (p['folio'], p['anho'], p['tipo_formulario'])
+        if key not in fsc_map:
+            continue  # descarta cross-year o cross-tipo residual
+        item = (p['item_presupuestario'] or '').strip()
+        if item and item != '0':
+            item_to_keys[item].add(key)
+            key_to_items[key].add(item)
+        cat = (p['categoria'] or '').strip()
+        if cat:
+            cat_to_keys[cat].add(key)
+
+    # Assign primary_item (single, for backwards compat) + items_propios (all shared items ≥2)
+    nodos = []
+    for key, details in fsc_map.items():
+        items = list(key_to_items.get(key, set()))
+        candidates = sorted(
+            [(it, len(item_to_keys[it])) for it in items if len(item_to_keys[it]) >= 2],
+            key=lambda x: -x[1]
+        )
+        primary_item  = candidates[0][0] if candidates else None
+        items_propios = [it for it, _ in candidates]
+        nodos.append({**details, 'primary_item': primary_item, 'items_propios': items_propios})
+
+    # Grupos layer 1: item_presupuestario con ≥2 FSC
+    grupos = []
+    for item, keys_set in item_to_keys.items():
+        if len(keys_set) < 2:
+            continue
+        forms = [fsc_map[k] for k in keys_set if k in fsc_map]
+        estado_counts = defaultdict(int)
+        for f in forms:
+            estado_counts[f['estado']] += 1
+        orden = ['ASDA', 'ADIR', 'AA', 'DC']
+        grupos.append({
+            'item_presupuestario': item,
+            'n_formularios': len(forms),
+            'monto_total': sum(f['monto_estimado'] for f in forms),
+            'estados': dict(estado_counts),
+            'formularios': sorted(forms, key=lambda x: orden.index(x['estado']) if x['estado'] in orden else 99),
+        })
+    grupos.sort(key=lambda x: -x['n_formularios'])
+
+    # Grupos layer 2: categoría con ≥2 FSC
+    grupos_categoria = []
+    for cat, keys_set in cat_to_keys.items():
+        if len(keys_set) < 2:
+            continue
+        forms = [fsc_map[k] for k in keys_set if k in fsc_map]
+        grupos_categoria.append({
+            'categoria': cat,
+            'n_formularios': len(forms),
+            'monto_total': sum(f['monto_estimado'] for f in forms),
+            'formularios': forms,
+        })
+    grupos_categoria.sort(key=lambda x: -x['n_formularios'])
+
+    # Grupos productos: ítem → categorías → formularios (para tab Productos, vista Opción C)
+    # Estructura: por cada ítem con ≥2 FSC, agrupar sus formularios por categoría de producto
+    item_cat_keys = defaultdict(lambda: defaultdict(set))
+    for p in prods.values('folio', 'anho', 'tipo_formulario', 'item_presupuestario', 'categoria'):
+        key = (p['folio'], p['anho'], p['tipo_formulario'])
+        if key not in fsc_map:
+            continue
+        item = (p['item_presupuestario'] or '').strip()
+        cat  = (p['categoria'] or '').strip()
+        if item and item != '0' and len(item_to_keys.get(item, set())) >= 2:
+            item_cat_keys[item][cat or '(sin categoría)'].add(key)
+
+    grupos_productos = []
+    for item, cat_map in item_cat_keys.items():
+        all_keys = set()
+        for keys_set in cat_map.values():
+            all_keys |= keys_set
+        forms_item = [fsc_map[k] for k in all_keys if k in fsc_map]
+        orden = ['ASDA', 'ADIR', 'AA', 'DC']
+        estado_counts = defaultdict(int)
+        for f in forms_item:
+            estado_counts[f['estado']] += 1
+        categorias = []
+        for cat, keys_set in sorted(cat_map.items(), key=lambda x: -len(x[1])):
+            forms_cat = [fsc_map[k] for k in keys_set if k in fsc_map]
+            categorias.append({
+                'categoria': cat,
+                'n_formularios': len(forms_cat),
+                'monto_total': sum(f['monto_estimado'] for f in forms_cat),
+                'formularios': sorted(forms_cat, key=lambda x: orden.index(x['estado']) if x['estado'] in orden else 99),
+            })
+        grupos_productos.append({
+            'item_presupuestario': item,
+            'n_formularios': len(forms_item),
+            'n_categorias': len(categorias),
+            'monto_total': sum(f['monto_estimado'] for f in forms_item),
+            'estados': dict(estado_counts),
+            'categorias': categorias,
+        })
+    grupos_productos.sort(key=lambda x: -x['n_formularios'])
+
+    return {
+        'nodos': nodos,
+        'grupos': grupos,
+        'grupos_categoria': grupos_categoria[:20],
+        'grupos_productos': grupos_productos,
+        'total_formularios': len(nodos),
+        'total_monto': sum(f['monto_estimado'] for f in fsc_map.values()),
+    }

@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path, re_path
 from django.http import FileResponse
@@ -22,4 +21,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(api_urls)),
     re_path(r'^bd_sistema/(?P<path>.*)$', react_spa),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Media files (boletas, adjuntos) — siempre activo, incluso DEBUG=False
+    re_path(r'^media/(?P<path>.*)$', static_serve, {'document_root': settings.MEDIA_ROOT}),
+]

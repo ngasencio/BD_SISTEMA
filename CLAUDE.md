@@ -180,6 +180,7 @@ GET   contratos/pac/                      PAC linkage pivot by year (5 min cache
 GET   formularios/stats/                  ?anho= KPIs + distributions (5 min cache)
 GET   formularios/flujo/                  ?anho= Pipeline P→AC + rechazados (5 min cache)
 GET   formularios/alertas/                ?dias_min=10&anho= FSC activos con días desde solicitud ≥ umbral, ordenados por días desc
+GET   formularios/unificacion/            ?anho= Grupos candidatos a compra conjunta: layer1=item_presupuestario (≥2 FSC), layer2=categoria. Estados ASDA→DC. (5 min cache)
 POST  formularios/actualizar/             {rut, dv, clave} → launches async ETL task → {task_id}
 POST  formularios/actualizar-cancelar/{task_id}/  Cancels running ETL
 GET   formularios/actualizar-estado/{task_id}/    Polls ETL progress {status, paso_desc, progreso_pct, logs_recientes, diff}
@@ -188,7 +189,7 @@ GET   formularios-fsc-derivados/          ?anho=&estado_compra=&search=
 GET   formularios-fsc-productos/          ?anho=&categoria=
 ```
 
-**Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`, `calcular_contratos_evaluaciones`, `calcular_contratos_financiero`, `calcular_contratos_oc_detalle`, `calcular_contratos_plazos`, `calcular_contratos_pac`, `calcular_formularios_stats`. **Helpers en views.py (NO en services):** `_snapshot_fsc()` (captura estado pre-ETL), `_diff_fsc()` (compara snapshots y produce diff con 4 categorías: nuevos/cambiaron_estado/derivados_nuevos/pegados).
+**Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`, `calcular_contratos_evaluaciones`, `calcular_contratos_financiero`, `calcular_contratos_oc_detalle`, `calcular_contratos_plazos`, `calcular_contratos_pac`, `calcular_formularios_stats`, `calcular_formularios_unificacion`. **Helpers en views.py (NO en services):** `_snapshot_fsc()` (captura estado pre-ETL), `_diff_fsc()` (compara snapshots y produce diff con 4 categorías: nuevos/cambiaron_estado/derivados_nuevos/pegados).
 
 **Cache pattern** — all stat endpoints use `LocMemCache` (volatile — lost on restart, not shared across workers):
 ```python
