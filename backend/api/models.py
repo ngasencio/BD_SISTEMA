@@ -883,6 +883,13 @@ class FormularioFSC(models.Model):
     justificacion_no_validacion = models.TextField(blank=True, null=True)
     fuente_financiamiento       = models.CharField(max_length=200, blank=True, null=True)
     estado                      = models.CharField(max_length=20, blank=True, null=True, db_index=True)
+    adj_espec_tecnicas          = models.TextField(blank=True, null=True)
+    adj_cotizacion              = models.TextField(blank=True, null=True)
+    adj_validacion              = models.TextField(blank=True, null=True)
+    adj_form_justificacion      = models.TextField(blank=True, null=True)
+    destino_actual              = models.TextField(blank=True, null=True)
+    item_presupuestario         = models.CharField(max_length=200, blank=True, null=True)
+    folio_requerimiento         = models.CharField(max_length=200, blank=True, null=True)
 
     class Meta:
         db_table = 'data_formularios_fsc'
@@ -926,6 +933,10 @@ class FormularioFSCDerivado(models.Model):
     estado_compra               = models.CharField(max_length=100, blank=True, null=True, db_index=True)
     item_presupuestario         = models.CharField(max_length=200, blank=True, null=True)
     folio_requerimiento         = models.CharField(max_length=200, blank=True, null=True)
+    adj_espec_tecnicas          = models.TextField(blank=True, null=True)
+    adj_cotizacion              = models.TextField(blank=True, null=True)
+    adj_validacion              = models.TextField(blank=True, null=True)
+    adj_form_justificacion      = models.TextField(blank=True, null=True)
 
     class Meta:
         db_table = 'data_formularios_fsc_derivados'

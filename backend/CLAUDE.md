@@ -93,8 +93,8 @@ backend/
 | `BoletaGarantia` | `T_BoletaGarantia` | `id` | CRUD completo + auditoría + file upload |
 | `BoletaGarantiaAudit` | `T_BoletaGarantia_Audit` | `id` | Log JSON. `usuario`/`fecha_accion` semánticamente correctos |
 | `GestionContrato` | `data_gestioncontratos` | `numero_contrato` | snake_case. `monto_por_ejecutar` nullable (ETL caps >10^13 to None). `fecha_inicio`/`fecha_termino` malformed strings ("07-00-2026" month=00 — use `dias_restantes`/`dias_vigencia` only). Join: `id_licitacion_oc = OrdenCompra.CodigoLicitacion` (~49% coverage). `TotalBruto` aggregation needs `Cast('TotalBruto', output_field=DecimalField(max_digits=20, decimal_places=2))`. `evaluacion` values: `"Evaluación Pendiente"`, `"--"`, or numeric string `"4"`/`"5"`. `EnlacePAC` values: `"Enlazada"`/`"No Enlazada"` — always compare `== 'Enlazada'`, never truthiness. |
-| `FormularioFSC` | `data_formularios_fsc` | `id` | snake_case. Formularios Solicitud de Compra sincronizados desde Panel SSO (Selenium). `monto_estimado` es **BigIntegerField** — el origen lo trae como string con separador de miles ("672.000"), convertir con `.replace(".", "")`. **No tiene clave natural única** — `folio`/`folio+anho` se repiten (~33% colisión); el ETL usa `folio+anho+unidad_requirente+fecha_solicitud` para upsert. |
-| `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Superset de columnas de `FormularioFSC` + `comprador`/`estado_compra`/`fecha_derivado`. Misma regla de clave compuesta para upsert. |
+| `FormularioFSC` | `data_formularios_fsc` | `id` | snake_case. Formularios Solicitud de Compra sincronizados desde Panel SSO (Selenium). `monto_estimado` es **BigIntegerField** — el origen lo trae como string con separador de miles ("672.000"), convertir con `.replace(".", "")`. **No tiene clave natural única** — `folio`/`folio+anho` se repiten (~33% colisión); el ETL usa `folio+anho+unidad_requirente+fecha_solicitud` para upsert. Campos `adj_espec_tecnicas`, `adj_cotizacion`, `adj_validacion`, `adj_form_justificacion` (TextField, nullable): URLs de adjuntos del Panel SSO. ViewSet usa `FormularioFSCFilter` con `BaseInFilter` para `estado` → acepta `?estado=DC,AA` (CSV multi-select). |
+| `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Superset de columnas de `FormularioFSC` + `comprador`/`estado_compra`/`fecha_derivado`. Misma regla de clave compuesta para upsert. También tiene los 4 campos `adj_*`. |
 | `FormularioFSCProducto` | `data_formularios_fsc_productos` | `id` | snake_case. Líneas de producto del "carro" de cada FSC. `tipo_formulario` usa `db_column='t_form'`. Clave de upsert: `folio+anho+tipo_formulario+categoria+producto+descripcion`. |
 | `FormularioFSCEstadoLog` | `data_formularios_fsc_estado_log` | `id` | snake_case. Agregado 2026-06-08. Historial diferencial de bandejas de visación: FK→`FormularioFSC` (`related_name='historial_estados'`), `(estado, fecha_registro)`. Una fila nueva **solo** cuando `estado` difiere del último registrado para ese FSC — append-only, escrito por `_registrar_cambio_estado()` en `page_data_panel.py` tras cada upsert. Confiable solo desde `2026-06-08` (el origen no expone transiciones pasadas). |
 
@@ -174,12 +174,13 @@ GET    /api/contratos/pac/                     PAC linkage pivot by year (cache 
 
 # Formularios FSC (Panel Documental SS Osorno — sincronizado vía Selenium, NO Excel)
 GET    /api/formularios/stats/                 KPIs + distribuciones (cache 5min)
-GET    /api/formularios/flujo/                 ?anho= Pipeline P→AC + rechazados + días en trámite/bandeja (cache 5min)
-GET    /api/formularios-fsc/                   ?anho=&unidad_requirente=&estado=&search=&ordering=
-GET    /api/formularios-fsc-derivados/         ?anho=&estado_compra=&search=&ordering=
+GET    /api/formularios/flujo/                 ?anho= Pipeline P→AC + rechazados (cache 5min)
+GET    /api/formularios/alertas/               ?dias_min=10&anho= FSC activos (≠ AC/R) con días≥umbral; calcula días en Python desde fecha_solicitud (string YYYY-MM-DD); sin cache; sin paginación (max ~200 reg)
+GET    /api/formularios-fsc/                   ?anho=&unidad_requirente=&estado=DC,AA (CSV multi-select via FormularioFSCFilter+BaseInFilter)&search= (busca en requerimiento+especificaciones_tecnicas)&ordering=
+GET    /api/formularios-fsc-derivados/         ?anho=&estado_compra=&search=(requerimiento+especificaciones_tecnicas)&ordering=
 GET    /api/formularios-fsc-productos/         ?anho=&categoria=&tipo_formulario=
 POST   /api/formularios/actualizar/            {rut, dv, clave} → {task_id} (credenciales Panel SSO, no persistidas)
-GET    /api/formularios/actualizar-estado/<id>/
+GET    /api/formularios/actualizar-estado/<id>/  Devuelve diff:{nuevos,cambiaron_estado,derivados_nuevos,pegados,*_count} al completar
 POST   /api/formularios/actualizar-cancelar/<id>/
 
 # ETL — Actualización desde dashboard (hilo daemon, polling)
@@ -246,6 +247,12 @@ Funciones clave — nunca duplicar en views:
 | `calcular_formularios_stats(anho=None)` | Formularios FSC — KPIs (total, derivados, monto estimado, % derivados) + distribuciones por estado/unidad/estado_compra |
 | `calcular_formularios_flujo(anho=None)` | Formularios FSC — pipeline de bandejas P→AC + rechazados, con `dias_en_tramite`/`dias_en_estado_actual` por formulario (usa `FormularioFSCEstadoLog`). Alimenta el sub-tab "Flujo de Visación" |
 | `generar_id_formulario(folio, anho, tipo_formulario=None, formulario_texto=None)` | Formularios FSC — construye el ID corto `Fn-XXX-AA` (tipo+folio+año); usado por los 3 serializers FSC vía `SerializerMethodField` |
+
+**Helpers de diff ETL (en `views.py`, NO en services):**
+| Función | Propósito |
+|---|---|
+| `_snapshot_fsc()` | Devuelve `(dict_fsc, set_derivados, hoy, _dias_fn)`. `dict_fsc` clave: `(folio,anho,unidad,fecha_sol)` → dict con todos los campos + `dias`. Ejecutar **antes** del ETL. |
+| `_diff_fsc(snap_antes, snap_despues, der_antes, der_despues, hoy, _dias, umbral_dias=10)` | Compara dos snapshots y devuelve `{nuevos, cambiaron_estado, derivados_nuevos, pegados, *_count}`. `pegados` = FSC con estado ≠ AC/R y días > umbral, ordenados desc. Límite 200 registros por categoría. |
 
 ---
 

@@ -107,8 +107,8 @@ Two naming conventions coexist — **do not mix them in new code**:
 | `BoletaGarantia` | `T_BoletaGarantia` | `id` | CRUD + file upload |
 | `BoletaGarantiaAudit` | `T_BoletaGarantia_Audit` | `id` | Auto-written on update/delete |
 | `GestionContrato` | `data_gestioncontratos` | `numero_contrato` (PK) | snake_case. `monto_por_ejecutar` nullable (>10^13 → None). `fecha_inicio`/`fecha_termino` malformed strings ("07-00-2026"). Join: `id_licitacion_oc = OrdenCompra.CodigoLicitacion` |
-| `FormularioFSC` | `data_formularios_fsc` | `id` | snake_case. Sin clave natural única — `folio`/`folio+anho` se repiten (~33% colisión); ETL usa `update_or_create` por `folio+anho+unidad_requirente+fecha_solicitud` (no destructivo, preserva historial) |
-| `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Misma clave de upsert que `FormularioFSC` |
+| `FormularioFSC` | `data_formularios_fsc` | `id` | snake_case. Sin clave natural única — `folio`/`folio+anho` se repiten (~33% colisión); ETL usa `update_or_create` por `folio+anho+unidad_requirente+fecha_solicitud` (no destructivo, preserva historial). Campos `adj_espec_tecnicas`, `adj_cotizacion`, `adj_validacion`, `adj_form_justificacion` (TextField nullable): URLs de adjuntos del Panel SSO. `destino_actual` (TextField nullable): persona que actualmente tiene el formulario. `item_presupuestario`/`folio_requerimiento` (CharField 200, nullable). `fecha_solicitud` como string `YYYY-MM-DD`. ViewSet filtra `?estado=DC,AA` (CSV) via `FormularioFSCFilter(BaseInFilter)` |
+| `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Misma clave de upsert que `FormularioFSC`. También tiene los 4 campos `adj_*` |
 | `FormularioFSCProducto` | `data_formularios_fsc_productos` | `id` | snake_case. `tipo_formulario` usa `db_column='t_form'`. Clave de upsert: `folio+anho+tipo_formulario+categoria+producto+descripcion` |
 
 ---
@@ -178,15 +178,17 @@ GET   contratos/pac/                      PAC linkage pivot by year (5 min cache
 
 # Formularios FSC (Panel Documental SS Osorno — sync vía Selenium, reemplaza Excel)
 GET   formularios/stats/                  ?anho= KPIs + distributions (5 min cache)
+GET   formularios/flujo/                  ?anho= Pipeline P→AC + rechazados (5 min cache)
+GET   formularios/alertas/                ?dias_min=10&anho= FSC activos con días desde solicitud ≥ umbral, ordenados por días desc
 POST  formularios/actualizar/             {rut, dv, clave} → launches async ETL task → {task_id}
 POST  formularios/actualizar-cancelar/{task_id}/  Cancels running ETL
-GET   formularios/actualizar-estado/{task_id}/    Polls ETL progress {status, paso_desc, progreso_pct, logs_recientes}
-GET   formularios-fsc/                    ?anho=&unidad_requirente=&estado=&search=
+GET   formularios/actualizar-estado/{task_id}/    Polls ETL progress {status, paso_desc, progreso_pct, logs_recientes, diff}
+GET   formularios-fsc/                    ?anho=&unidad_requirente=&estado=DC,AA (CSV multi-select)&search=
 GET   formularios-fsc-derivados/          ?anho=&estado_compra=&search=
 GET   formularios-fsc-productos/          ?anho=&categoria=
 ```
 
-**Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`, `calcular_contratos_evaluaciones`, `calcular_contratos_financiero`, `calcular_contratos_oc_detalle`, `calcular_contratos_plazos`, `calcular_contratos_pac`, `calcular_formularios_stats`.
+**Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`, `calcular_contratos_evaluaciones`, `calcular_contratos_financiero`, `calcular_contratos_oc_detalle`, `calcular_contratos_plazos`, `calcular_contratos_pac`, `calcular_formularios_stats`. **Helpers en views.py (NO en services):** `_snapshot_fsc()` (captura estado pre-ETL), `_diff_fsc()` (compara snapshots y produce diff con 4 categorías: nuevos/cambiaron_estado/derivados_nuevos/pegados).
 
 **Cache pattern** — all stat endpoints use `LocMemCache` (volatile — lost on restart, not shared across workers):
 ```python

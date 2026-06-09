@@ -2187,6 +2187,7 @@ def calcular_formularios_flujo(anho=None):
             'fecha_solicitud': fsc.fecha_solicitud,
             'monto_estimado': float(fsc.monto_estimado or 0),
             'estado': fsc.estado,
+            'destino_actual': fsc.destino_actual,
             'dias_en_tramite': dias_tramite,
             'dias_en_estado_actual': (hoy - ultima_fecha).days if ultima_fecha else None,
         }

@@ -11,6 +11,7 @@ from django.core.cache import cache
 from django.db.models import Count, Q, Sum
 from django.db.models import DecimalField
 from django.db.models.functions import Cast
+import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters, viewsets
 from rest_framework.decorators import api_view, permission_classes
@@ -2374,6 +2375,77 @@ _tareas_actualizacion_formularios: dict = {}
 _RUTA_DATA_PANEL = Path(__file__).parent.parent.parent / "api" / "data" / "data_panel"
 
 
+def _snapshot_fsc():
+    """Captura el estado actual de FormularioFSC para calcular el diff post-ETL."""
+    from datetime import date, datetime
+    from api.models import FormularioFSC, FormularioFSCDerivado
+    hoy = date.today()
+
+    def _dias(fecha_str):
+        if not fecha_str:
+            return None
+        for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y'):
+            try:
+                return (hoy - datetime.strptime(fecha_str, fmt).date()).days
+            except ValueError:
+                continue
+        return None
+
+    fsc = {
+        (f.folio, f.anho, f.unidad_requirente or '', f.fecha_solicitud or ''): {
+            'folio': f.folio, 'anho': f.anho,
+            'unidad_requirente': f.unidad_requirente, 'fecha_solicitud': f.fecha_solicitud,
+            'estado': f.estado, 'monto_estimado': f.monto_estimado,
+            'usuario_requirente': f.usuario_requirente,
+            'destino_actual': f.destino_actual,
+            'dias': _dias(f.fecha_solicitud),
+        }
+        for f in FormularioFSC.objects.only(
+            'folio', 'anho', 'unidad_requirente', 'fecha_solicitud',
+            'estado', 'monto_estimado', 'usuario_requirente', 'destino_actual'
+        )
+    }
+    derivados = {
+        (f.folio, f.anho, f.unidad_requirente or '', f.fecha_solicitud or '')
+        for f in FormularioFSCDerivado.objects.only('folio', 'anho', 'unidad_requirente', 'fecha_solicitud')
+    }
+    return fsc, derivados, hoy, _dias
+
+
+def _diff_fsc(snap_antes, snap_despues, der_antes, der_despues, hoy, _dias, umbral_dias=10):
+    """Calcula las 4 categorías del diff para el panel de cambios."""
+    nuevos, cambiaron_estado, pegados = [], [], []
+
+    for key, datos in snap_despues.items():
+        if key not in snap_antes:
+            nuevos.append(datos)
+        else:
+            estado_prev = snap_antes[key]['estado']
+            if estado_prev != datos['estado']:
+                cambiaron_estado.append({**datos, 'estado_anterior': estado_prev})
+
+        if datos['estado'] not in ('AC', 'R') and datos['dias'] is not None and datos['dias'] > umbral_dias:
+            pegados.append(datos)
+
+    der_nuevos_keys = der_despues - der_antes
+    derivados_nuevos = [
+        snap_despues[k] for k in der_nuevos_keys if k in snap_despues
+    ]
+
+    pegados.sort(key=lambda x: -(x['dias'] or 0))
+
+    return {
+        'nuevos': nuevos[:200],
+        'cambiaron_estado': cambiaron_estado[:200],
+        'derivados_nuevos': derivados_nuevos[:200],
+        'pegados': pegados[:200],
+        'nuevos_count': len(nuevos),
+        'cambiaron_estado_count': len(cambiaron_estado),
+        'derivados_nuevos_count': len(derivados_nuevos),
+        'pegados_count': len(pegados),
+    }
+
+
 def _ejecutar_actualizacion_formularios(task_id: str, rut: str, dv: str, clave: str):
     """Descarga (Selenium) y carga los reportes FSC del Panel SS Osorno delegando en page_data_panel."""
     panel_path = str(_RUTA_DATA_PANEL)
@@ -2409,9 +2481,20 @@ def _ejecutar_actualizacion_formularios(task_id: str, rut: str, dv: str, clave: 
         _cb(paso=1, paso_desc="Iniciando navegador y autenticando...", progreso_pct=5,
             log="Iniciando descarga de reportes desde el Panel SS Osorno...")
 
+        snap_antes, der_antes, hoy, _dias_fn = _snapshot_fsc()
+
         resumen = panel_etl.ejecutar_proceso_completo(rut, dv, clave, progress_callback=_cb)
 
-        cache.delete("formularios_stats_v1_todos")
+        snap_despues, der_despues, _, _ = _snapshot_fsc()
+        diff = _diff_fsc(snap_antes, snap_despues, der_antes, der_despues, hoy, _dias_fn)
+
+        for key in ('formularios_stats_v1_todos',):
+            cache.delete(key)
+        for yr in range(2024, hoy.year + 2):
+            cache.delete(f'formularios_stats_v1_{yr}')
+            cache.delete(f'formularios_flujo_v1_{yr}')
+        cache.delete('formularios_flujo_v1_todos')
+
         _tareas_actualizacion_formularios[task_id].update(
             status="completado", paso=4,
             paso_desc=(
@@ -2421,6 +2504,7 @@ def _ejecutar_actualizacion_formularios(task_id: str, rut: str, dv: str, clave: 
             total_cargados=resumen["total"],
             logs_recientes=logs[-30:],
             progreso_pct=100,
+            diff=diff,
         )
 
     except Exception as exc:
@@ -2478,6 +2562,7 @@ def estado_actualizacion_formularios(request, task_id):
         "progreso_pct":   tarea.get("progreso_pct", 0),
         "logs_recientes": tarea.get("logs_recientes", []),
         "error":          tarea.get("error"),
+        "diff":           tarea.get("diff"),
     })
 
 
@@ -2486,6 +2571,61 @@ def estado_actualizacion_formularios(request, task_id):
 def cancelar_actualizacion_formularios(request, task_id):
     """Cancela una tarea de actualización de Formularios FSC en curso."""
     return _cancelar_tarea(_tareas_actualizacion_formularios, task_id)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def formularios_alertas_view(request):
+    """Formularios FSC con alerta de demora — estados activos con días desde solicitud calculados."""
+    from datetime import date, datetime
+    from api.models import FormularioFSC
+
+    hoy = date.today()
+    try:
+        dias_min = int(request.GET.get('dias_min', 10))
+    except (ValueError, TypeError):
+        dias_min = 10
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    estados_excluidos = ('AC', 'R')
+
+    qs = FormularioFSC.objects.exclude(estado__in=estados_excluidos)
+    if anho_int:
+        qs = qs.filter(anho=anho_int)
+
+    registros = []
+    for f in qs.only(
+        'id', 'folio', 'anho', 'formulario', 'fecha_solicitud', 'estado',
+        'unidad_requirente', 'usuario_requirente', 'monto_estimado', 'requerimiento',
+        'destino_actual',
+    ):
+        dias = None
+        if f.fecha_solicitud:
+            for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y'):
+                try:
+                    dias = (hoy - datetime.strptime(f.fecha_solicitud, fmt).date()).days
+                    break
+                except ValueError:
+                    continue
+        if dias is None or dias < dias_min:
+            continue
+        registros.append({
+            'id': f.id,
+            'folio': f.folio,
+            'anho': f.anho,
+            'formulario': f.formulario,
+            'fecha_solicitud': f.fecha_solicitud,
+            'estado': f.estado,
+            'unidad_requirente': f.unidad_requirente,
+            'usuario_requirente': f.usuario_requirente,
+            'monto_estimado': f.monto_estimado,
+            'requerimiento': f.requerimiento,
+            'destino_actual': f.destino_actual,
+            'dias': dias,
+        })
+
+    registros.sort(key=lambda x: -x['dias'])
+    return Response({'count': len(registros), 'results': registros})
 
 
 @api_view(["GET"])
@@ -2517,17 +2657,26 @@ def formularios_flujo_view(request):
     return Response(data)
 
 
+class FormularioFSCFilter(django_filters.FilterSet):
+    estado = django_filters.BaseInFilter(field_name='estado', lookup_expr='in')
+
+    class Meta:
+        model = FormularioFSC
+        fields = ['estado', 'anho', 'unidad_requirente']
+
+
 class FormularioFSCViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = FormularioFSC.objects.all()
     serializer_class = FormularioFSCSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
-    filterset_fields = ["estado", "anho", "unidad_requirente"]
+    filterset_class = FormularioFSCFilter
     search_fields = [
         "folio", "anho", "formulario", "objetivo_compra", "usuario_requirente",
-        "unidad_requirente", "encargado", "jefe", "correo", "requerimiento", "estado",
+        "unidad_requirente", "encargado", "jefe", "correo", "requerimiento",
+        "especificaciones_tecnicas", "estado",
     ]
-    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_solicitud", "unidad_requirente", "estado"]
+    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_solicitud", "unidad_requirente", "estado", "destino_actual"]
 
 
 class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
@@ -2539,6 +2688,7 @@ class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = [
         "folio", "anho", "formulario", "objetivo_compra", "usuario_requirente",
         "unidad_requirente", "comprador", "estado_compra", "encargado", "jefe", "correo",
+        "requerimiento", "especificaciones_tecnicas",
     ]
     ordering_fields = ["folio", "anho", "monto_estimado", "fecha_derivado", "unidad_requirente", "estado_compra"]
 

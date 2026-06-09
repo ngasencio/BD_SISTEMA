@@ -262,6 +262,9 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         if ultimo is None or ultimo.estado != fsc.estado:
             FormularioFSCEstadoLog.objects.create(formulario=fsc, estado=fsc.estado, fecha_registro=hoy)
 
+    _COLS_ADJ = ["adj_espec_tecnicas", "adj_cotizacion", "adj_validacion", "adj_form_justificacion"]
+    _COLS_NEW_FSC = ["destino_actual", "item_presupuestario", "folio_requerimiento"]
+
     columnas_fsc = [
         "fecha_solicitud", "folio", "formulario", "anho", "unidad_requirente",
         "usuario_requirente", "anexo", "correo", "encargado", "jefe",
@@ -269,10 +272,16 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         "cotizacion", "monto_estimado", "moneda", "tipo_monto", "plan_anual",
         "id_plan", "justificacion", "validacion_tecnica", "unidad_validadora",
         "justificacion_no_validacion", "fuente_financiamiento", "estado",
-    ]
-    columnas_derivado = columnas_fsc + [
+    ] + _COLS_ADJ + _COLS_NEW_FSC
+    columnas_derivado = [
+        "fecha_solicitud", "folio", "formulario", "anho", "unidad_requirente",
+        "usuario_requirente", "anexo", "correo", "encargado", "jefe",
+        "requerimiento", "fecha_entrega", "objetivo_compra", "especificaciones_tecnicas",
+        "cotizacion", "monto_estimado", "moneda", "tipo_monto", "plan_anual",
+        "id_plan", "justificacion", "validacion_tecnica", "unidad_validadora",
+        "justificacion_no_validacion", "fuente_financiamiento", "estado",
         "fecha_derivado", "comprador", "estado_compra", "item_presupuestario", "folio_requerimiento",
-    ]
+    ] + _COLS_ADJ
     columnas_producto = [
         "folio", "tipo_formulario", "anho", "categoria", "producto",
         "monto", "cantidad", "descripcion", "item_presupuestario",
@@ -306,6 +315,10 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
             justificacion_no_validacion=_to_str(row["justificacion_no_validacion"]),
             fuente_financiamiento=_to_str(row["fuente_financiamiento"]),
             estado=_to_str(row["estado"]),
+            adj_espec_tecnicas=_to_str(row["adj_espec_tecnicas"]),
+            adj_cotizacion=_to_str(row["adj_cotizacion"]),
+            adj_validacion=_to_str(row["adj_validacion"]),
+            adj_form_justificacion=_to_str(row["adj_form_justificacion"]),
         )
 
     def _clave_fsc(campos):
@@ -332,6 +345,11 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         with transaction.atomic():
             for i, (_, row) in enumerate(tabla.iterrows()):
                 campos = _campos_comunes(row)
+                campos.update(
+                    destino_actual=_to_str(row["destino_actual"]),
+                    item_presupuestario=_to_str(row["item_presupuestario"]),
+                    folio_requerimiento=_to_str(row["folio_requerimiento"]),
+                )
                 lookup = _clave_fsc(campos)
                 fsc, creado = _upsert(FormularioFSC, lookup, campos)
                 _registrar_cambio_estado(fsc)
