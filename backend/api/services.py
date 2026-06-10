@@ -2379,3 +2379,101 @@ def calcular_formularios_unificacion(anho=None):
         'total_formularios': len(nodos),
         'total_monto': sum(f['monto_estimado'] for f in fsc_map.values()),
     }
+
+
+def calcular_formularios_historial(anho=None, unidad_requirente=None, usuario_requirente=None):
+    """
+    Historial de productos solicitados agrupado por unidad requirente.
+    Excluye estados R (Rechazado) y P (Pendiente Firmas).
+    Retorna lista de FSC con sus productos embebidos.
+
+    JOIN key: (folio, anho, tipo_formulario) — evita colisión cruzada entre FSC con
+    mismo folio/año pero distintas unidades requirente (33% colisión observada con
+    solo folio+anho). El tipo_formulario se extrae del campo 'formulario' via regex.
+    """
+    estados_excluidos = ['R', 'P']
+    qs = FormularioFSC.objects.exclude(estado__in=estados_excluidos)
+    if anho:
+        try:
+            qs = qs.filter(anho=int(anho))
+        except (ValueError, TypeError):
+            pass
+    if unidad_requirente:
+        qs = qs.filter(unidad_requirente__icontains=unidad_requirente)
+    if usuario_requirente:
+        qs = qs.filter(usuario_requirente__icontains=usuario_requirente)
+
+    fscs = list(qs.only(
+        'id', 'folio', 'anho', 'formulario', 'fecha_solicitud', 'estado',
+        'unidad_requirente', 'usuario_requirente',
+        'monto_estimado', 'requerimiento',
+    ).order_by('-fecha_solicitud'))
+
+    if not fscs:
+        return []
+
+    # Construir mapa id→tipo y conjunto de claves (folio, anho, tipo)
+    fsc_tipo = {}
+    fsc_keys = set()
+    for f in fscs:
+        m = _RE_TIPO_FORMULARIO.search(f.formulario or '')
+        tipo = int(m.group(1)) if m else None
+        fsc_tipo[f.id] = tipo
+        fsc_keys.add((f.folio, f.anho, tipo))
+
+    # Consultar productos usando folio+anho para eficiencia; luego discriminar por tipo
+    folios = list({k[0] for k in fsc_keys})
+    anhos_list = list({k[1] for k in fsc_keys})
+    tipos = [t for t in {k[2] for k in fsc_keys} if t is not None]
+
+    prods_qs = FormularioFSCProducto.objects.filter(folio__in=folios, anho__in=anhos_list)
+    if tipos:
+        prods_qs = prods_qs.filter(tipo_formulario__in=tipos)
+
+    productos_map = defaultdict(list)
+    for p in prods_qs.only(
+        'folio', 'anho', 'tipo_formulario', 'categoria', 'producto', 'descripcion',
+        'cantidad', 'monto', 'item_presupuestario',
+    ):
+        key = (p.folio, p.anho, p.tipo_formulario)
+        if key not in fsc_keys:
+            continue
+        try:
+            monto = float(p.monto) if p.monto else 0.0
+        except (ValueError, TypeError):
+            monto = 0.0
+        try:
+            cantidad = float(p.cantidad) if p.cantidad else 0.0
+        except (ValueError, TypeError):
+            cantidad = 0.0
+        productos_map[key].append({
+            'categoria': p.categoria or '',
+            'producto': p.producto or '',
+            'descripcion': p.descripcion or '',
+            'cantidad': cantidad,
+            'monto': monto,
+            'item_presupuestario': (p.item_presupuestario or '').strip(),
+        })
+
+    resultado = []
+    for f in fscs:
+        tipo = fsc_tipo[f.id]
+        key = (f.folio, f.anho, tipo)
+        try:
+            monto_est = float(f.monto_estimado) if f.monto_estimado else 0.0
+        except (ValueError, TypeError):
+            monto_est = 0.0
+        resultado.append({
+            'id': f.id,
+            'folio': f.folio,
+            'anho': f.anho,
+            'fecha_solicitud': str(f.fecha_solicitud) if f.fecha_solicitud else None,
+            'estado': f.estado or '',
+            'unidad_requirente': f.unidad_requirente or '',
+            'usuario_requirente': f.usuario_requirente or '',
+            'monto_estimado': monto_est,
+            'requerimiento': f.requerimiento or '',
+            'productos': productos_map.get(key, []),
+        })
+
+    return resultado

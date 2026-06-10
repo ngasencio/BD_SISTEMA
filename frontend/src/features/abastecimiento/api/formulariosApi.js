@@ -9,6 +9,8 @@ export const getFormulariosProductos = (params = {}) => apiClient.get('formulari
 
 export const getFormulariosAlertas      = (params = {}) => apiClient.get('formularios/alertas/', { params });
 export const getFormulariosUnificacion  = (params = {}) => apiClient.get('formularios/unificacion/', { params });
+export const getFormulariosHistorial    = (params = {}) => apiClient.get('formularios/historial/', { params });
+export const getFormularioById          = (id)          => apiClient.get(`formularios-fsc/${id}/`);
 
 export const iniciarActualizacionFormularios  = (credenciales)  => apiClient.post('formularios/actualizar/', credenciales);
 export const estadoActualizacionFormularios   = (taskId)        => apiClient.get(`formularios/actualizar-estado/${taskId}/`);

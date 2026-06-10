@@ -30,7 +30,7 @@ from .views import (
     FormularioFSCViewSet, FormularioFSCDerivadoViewSet, FormularioFSCProductoViewSet,
     iniciar_actualizacion_formularios, estado_actualizacion_formularios,
     cancelar_actualizacion_formularios, formularios_stats_view, formularios_flujo_view,
-    formularios_alertas_view, formularios_unificacion_view,
+    formularios_alertas_view, formularios_unificacion_view, formularios_historial_view,
 )
 
 router = DefaultRouter()
@@ -140,6 +140,7 @@ urlpatterns = [
     path('formularios/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_formularios, name='cancelar_actualizacion_formularios'),
     path('formularios/alertas/', formularios_alertas_view, name='formularios_alertas'),
     path('formularios/unificacion/', formularios_unificacion_view, name='formularios_unificacion'),
+    path('formularios/historial/', formularios_historial_view, name='formularios_historial'),
 
     # Router ViewSets
     path('', include(router.urls)),

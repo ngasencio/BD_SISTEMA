@@ -2646,6 +2646,23 @@ def formularios_unificacion_view(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def formularios_historial_view(request):
+    """Historial de productos solicitados por unidad — excluye R y P."""
+    from .services import calcular_formularios_historial
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    unidad = request.GET.get('unidad_requirente', '').strip() or None
+    usuario = request.GET.get('usuario_requirente', '').strip() or None
+    cache_key = f'formularios_historial_{anho_int or "todos"}_{unidad or ""}_{usuario or ""}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_formularios_historial(anho=anho_int, unidad_requirente=unidad, usuario_requirente=usuario)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def formularios_stats_view(request):
     from .services import calcular_formularios_stats
     anho = request.GET.get("anho", "").strip()

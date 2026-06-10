@@ -4,7 +4,8 @@ import * as d3 from 'd3';
 import {
     getFormulariosStats, getFormulariosFlujo,
     getFormularios, getFormulariosDerivados, getFormulariosProductos,
-    getFormulariosAlertas, getFormulariosUnificacion,
+    getFormulariosAlertas, getFormulariosUnificacion, getFormulariosHistorial,
+    getFormularioById,
     iniciarActualizacionFormularios, estadoActualizacionFormularios, cancelarActualizacionFormularios,
 } from '../api/formulariosApi';
 import { KpiCard } from './KpiCard';
@@ -366,7 +367,12 @@ function ProductosDelFormulario({ folio, anho, formularioTexto }) {
                         <td style={{ padding: '7px 10px', maxWidth: 260, fontSize: 12, color: '#374151' }}><div className="truncate-text" title={p.descripcion}>{p.descripcion || '—'}</div></td>
                         <td style={{ padding: '7px 10px', textAlign: 'right', fontSize: 12, color: '#374151' }}>{fmtN(p.cantidad)}</td>
                         <td style={{ padding: '7px 10px', textAlign: 'right', fontSize: 12, color: '#374151' }}>{fmtCLP(p.monto)}</td>
-                        <td style={{ padding: '7px 10px', fontSize: 12, color: '#374151' }}>{p.item_presupuestario || '—'}</td>
+                        <td style={{ padding: '7px 10px', fontSize: 12 }}>
+                            {p.item_presupuestario
+                                ? <span style={{ color:'#374151' }}>{p.item_presupuestario}</span>
+                                : <span style={{ color:'#f97316', fontSize:11, fontWeight:600, background:'#fff7ed', padding:'1px 7px', borderRadius:10, border:'1px solid #fed7aa' }}>⚠️ Sin ítem</span>
+                            }
+                        </td>
                     </tr>
                 ))}
             </tbody>
@@ -379,6 +385,210 @@ function ProductosDelFormulario({ folio, anho, formularioTexto }) {
 function ModalDocumento({ formulario, onCerrar }) {
     if (!formulario) return null;
     const info = ESTADO_FSC_INFO[formulario.estado] || { nombre: formulario.estado || 'Sin estado', color: '#94a3b8' };
+    const [imprimiendo, setImprimiendo] = useState(false);
+
+    const handlePrint = async () => {
+        setImprimiendo(true);
+        let productos = [];
+        try {
+            const params = { folio: formulario.folio, anho: formulario.anho };
+            const tipo = parseTipoFormulario(formulario.formulario);
+            if (tipo) params.tipo_formulario = tipo;
+            const { data } = await getFormulariosProductos(params);
+            productos = data.results ?? data;
+        } catch (_) { /* imprimir sin productos */ }
+
+        const fmtMoneda = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
+        const fmtNum = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
+        const esc = (str) => String(str ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const estadoInfo = ESTADO_FSC_INFO[formulario.estado] || { nombre: formulario.estado || 'Sin estado', color: '#94a3b8' };
+
+        const campo = (label, value, opts = {}) => {
+            if (!value && value !== 0) return '';
+            return `<div class="campo${opts.span2 ? ' span2' : ''}">
+                <label>${esc(label)}</label>
+                <span class="valor${opts.mono ? ' mono' : ''}">${esc(String(value))}</span>
+            </div>`;
+        };
+
+        const adjuntos = [
+            { key: 'adj_espec_tecnicas',     label: 'Espec. Técnicas' },
+            { key: 'adj_cotizacion',         label: 'Cotización' },
+            { key: 'adj_validacion',         label: 'Validación' },
+            { key: 'adj_form_justificacion', label: 'Form. Justificación' },
+        ];
+        const adjHtml = adjuntos.map(({ key, label }) =>
+            formulario[key]
+                ? `<div class="adj-item adj-ok">&#128206; <a href="${esc(formulario[key])}" target="_blank">${esc(label)}</a></div>`
+                : `<div class="adj-item adj-no">&#8212; ${esc(label)}</div>`
+        ).join('');
+
+        const productosHtml = productos.length === 0
+            ? '<p class="sin-datos">Sin productos registrados en el carro.</p>'
+            : `<table>
+                <thead><tr>
+                    <th>Categoría</th><th>Producto</th><th>Descripción</th>
+                    <th class="right">Cantidad</th><th class="right">Monto</th><th>Ítem Presupuestario</th>
+                </tr></thead>
+                <tbody>
+                    ${productos.map(p => `<tr>
+                        <td>${esc(p.categoria)}</td>
+                        <td>${esc(p.producto)}</td>
+                        <td>${esc(p.descripcion)}</td>
+                        <td class="right">${fmtNum(p.cantidad)}</td>
+                        <td class="right">${fmtMoneda(p.monto)}</td>
+                        <td>${esc(p.item_presupuestario)}</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>`;
+
+        const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>FSC · ${esc(formulario.id_formulario || `Folio ${formulario.folio}`)}</title>
+<style>
+  @page { size: A4 portrait; margin: 18mm 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #1e293b; margin: 0; }
+  /* ─── Cabecera ─── */
+  .header { text-align: center; border-bottom: 3px solid #7c3aed; padding-bottom: 14px; margin-bottom: 18px; }
+  .header .org { font-size: 9pt; color: #64748b; margin: 0 0 4px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .header h1 { font-size: 15pt; color: #7c3aed; margin: 6px 0; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+  .header-meta { display: flex; justify-content: center; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .folio-badge { font-family: monospace; font-size: 14pt; font-weight: 700; color: #7c3aed; background: #ede9fe; border: 2px solid #c4b5fd; padding: 3px 16px; border-radius: 4px; }
+  .estado-badge { font-size: 10pt; font-weight: 700; padding: 3px 14px; border-radius: 20px; }
+  .destino-badge { font-size: 9.5pt; color: #7c3aed; background: #f5f3ff; border: 1px solid #c4b5fd; padding: 2px 12px; border-radius: 20px; }
+  /* ─── Secciones ─── */
+  section { margin-bottom: 16px; }
+  .section-title { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #7c3aed; border-bottom: 2px solid #ede9fe; padding-bottom: 5px; margin-bottom: 10px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 20px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 20px; }
+  .campo { display: flex; flex-direction: column; gap: 2px; }
+  .campo.span2 { grid-column: span 2; }
+  .campo label { font-size: 7.5pt; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+  .campo .valor { font-size: 11pt; color: #1e293b; }
+  .campo .valor.mono { font-family: monospace; font-weight: 700; }
+  /* ─── Bloques de texto ─── */
+  p.texto-box { font-size: 10.5pt; color: #374151; line-height: 1.6; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 9px 12px; white-space: pre-wrap; word-break: break-word; margin: 0; }
+  p.green-box  { border-left: 3px solid #16a34a; background: #f0fdf4; }
+  p.yellow-box { border-left: 3px solid #f59e0b; background: #fffbeb; }
+  .plan-id { font-family: monospace; font-size: 12pt; font-weight: 700; color: #15803d; background: #f0fdf4; border: 1px solid #86efac; padding: 3px 12px; border-radius: 4px; display: inline-block; }
+  .plan-sin-id-title { font-size: 9pt; color: #f59e0b; font-weight: 700; margin: 0 0 6px; }
+  /* ─── Adjuntos ─── */
+  .adj-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .adj-item { padding: 7px 12px; border-radius: 6px; font-size: 10pt; }
+  .adj-ok { background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; }
+  .adj-ok a { color: #0369a1; text-decoration: none; }
+  .adj-no { background: #f8fafc; border: 1px dashed #e2e8f0; color: #94a3b8; }
+  /* ─── Tabla productos ─── */
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; page-break-inside: auto; }
+  thead { display: table-header-group; }
+  th { background: #7c3aed; color: #fff; padding: 7px 10px; text-align: left; font-size: 8.5pt; font-weight: 700; }
+  td { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; color: #374151; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .right { text-align: right; }
+  /* ─── Pie de página ─── */
+  .footer-print { margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 8px; font-size: 8pt; color: #94a3b8; display: flex; justify-content: space-between; }
+  .sin-datos { color: #94a3b8; font-size: 10pt; margin: 0; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <p class="org">Servicio de Salud Osorno — Organismo 7296</p>
+  <h1>Formulario de Solicitud de Compra (FSC)</h1>
+  <div class="header-meta">
+    <span class="folio-badge">${esc(formulario.id_formulario || `Folio ${formulario.folio}`)}</span>
+    <span class="estado-badge" style="background:${estadoInfo.color}20;color:${estadoInfo.color};border:1px solid ${estadoInfo.color}50">
+      ${esc(formulario.estado || '—')} · ${esc(estadoInfo.nombre)}
+    </span>
+    ${formulario.destino_actual ? `<span class="destino-badge">👤 ${esc(formulario.destino_actual)}</span>` : ''}
+  </div>
+</div>
+
+<section>
+  <div class="section-title">Identificación</div>
+  <div class="grid-3">
+    ${campo('Folio', formulario.folio, { mono: true })}
+    ${campo('Año', formulario.anho)}
+    ${campo('Bandeja Actual', estadoInfo.nombre)}
+    ${campo('Fecha Solicitud', formulario.fecha_solicitud)}
+    ${campo('Fecha Entrega', formulario.fecha_entrega)}
+    ${campo('Monto Estimado', fmtMoneda(formulario.monto_estimado))}
+    ${formulario.destino_actual ? campo('Actualmente en bandeja de', formulario.destino_actual, { span2: true }) : ''}
+    ${formulario.item_presupuestario ? campo('Ítem Presupuestario', formulario.item_presupuestario) : ''}
+    ${formulario.folio_requerimiento ? campo('Folio Requerimiento', formulario.folio_requerimiento, { mono: true }) : ''}
+  </div>
+</section>
+
+<section>
+  <div class="section-title">Solicitante</div>
+  <div class="grid-2">
+    ${campo('Unidad Requirente', formulario.unidad_requirente)}
+    ${campo('Usuario Requirente', formulario.usuario_requirente)}
+    ${campo('Encargado', formulario.encargado)}
+    ${campo('Jefe', formulario.jefe)}
+    ${campo('Anexo', formulario.anexo)}
+    ${campo('Correo', formulario.correo)}
+  </div>
+</section>
+
+${formulario.requerimiento ? `
+<section>
+  <div class="section-title">Nombre de la Compra</div>
+  <p class="texto-box green-box">${esc(formulario.requerimiento)}</p>
+</section>` : ''}
+
+${formulario.objetivo_compra ? `
+<section>
+  <div class="section-title">Objetivo de Compra</div>
+  <p class="texto-box">${esc(formulario.objetivo_compra)}</p>
+</section>` : ''}
+
+${formulario.especificaciones_tecnicas ? `
+<section>
+  <div class="section-title">Especificaciones Técnicas</div>
+  <p class="texto-box">${esc(formulario.especificaciones_tecnicas)}</p>
+</section>` : ''}
+
+<section>
+  <div class="section-title">Plan de Compras</div>
+  ${formulario.id_plan
+    ? `<span class="plan-id">${esc(formulario.id_plan)}</span>`
+    : `<p class="plan-sin-id-title">Sin ID de Plan — Justificación:</p>
+       <p class="texto-box yellow-box">${esc(formulario.justificacion || '—')}</p>`}
+</section>
+
+<section>
+  <div class="section-title">Archivos Adjuntos</div>
+  <div class="adj-grid">${adjHtml}</div>
+</section>
+
+<section>
+  <div class="section-title">Carro de Productos</div>
+  ${productosHtml}
+</section>
+
+<div class="footer-print">
+  <span>Servicio de Salud Osorno — Sistema de Gestión BD SSO</span>
+  <span>Impreso: ${new Date().toLocaleString('es-CL')}</span>
+</div>
+
+</body>
+</html>`;
+
+        const win = window.open('', '_blank', 'width=950,height=780');
+        if (win) {
+            win.document.write(html);
+            win.document.close();
+            win.focus();
+            setTimeout(() => { win.print(); setImprimiendo(false); }, 600);
+        } else {
+            setImprimiendo(false);
+        }
+    };
 
     const Campo = ({ label, value, mono, span2 }) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, ...(span2 ? { gridColumn: 'span 2' } : {}) }}>
@@ -562,7 +772,21 @@ function ModalDocumento({ formulario, onCerrar }) {
                 </div>
 
                 {/* Footer */}
-                <div style={{ padding: '14px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ padding: '14px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <button
+                        onClick={handlePrint}
+                        disabled={imprimiendo}
+                        style={{
+                            padding: '8px 18px', background: imprimiendo ? '#f1f5f9' : '#f5f3ff',
+                            color: imprimiendo ? '#94a3b8' : '#7c3aed',
+                            border: '1px solid', borderColor: imprimiendo ? '#e2e8f0' : '#c4b5fd',
+                            borderRadius: 8, cursor: imprimiendo ? 'not-allowed' : 'pointer',
+                            fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 7,
+                            transition: 'all 0.15s',
+                        }}
+                    >
+                        {imprimiendo ? '⏳ Preparando…' : '🖨️ Imprimir ficha'}
+                    </button>
                     <button onClick={onCerrar} style={{ padding: '8px 20px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                         Cerrar
                     </button>
@@ -2462,11 +2686,829 @@ function TabUnificacion({ anioSeleccionado }) {
     );
 }
 
+// ─── Tab Historial de Compras ─────────────────────────────────────────────────
+
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function KpiMini({ label, valor, color, fmt }) {
+    const v = fmt === 'clp' ? fmtCLP(valor) : fmtN(valor);
+    return (
+        <div style={{ padding: '10px 16px', borderRadius: 10, background: color + '12', border: `1px solid ${color}30`, minWidth: 120 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1.1 }}>{v}</div>
+            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 3 }}>{label}</div>
+        </div>
+    );
+}
+
+// Sub-tab A — Pivote ítem × mes
+// ─── Drawer: Ficha FSC lateral derecho ──────────────────────────────────────
+function DrawerFormularioDetalle({ id, onCerrar }) {
+    const [formulario, setFormulario]   = useState(null);
+    const [cargando, setCargando]       = useState(false);
+    const [error, setError]             = useState(null);
+    const [imprimiendo, setImprimiendo] = useState(false);
+
+    useEffect(() => {
+        if (!id) return;
+        let activo = true;
+        setCargando(true);
+        setError(null);
+        setFormulario(null);
+        getFormularioById(id)
+            .then(({ data }) => { if (activo) setFormulario(data); })
+            .catch(() => { if (activo) setError('No se pudo cargar el formulario.'); })
+            .finally(() => { if (activo) setCargando(false); });
+        return () => { activo = false; };
+    }, [id]);
+
+    if (!id) return null;
+
+    const Campo = ({ label, value, mono, span2 }) => (
+        <div style={{ display:'flex', flexDirection:'column', gap:2, ...(span2 ? { gridColumn:'span 2' } : {}) }}>
+            <span style={{ fontSize:10, fontWeight:600, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>{label}</span>
+            <span style={{ fontSize:13, color:'#1e293b', fontFamily: mono?'monospace':'inherit', fontWeight: mono?600:400 }}>
+                {value || '—'}
+            </span>
+        </div>
+    );
+
+    const SeccionTitulo = ({ children }) => (
+        <div style={{ fontSize:11, fontWeight:700, color:'#7c3aed', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:12, paddingBottom:6, borderBottom:'2px solid #ede9fe' }}>
+            {children}
+        </div>
+    );
+
+    const handlePrint = async () => {
+        if (!formulario) return;
+        setImprimiendo(true);
+        let productos = [];
+        try {
+            const params = { folio: formulario.folio, anho: formulario.anho };
+            const tipo = parseTipoFormulario(formulario.formulario);
+            if (tipo) params.tipo_formulario = tipo;
+            const { data } = await getFormulariosProductos(params);
+            productos = data.results ?? data;
+        } catch (_) {}
+        const fmtMoneda = (n) => new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(n ?? 0);
+        const fmtNum    = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
+        const esc       = (str) => String(str ?? '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const estadoInfo = ESTADO_FSC_INFO[formulario.estado] || { nombre: formulario.estado || 'Sin estado', color:'#94a3b8' };
+        const campo = (label, value, opts = {}) => {
+            if (!value && value !== 0) return '';
+            return `<div class="campo${opts.span2?' span2':''}"><label>${esc(label)}</label><span class="valor${opts.mono?' mono':''}">${esc(String(value))}</span></div>`;
+        };
+        const adjuntos = [
+            { key:'adj_espec_tecnicas', label:'Espec. Técnicas' },
+            { key:'adj_cotizacion', label:'Cotización' },
+            { key:'adj_validacion', label:'Validación' },
+            { key:'adj_form_justificacion', label:'Form. Justificación' },
+        ];
+        const adjHtml = adjuntos.map(({ key, label }) =>
+            formulario[key]
+                ? `<div class="adj-item adj-ok">&#128206; <a href="${esc(formulario[key])}" target="_blank">${esc(label)}</a></div>`
+                : `<div class="adj-item adj-no">&#8212; ${esc(label)}</div>`
+        ).join('');
+        const productosHtml = productos.length === 0
+            ? '<p class="sin-datos">Sin productos registrados en el carro.</p>'
+            : `<table><thead><tr><th>Categoría</th><th>Producto</th><th>Descripción</th><th class="right">Cantidad</th><th class="right">Monto</th><th>Ítem Presupuestario</th></tr></thead><tbody>
+                ${productos.map(p => `<tr><td>${esc(p.categoria)}</td><td>${esc(p.producto)}</td><td>${esc(p.descripcion)}</td><td class="right">${fmtNum(p.cantidad)}</td><td class="right">${fmtMoneda(p.monto)}</td><td>${esc(p.item_presupuestario)}</td></tr>`).join('')}
+               </tbody></table>`;
+        const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>FSC · ${esc(formulario.id_formulario || `Folio ${formulario.folio}`)}</title>
+<style>
+  @page{size:A4 portrait;margin:18mm 15mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11pt;color:#1e293b;margin:0}
+  .header{text-align:center;border-bottom:3px solid #7c3aed;padding-bottom:14px;margin-bottom:18px}.header .org{font-size:9pt;color:#64748b;margin:0 0 4px;text-transform:uppercase}.header h1{font-size:15pt;color:#7c3aed;margin:6px 0;font-weight:800;text-transform:uppercase}
+  .header-meta{display:flex;justify-content:center;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px}.folio-badge{font-family:monospace;font-size:14pt;font-weight:700;color:#7c3aed;background:#ede9fe;border:2px solid #c4b5fd;padding:3px 16px;border-radius:4px}.estado-badge{font-size:10pt;font-weight:700;padding:3px 14px;border-radius:20px}.destino-badge{font-size:9.5pt;color:#7c3aed;background:#f5f3ff;border:1px solid #c4b5fd;padding:2px 12px;border-radius:20px}
+  section{margin-bottom:16px}.section-title{font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#7c3aed;border-bottom:2px solid #ede9fe;padding-bottom:5px;margin-bottom:10px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 20px}.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 20px}
+  .campo{display:flex;flex-direction:column;gap:2px}.campo.span2{grid-column:span 2}.campo label{font-size:7.5pt;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em}.campo .valor{font-size:11pt;color:#1e293b}.campo .valor.mono{font-family:monospace;font-weight:700}
+  p.texto-box{font-size:10.5pt;color:#374151;line-height:1.6;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:9px 12px;white-space:pre-wrap;word-break:break-word;margin:0}p.green-box{border-left:3px solid #16a34a;background:#f0fdf4}p.yellow-box{border-left:3px solid #f59e0b;background:#fffbeb}
+  .plan-id{font-family:monospace;font-size:12pt;font-weight:700;color:#15803d;background:#f0fdf4;border:1px solid #86efac;padding:3px 12px;border-radius:4px;display:inline-block}.plan-sin-id-title{font-size:9pt;color:#f59e0b;font-weight:700;margin:0 0 6px}
+  .adj-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.adj-item{padding:7px 12px;border-radius:6px;font-size:10pt}.adj-ok{background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1}.adj-ok a{color:#0369a1;text-decoration:none}.adj-no{background:#f8fafc;border:1px dashed #e2e8f0;color:#94a3b8}
+  table{width:100%;border-collapse:collapse;font-size:9.5pt}thead{display:table-header-group}th{background:#7c3aed;color:#fff;padding:7px 10px;text-align:left;font-size:8.5pt;font-weight:700}td{padding:6px 10px;border-bottom:1px solid #e2e8f0;color:#374151;vertical-align:top}tr:nth-child(even) td{background:#f8fafc}.right{text-align:right}
+  .footer-print{margin-top:20px;border-top:1px solid #e2e8f0;padding-top:8px;font-size:8pt;color:#94a3b8;display:flex;justify-content:space-between}.sin-datos{color:#94a3b8;font-size:10pt;margin:0}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="header"><p class="org">Servicio de Salud Osorno — Organismo 7296</p><h1>Formulario de Solicitud de Compra (FSC)</h1>
+<div class="header-meta"><span class="folio-badge">${esc(formulario.id_formulario || `Folio ${formulario.folio}`)}</span>
+<span class="estado-badge" style="background:${estadoInfo.color}20;color:${estadoInfo.color};border:1px solid ${estadoInfo.color}50">${esc(formulario.estado||'—')} · ${esc(estadoInfo.nombre)}</span>
+${formulario.destino_actual ? `<span class="destino-badge">👤 ${esc(formulario.destino_actual)}</span>` : ''}</div></div>
+<section><div class="section-title">Identificación</div><div class="grid-3">
+${campo('Folio',formulario.folio,{mono:true})}${campo('Año',formulario.anho)}${campo('Bandeja Actual',estadoInfo.nombre)}
+${campo('Fecha Solicitud',formulario.fecha_solicitud)}${campo('Fecha Entrega',formulario.fecha_entrega)}${campo('Monto Estimado',fmtMoneda(formulario.monto_estimado))}
+${formulario.destino_actual?campo('Actualmente en bandeja de',formulario.destino_actual,{span2:true}):''}
+${formulario.item_presupuestario?campo('Ítem Presupuestario',formulario.item_presupuestario):''}
+${formulario.folio_requerimiento?campo('Folio Requerimiento',formulario.folio_requerimiento,{mono:true}):''}
+</div></section>
+<section><div class="section-title">Solicitante</div><div class="grid-2">
+${campo('Unidad Requirente',formulario.unidad_requirente)}${campo('Usuario Requirente',formulario.usuario_requirente)}
+${campo('Encargado',formulario.encargado)}${campo('Jefe',formulario.jefe)}${campo('Anexo',formulario.anexo)}${campo('Correo',formulario.correo)}
+</div></section>
+${formulario.requerimiento?`<section><div class="section-title">Nombre de la Compra</div><p class="texto-box green-box">${esc(formulario.requerimiento)}</p></section>`:''}
+${formulario.objetivo_compra?`<section><div class="section-title">Objetivo de Compra</div><p class="texto-box">${esc(formulario.objetivo_compra)}</p></section>`:''}
+${formulario.especificaciones_tecnicas?`<section><div class="section-title">Especificaciones Técnicas</div><p class="texto-box">${esc(formulario.especificaciones_tecnicas)}</p></section>`:''}
+<section><div class="section-title">Plan de Compras</div>
+${formulario.id_plan?`<span class="plan-id">${esc(formulario.id_plan)}</span>`:`<p class="plan-sin-id-title">Sin ID de Plan — Justificación:</p><p class="texto-box yellow-box">${esc(formulario.justificacion||'—')}</p>`}
+</section>
+<section><div class="section-title">Archivos Adjuntos</div><div class="adj-grid">${adjHtml}</div></section>
+<section><div class="section-title">Carro de Productos</div>${productosHtml}</section>
+<div class="footer-print"><span>Servicio de Salud Osorno — Sistema de Gestión BD SSO</span><span>Impreso: ${new Date().toLocaleString('es-CL')}</span></div>
+</body></html>`;
+        const win = window.open('', '_blank', 'width=950,height=780');
+        if (win) {
+            win.document.write(html);
+            win.document.close();
+            win.focus();
+            setTimeout(() => { win.print(); setImprimiendo(false); }, 600);
+        } else { setImprimiendo(false); }
+    };
+
+    const adjuntos = [
+        { key:'adj_espec_tecnicas', label:'📎 Espec. Técnicas' },
+        { key:'adj_cotizacion', label:'📎 Cotización' },
+        { key:'adj_validacion', label:'📎 Validación' },
+        { key:'adj_form_justificacion', label:'📎 Form. Justificación' },
+    ];
+
+    return (
+        <div style={{ position:'fixed', top:0, right:0, bottom:0, width:720, zIndex:1300, background:'#fff', boxShadow:'-8px 0 40px rgba(0,0,0,0.18)', display:'flex', flexDirection:'column', borderLeft:'3px solid #7c3aed' }}>
+            {/* Header */}
+            <div style={{ padding:'18px 24px 14px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16, flexShrink:0 }}>
+                <div>
+                    {formulario && (
+                        <>
+                            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:6 }}>
+                                <span style={{ fontSize:16, fontWeight:700, color:'#1e293b', fontFamily:'monospace' }}>
+                                    {formulario.id_formulario || `Folio ${formulario.folio}`}
+                                </span>
+                                <EstadoFSCBadge codigo={formulario.estado} />
+                                {formulario.destino_actual && (
+                                    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:600, background:'#f5f3ff', border:'1px solid #c4b5fd', color:'#7c3aed' }}>
+                                        👤 {formulario.destino_actual}
+                                    </span>
+                                )}
+                            </div>
+                            <div style={{ fontSize:12, color:'#64748b' }}>{formulario.formulario || 'Formulario de Solicitud de Compra'}</div>
+                        </>
+                    )}
+                    {cargando && <div style={{ fontSize:13, color:'#64748b' }}>Cargando ficha…</div>}
+                    {error && <div style={{ fontSize:13, color:'#dc2626' }}>{error}</div>}
+                </div>
+                <button onClick={onCerrar} style={{ background:'#f1f5f9', border:'none', borderRadius:8, width:32, height:32, cursor:'pointer', fontSize:16, color:'#64748b', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+            </div>
+
+            {/* Cuerpo scrollable */}
+            {formulario && (
+                <div style={{ overflowY:'auto', padding:'20px 24px', display:'flex', flexDirection:'column', gap:20, flex:1 }}>
+                    <section>
+                        <SeccionTitulo>Identificación</SeccionTitulo>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px 20px' }}>
+                            <Campo label="Folio" value={formulario.folio} mono />
+                            <Campo label="Año" value={formulario.anho} />
+                            <Campo label="Bandeja actual" value={(ESTADO_FSC_INFO[formulario.estado] || {}).nombre || formulario.estado} />
+                            <Campo label="Fecha Solicitud" value={formulario.fecha_solicitud} />
+                            <Campo label="Fecha Entrega" value={formulario.fecha_entrega} />
+                            <Campo label="Monto Estimado" value={fmtCLP(formulario.monto_estimado)} />
+                            {formulario.destino_actual && <Campo label="Actualmente en bandeja de" value={formulario.destino_actual} span2 />}
+                            {formulario.item_presupuestario && <Campo label="Ítem Presupuestario" value={formulario.item_presupuestario} />}
+                            {formulario.folio_requerimiento && <Campo label="Folio Requerimiento" value={formulario.folio_requerimiento} mono />}
+                        </div>
+                    </section>
+                    <section>
+                        <SeccionTitulo>Solicitante</SeccionTitulo>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'14px 20px' }}>
+                            <Campo label="Unidad Requirente" value={formulario.unidad_requirente} />
+                            <Campo label="Usuario Requirente" value={formulario.usuario_requirente} />
+                            <Campo label="Encargado" value={formulario.encargado} />
+                            <Campo label="Jefe" value={formulario.jefe} />
+                            <Campo label="Anexo" value={formulario.anexo} />
+                            <Campo label="Correo" value={formulario.correo} />
+                        </div>
+                    </section>
+                    {formulario.requerimiento && (
+                        <section>
+                            <SeccionTitulo>Nombre de la Compra</SeccionTitulo>
+                            <p style={{ fontSize:13, color:'#1e293b', lineHeight:1.6, margin:0, background:'#f0fdf4', borderRadius:8, padding:'10px 14px', borderLeft:'3px solid #16a34a', fontWeight:500 }}>
+                                {formulario.requerimiento}
+                            </p>
+                        </section>
+                    )}
+                    {formulario.objetivo_compra && (
+                        <section>
+                            <SeccionTitulo>Objetivo de Compra</SeccionTitulo>
+                            <p style={{ fontSize:13, color:'#374151', lineHeight:1.6, margin:0, background:'#f8fafc', borderRadius:8, padding:'10px 14px' }}>
+                                {formulario.objetivo_compra}
+                            </p>
+                        </section>
+                    )}
+                    {formulario.especificaciones_tecnicas && (
+                        <section>
+                            <SeccionTitulo>Especificaciones Técnicas</SeccionTitulo>
+                            <p style={{ fontSize:13, color:'#374151', lineHeight:1.6, margin:0, background:'#f8fafc', borderRadius:8, padding:'10px 14px', whiteSpace:'pre-wrap' }}>
+                                {formulario.especificaciones_tecnicas}
+                            </p>
+                        </section>
+                    )}
+                    <section>
+                        <SeccionTitulo>Plan de Compras</SeccionTitulo>
+                        {formulario.id_plan ? (
+                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                <span style={{ fontSize:11, fontWeight:600, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>ID Plan:</span>
+                                <span style={{ fontSize:13, fontFamily:'monospace', color:'#16a34a', fontWeight:700, background:'#f0fdf4', padding:'2px 10px', borderRadius:6 }}>{formulario.id_plan}</span>
+                            </div>
+                        ) : (
+                            <div>
+                                <span style={{ fontSize:11, fontWeight:600, color:'#f59e0b', marginBottom:6, display:'block' }}>Sin ID de Plan — Justificación:</span>
+                                <p style={{ fontSize:13, color:'#374151', lineHeight:1.6, margin:0, background:'#fffbeb', borderRadius:8, padding:'10px 14px', borderLeft:'3px solid #f59e0b' }}>
+                                    {formulario.justificacion || '—'}
+                                </p>
+                            </div>
+                        )}
+                    </section>
+                    <section>
+                        <SeccionTitulo>Archivos Adjuntos</SeccionTitulo>
+                        {adjuntos.some(a => formulario[a.key]) ? (
+                            <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:10 }}>
+                                {adjuntos.map(({ key, label }) => formulario[key] ? (
+                                    <a key={key} href={formulario[key]} target="_blank" rel="noopener noreferrer"
+                                        style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', borderRadius:8, background:'#f0f9ff', border:'1px solid #bae6fd', color:'#0369a1', fontSize:12, fontWeight:600, textDecoration:'none' }}>
+                                        {label}
+                                    </a>
+                                ) : (
+                                    <div key={key} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', borderRadius:8, background:'#f8fafc', border:'1px dashed #e2e8f0', color:'#94a3b8', fontSize:12 }}>
+                                        {label.replace('📎','—')}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p style={{ fontSize:13, color:'#94a3b8', margin:0 }}>Sin archivos adjuntos registrados.</p>
+                        )}
+                    </section>
+                    <section>
+                        <SeccionTitulo>Carro de Productos</SeccionTitulo>
+                        <ProductosDelFormulario folio={formulario.folio} anho={formulario.anho} formularioTexto={formulario.formulario} />
+                    </section>
+                </div>
+            )}
+
+            {/* Footer */}
+            {formulario && (
+                <div style={{ padding:'14px 24px', borderTop:'1px solid #e2e8f0', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+                    <button onClick={handlePrint} disabled={imprimiendo} style={{ padding:'8px 18px', background: imprimiendo?'#f1f5f9':'#f5f3ff', color: imprimiendo?'#94a3b8':'#7c3aed', border:'1px solid', borderColor: imprimiendo?'#e2e8f0':'#c4b5fd', borderRadius:8, cursor: imprimiendo?'not-allowed':'pointer', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:7 }}>
+                        {imprimiendo ? '⏳ Preparando…' : '🖨️ Imprimir ficha'}
+                    </button>
+                    <button onClick={onCerrar} style={{ padding:'8px 18px', background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:600 }}>
+                        Cerrar
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Sub-tab A — Distribución Anual (pivot mapa de calor) ────────────────────
+function SubTabPivote({ datos, onVerFSC }) {
+    const [agruparPor, setAgruparPor]         = useState('item');
+    const [metrica, setMetrica]               = useState('monto');
+    const [celdaExpandida, setCeldaExpandida] = useState(null);
+
+    // Base pivot: structural data independent of metrica
+    const pivotBase = useMemo(() => {
+        const map = {};
+        datos.forEach(fsc => {
+            const partes = (fsc.fecha_solicitud || '').split('-');
+            const mes = partes.length === 3 ? parseInt(partes[1], 10) - 1 : null;
+            if (mes === null || mes < 0 || mes > 11) return;
+            fsc.productos.forEach(p => {
+                const rowKey = agruparPor === 'item'      ? (p.item_presupuestario || '(Sin ítem)')
+                             : agruparPor === 'categoria' ? (p.categoria || '(Sin categoría)')
+                             :                              (p.producto || '(Sin nombre)');
+                if (!map[rowKey]) map[rowKey] = {
+                    key: rowKey,
+                    meses_monto:    Array(12).fill(0),
+                    meses_cantidad: Array(12).fill(0),
+                    meses_count:    Array(12).fill(0),
+                    meses_fscs: Array.from({ length: 12 }, () => new Map()),
+                    total_monto: 0, total_cantidad: 0, total_count: 0,
+                };
+                map[rowKey].meses_monto[mes]    += p.monto    ?? 0;
+                map[rowKey].meses_cantidad[mes] += p.cantidad ?? 0;
+                map[rowKey].meses_count[mes]    += 1;
+                map[rowKey].total_monto    += p.monto    ?? 0;
+                map[rowKey].total_cantidad += p.cantidad ?? 0;
+                map[rowKey].total_count    += 1;
+                if (!map[rowKey].meses_fscs[mes].has(fsc.id)) {
+                    map[rowKey].meses_fscs[mes].set(fsc.id, {
+                        id: fsc.id, folio: fsc.folio, anho: fsc.anho,
+                        estado: fsc.estado, unidad: fsc.unidad_requirente,
+                        usuario: fsc.usuario_requirente, fecha: fsc.fecha_solicitud,
+                    });
+                }
+            });
+        });
+        return Object.values(map).sort((a, b) => b.total_monto - a.total_monto);
+    }, [datos, agruparPor]);
+
+    // Display pivot: adds meses[] based on current metrica
+    const pivot = useMemo(() => pivotBase.map(row => ({
+        ...row,
+        meses: metrica === 'monto'    ? row.meses_monto
+             : metrica === 'cantidad' ? row.meses_cantidad
+             :                          row.meses_count,
+    })), [pivotBase, metrica]);
+
+    useEffect(() => { setCeldaExpandida(null); }, [pivotBase]);
+
+    const maxCell = useMemo(() => Math.max(...pivot.flatMap(r => r.meses), 1), [pivot]);
+    const cellBg  = (val, isActive) => {
+        if (isActive) return '#ede9fe';
+        if (!val) return 'transparent';
+        const t = val / maxCell;
+        return `rgba(124,58,237,${(0.08 + t * 0.65).toFixed(2)})`;
+    };
+    const cellTxt = (val) => {
+        if (!val) return null;
+        if (metrica === 'monto') return val >= 1_000_000 ? `${(val/1_000_000).toFixed(1)}M` : val >= 1_000 ? `${(val/1_000).toFixed(0)}K` : fmtN(val);
+        return fmtN(val);
+    };
+    const totalFmt = (r) => metrica === 'monto' ? fmtCLP(r.total_monto) : metrica === 'cantidad' ? fmtN(r.total_cantidad) : fmtN(r.total_count);
+
+    const handleCeldaClick = (rowKey, mesIdx, val) => {
+        if (!val) return;
+        setCeldaExpandida(old => (old?.rowKey === rowKey && old?.mesIdx === mesIdx) ? null : { rowKey, mesIdx });
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Agrupar por:</span>
+                {[{ id:'item', label:'Ítem Presupuestario' },{ id:'categoria', label:'Categoría' },{ id:'producto', label:'Producto' }].map(o => (
+                    <FiltroChip key={o.id} activo={agruparPor === o.id} color="#7c3aed" onClick={() => setAgruparPor(o.id)}>{o.label}</FiltroChip>
+                ))}
+                <span style={{ width: 1, height: 18, background: '#e2e8f0', margin: '0 4px' }} />
+                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Métrica:</span>
+                {[{ id:'monto', label:'Monto ($)' },{ id:'cantidad', label:'Cantidad' },{ id:'count', label:'N° FSC' }].map(o => (
+                    <FiltroChip key={o.id} activo={metrica === o.id} color="#0891b2" onClick={() => setMetrica(o.id)}>{o.label}</FiltroChip>
+                ))}
+                {celdaExpandida && (
+                    <button onClick={() => setCeldaExpandida(null)} style={{ marginLeft:'auto', padding:'4px 12px', border:'1px solid #e2e8f0', borderRadius:6, background:'#fff', fontSize:11, cursor:'pointer', color:'#64748b' }}>
+                        ✕ Cerrar detalle
+                    </button>
+                )}
+            </div>
+            {pivot.length === 0 ? (
+                <div style={{ textAlign:'center', padding: 40, color:'#94a3b8', fontSize: 13 }}>Sin datos con los filtros seleccionados.</div>
+            ) : (
+                <div className="card" style={{ overflowX:'auto' }}>
+                    <table style={{ borderCollapse:'collapse', width:'100%', fontSize: 11 }}>
+                        <thead>
+                            <tr>
+                                <th style={{ ...thStyle, position:'sticky', left:0, minWidth:200, zIndex:1 }}>
+                                    {agruparPor === 'item' ? 'Ítem Presupuestario' : agruparPor === 'categoria' ? 'Categoría' : 'Producto'}
+                                </th>
+                                {MESES.map(m => <th key={m} style={{ ...thStyle, textAlign:'center', minWidth:58 }}>{m}</th>)}
+                                <th style={{ ...thStyle, textAlign:'right', background:'#ede9fe', color:'#7c3aed', minWidth:90 }}>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {pivot.map((row, i) => {
+                                const isExpRow = celdaExpandida?.rowKey === row.key;
+                                const expandedFSCs = isExpRow ? [...row.meses_fscs[celdaExpandida.mesIdx].values()] : [];
+                                return (
+                                    <React.Fragment key={row.key}>
+                                        <tr style={{ borderBottom: isExpRow ? 'none' : '1px solid #f1f5f9', background: isExpRow ? '#f5f3ff' : i%2===0?'#fff':'#fafafa' }}>
+                                            <td style={{ padding:'7px 10px', position:'sticky', left:0, background: isExpRow?'#f5f3ff': i%2===0?'#fff':'#fafafa', fontWeight:500, fontSize:11, color:'#1e293b', zIndex:1, maxWidth:240 }}>
+                                                <div className="truncate-text" title={row.key}>{row.key}</div>
+                                            </td>
+                                            {row.meses.map((val, mi) => {
+                                                const isActive = isExpRow && celdaExpandida.mesIdx === mi;
+                                                return (
+                                                    <td key={mi} onClick={() => handleCeldaClick(row.key, mi, val)}
+                                                        style={{ padding:'5px 6px', textAlign:'center', background: cellBg(val, isActive), cursor: val > 0 ? 'pointer' : 'default', outline: isActive ? '2px solid #7c3aed' : 'none', outlineOffset: -2, transition:'background 0.1s' }}
+                                                        title={val > 0 ? `${MESES[mi]}: ${cellTxt(val)} — clic para ver FSC` : undefined}>
+                                                        {val > 0
+                                                            ? <span style={{ fontSize:10, fontWeight:600, color: isActive?'#4c1d95': val/maxCell > 0.55 ? '#fff' : '#4c1d95' }}>{cellTxt(val)}</span>
+                                                            : <span style={{ color:'#e2e8f0', fontSize:10 }}>—</span>}
+                                                    </td>
+                                                );
+                                            })}
+                                            <td style={{ padding:'7px 10px', textAlign:'right', fontWeight:700, fontSize:11, color:'#7c3aed', background:'#faf5ff' }}>
+                                                {totalFmt(row)}
+                                            </td>
+                                        </tr>
+                                        {isExpRow && (
+                                            <tr style={{ background:'#faf5ff' }}>
+                                                <td colSpan={14} style={{ padding:'10px 20px 14px 20px', borderBottom:'1px solid #e2e8f0' }}>
+                                                    <div style={{ fontSize:11, fontWeight:700, color:'#7c3aed', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.05em' }}>
+                                                        📋 {MESES[celdaExpandida.mesIdx]} — {expandedFSCs.length} formulario(s) con "{row.key}":
+                                                    </div>
+                                                    {expandedFSCs.length === 0 ? (
+                                                        <span style={{ fontSize:11, color:'#94a3b8' }}>Sin formularios.</span>
+                                                    ) : (
+                                                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Folio</th>
+                                                                    <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Fecha</th>
+                                                                    <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Estado</th>
+                                                                    <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Unidad</th>
+                                                                    <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Usuario</th>
+                                                                    <th style={{ ...thStyle, fontSize:10, padding:'5px 8px', textAlign:'center' }}>Acciones</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {expandedFSCs.map((fsc, j) => (
+                                                                    <tr key={fsc.id} style={{ borderBottom:'1px solid #ede9fe', background: j%2===0?'#fff':'#f5f3ff' }}>
+                                                                        <td style={{ padding:'5px 8px', fontFamily:'monospace', color:'#7c3aed', fontWeight:600 }}>#{fsc.folio}</td>
+                                                                        <td style={{ padding:'5px 8px', color:'#64748b', whiteSpace:'nowrap' }}>{fsc.fecha || '—'}</td>
+                                                                        <td style={{ padding:'5px 8px' }}><EstadoFSCBadge codigo={fsc.estado} /></td>
+                                                                        <td style={{ padding:'5px 8px', color:'#374151', maxWidth:180 }}><div className="truncate-text" title={fsc.unidad}>{fsc.unidad || '—'}</div></td>
+                                                                        <td style={{ padding:'5px 8px', color:'#374151', maxWidth:120 }}><div className="truncate-text" title={fsc.usuario}>{fsc.usuario || '—'}</div></td>
+                                                                        <td style={{ padding:'5px 8px', textAlign:'center' }}>
+                                                                            <button onClick={() => onVerFSC?.(fsc.id)} style={{ padding:'3px 10px', border:'1px solid #c4b5fd', borderRadius:6, background:'#f5f3ff', color:'#7c3aed', fontSize:10, fontWeight:600, cursor:'pointer' }}>
+                                                                                👁 Ver
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Sub-tab B — Repeticiones / Duplicados
+function SubTabRepeticiones({ datos, onVerFSC }) {
+    const [expandido, setExpandido]       = useState(null);
+    const [soloRepetidos, setSoloRepetidos] = useState(false);
+
+    const agrupados = useMemo(() => {
+        const map = {};
+        datos.forEach(fsc => {
+            fsc.productos.forEach(p => {
+                const key = `${p.item_presupuestario}‖${p.producto}`;
+                if (!map[key]) map[key] = { producto: p.producto, categoria: p.categoria, item_presupuestario: p.item_presupuestario, total_cantidad: 0, total_monto: 0, solicitudes: [] };
+                map[key].total_cantidad += p.cantidad;
+                map[key].total_monto    += p.monto;
+                map[key].solicitudes.push({ id: fsc.id, folio: fsc.folio, anho: fsc.anho, unidad: fsc.unidad_requirente, usuario: fsc.usuario_requirente, fecha: fsc.fecha_solicitud, estado: fsc.estado, cantidad: p.cantidad, monto: p.monto });
+            });
+        });
+        return Object.values(map).sort((a, b) => b.solicitudes.length - a.solicitudes.length || b.total_monto - a.total_monto);
+    }, [datos]);
+
+    const items     = soloRepetidos ? agrupados.filter(a => a.solicitudes.length > 1) : agrupados;
+    const repetidos = agrupados.filter(a => a.solicitudes.length > 1).length;
+    const totalMonto = agrupados.reduce((s, a) => s + a.total_monto, 0);
+
+    return (
+        <div style={{ display:'flex', flexDirection:'column', gap: 14 }}>
+            <div style={{ display:'flex', gap: 10, alignItems:'center', flexWrap:'wrap' }}>
+                <KpiMini label="Productos únicos" valor={agrupados.length} color="#7c3aed" />
+                <KpiMini label="Con repeticiones"  valor={repetidos}        color="#f97316" />
+                <KpiMini label="Solicitudes"        valor={datos.length}     color="#0891b2" />
+                <KpiMini label="Monto total"        valor={totalMonto}       color="#16a34a" fmt="clp" />
+                <label style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: 7, fontSize: 12, color:'#64748b', cursor:'pointer', fontWeight: 600 }}>
+                    <input type="checkbox" checked={soloRepetidos} onChange={e => setSoloRepetidos(e.target.checked)} />
+                    Solo repetidos ({repetidos})
+                </label>
+            </div>
+            <div className="card">
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                    <thead>
+                        <tr>
+                            <th style={{ ...thStyle, width: 28 }} />
+                            <th style={thStyle}>Ítem Presupuestario</th>
+                            <th style={thStyle}>Producto</th>
+                            <th style={thStyle}>Categoría</th>
+                            <th style={{ ...thStyle, textAlign:'center' }}>Solicitudes</th>
+                            <th style={{ ...thStyle, textAlign:'right' }}>Total Cantidad</th>
+                            <th style={{ ...thStyle, textAlign:'right' }}>Total Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.length === 0 && (
+                            <tr><td colSpan={7} style={{ textAlign:'center', padding: 32, color:'#94a3b8' }}>Sin productos.</td></tr>
+                        )}
+                        {items.map((item, i) => {
+                            const key   = `${item.item_presupuestario}‖${item.producto}`;
+                            const isDup = item.solicitudes.length > 1;
+                            const open  = expandido === key;
+                            return (
+                                <React.Fragment key={key}>
+                                    <tr onClick={() => setExpandido(open ? null : key)}
+                                        style={{ borderBottom:'1px solid #f1f5f9', background: open ? '#f5f3ff' : i%2===0?'#fff':'#fafafa', cursor:'pointer' }}>
+                                        <td style={{ padding:'7px 6px', textAlign:'center' }}>
+                                            <span style={{ fontSize:11, color:'#94a3b8' }}>{open ? '▼' : '▶'}</span>
+                                        </td>
+                                        <td style={{ padding:'7px 10px', fontSize:12, fontFamily:'monospace', color: item.item_presupuestario ? '#1e293b' : '#94a3b8' }}>
+                                            {item.item_presupuestario || '—'}
+                                        </td>
+                                        <td style={{ padding:'7px 10px', fontSize:12, color:'#1e293b', maxWidth:280 }}>
+                                            <div style={{ display:'flex', alignItems:'center', gap: 8 }}>
+                                                {isDup && <span style={{ padding:'1px 7px', background:'#fff7ed', color:'#ea580c', border:'1px solid #fed7aa', borderRadius:20, fontSize:10, fontWeight:700, whiteSpace:'nowrap' }}>⚠️ ×{item.solicitudes.length}</span>}
+                                                <span className="truncate-text" title={item.producto}>{item.producto || '—'}</span>
+                                            </div>
+                                        </td>
+                                        <td style={{ padding:'7px 10px', fontSize:12, color:'#64748b' }}>{item.categoria || '—'}</td>
+                                        <td style={{ padding:'7px 10px', textAlign:'center' }}>
+                                            <span style={{ padding:'2px 10px', borderRadius:20, fontSize:12, fontWeight:700, background: isDup?'#fff7ed':'#f0fdf4', color: isDup?'#ea580c':'#16a34a', border:`1px solid ${isDup?'#fed7aa':'#86efac'}` }}>
+                                                {item.solicitudes.length}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding:'7px 10px', textAlign:'right', fontSize:12, color:'#374151', fontFamily:'monospace' }}>{fmtN(item.total_cantidad)}</td>
+                                        <td style={{ padding:'7px 10px', textAlign:'right', fontSize:12, color:'#374151', fontWeight:500 }}>{fmtCLP(item.total_monto)}</td>
+                                    </tr>
+                                    {open && (
+                                        <tr style={{ background:'#faf5ff' }}>
+                                            <td colSpan={7} style={{ padding:'10px 20px 14px 44px' }}>
+                                                <div style={{ fontSize:11, fontWeight:700, color:'#7c3aed', marginBottom: 8, textTransform:'uppercase', letterSpacing:'0.05em' }}>
+                                                    FSC que incluyen este producto:
+                                                </div>
+                                                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                                                    <thead>
+                                                        <tr>
+                                                            <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Folio</th>
+                                                            <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Fecha</th>
+                                                            <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Estado</th>
+                                                            <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Unidad</th>
+                                                            <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Usuario</th>
+                                                            <th style={{ ...thStyle, fontSize:10, padding:'5px 8px', textAlign:'right' }}>Cantidad</th>
+                                                            <th style={{ ...thStyle, fontSize:10, padding:'5px 8px', textAlign:'right' }}>Monto</th>
+                                                            <th style={{ ...thStyle, fontSize:10, padding:'5px 8px', textAlign:'center' }}>Acciones</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {item.solicitudes.map((s, j) => (
+                                                            <tr key={j} style={{ borderBottom:'1px solid #ede9fe' }}>
+                                                                <td style={{ padding:'5px 8px', fontFamily:'monospace', color:'#7c3aed', fontWeight:600 }}>#{s.folio}</td>
+                                                                <td style={{ padding:'5px 8px', color:'#64748b', whiteSpace:'nowrap' }}>{s.fecha || '—'}</td>
+                                                                <td style={{ padding:'5px 8px' }}><EstadoFSCBadge codigo={s.estado} /></td>
+                                                                <td style={{ padding:'5px 8px', color:'#374151', maxWidth:180 }}><div className="truncate-text" title={s.unidad}>{s.unidad || '—'}</div></td>
+                                                                <td style={{ padding:'5px 8px', color:'#374151', maxWidth:140 }}><div className="truncate-text" title={s.usuario}>{s.usuario || '—'}</div></td>
+                                                                <td style={{ padding:'5px 8px', textAlign:'right', color:'#374151' }}>{fmtN(s.cantidad)}</td>
+                                                                <td style={{ padding:'5px 8px', textAlign:'right', color:'#374151' }}>{fmtCLP(s.monto)}</td>
+                                                                <td style={{ padding:'5px 8px', textAlign:'center' }}>
+                                                                    <button onClick={() => onVerFSC?.(s.id)} style={{ padding:'3px 10px', border:'1px solid #c4b5fd', borderRadius:6, background:'#f5f3ff', color:'#7c3aed', fontSize:10, fontWeight:600, cursor:'pointer' }}>
+                                                                        👁 Ver
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
+// Sub-tab C — Por Solicitud (cronológico)
+function SubTabCronologico({ datos, onVerFSC }) {
+    const [expandido, setExpandido] = useState(null);
+
+    if (datos.length === 0) return (
+        <div style={{ textAlign:'center', padding: 40, color:'#94a3b8', fontSize: 13 }}>Sin solicitudes con los filtros seleccionados.</div>
+    );
+
+    return (
+        <div className="card">
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                <thead>
+                    <tr>
+                        <th style={{ ...thStyle, width:28 }} />
+                        <th style={thStyle}>Folio</th>
+                        <th style={thStyle}>Fecha Solicitud</th>
+                        <th style={thStyle}>Estado</th>
+                        <th style={thStyle}>Unidad Requirente</th>
+                        <th style={thStyle}>Usuario</th>
+                        <th style={thStyle}>Requerimiento</th>
+                        <th style={{ ...thStyle, textAlign:'center' }}>Productos</th>
+                        <th style={{ ...thStyle, textAlign:'right' }}>Monto</th>
+                        <th style={{ ...thStyle, textAlign:'center' }}>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {datos.map((fsc, i) => {
+                        const isOpen = expandido === fsc.id;
+                        return (
+                            <React.Fragment key={fsc.id}>
+                                <tr onClick={() => setExpandido(isOpen ? null : fsc.id)}
+                                    style={{ borderBottom:'1px solid #f1f5f9', background: isOpen?'#f5f3ff':i%2===0?'#fff':'#fafafa', cursor:'pointer' }}>
+                                    <td style={{ padding:'7px 6px', textAlign:'center' }}>
+                                        <span style={{ fontSize:11, color:'#94a3b8' }}>{isOpen ? '▼' : '▶'}</span>
+                                    </td>
+                                    <td style={{ padding:'7px 10px' }}>
+                                        <span style={{ fontFamily:'monospace', fontWeight:600, fontSize:12, color:'#7c3aed', background:'#f5f3ff', padding:'2px 7px', borderRadius:5 }}>
+                                            #{fsc.folio}
+                                        </span>
+                                    </td>
+                                    <td style={{ padding:'7px 10px', fontSize:12, color:'#374151', whiteSpace:'nowrap' }}>{fsc.fecha_solicitud || '—'}</td>
+                                    <td style={{ padding:'7px 10px' }}><EstadoFSCBadge codigo={fsc.estado} /></td>
+                                    <td style={{ padding:'7px 10px', maxWidth:200 }}><div className="truncate-text" title={fsc.unidad_requirente} style={{ fontSize:12, color:'#374151' }}>{fsc.unidad_requirente || '—'}</div></td>
+                                    <td style={{ padding:'7px 10px', maxWidth:140 }}><div className="truncate-text" title={fsc.usuario_requirente} style={{ fontSize:12, color:'#374151' }}>{fsc.usuario_requirente || '—'}</div></td>
+                                    <td style={{ padding:'7px 10px', maxWidth:260 }}><div className="truncate-text" title={fsc.requerimiento} style={{ fontSize:11, color:'#374151' }}>{fsc.requerimiento || '—'}</div></td>
+                                    <td style={{ padding:'7px 10px', textAlign:'center' }}>
+                                        <span style={{ fontSize:12, fontWeight:600, color: fsc.productos.length > 0 ? '#16a34a' : '#94a3b8' }}>
+                                            {fsc.productos.length > 0 ? `${fsc.productos.length}` : '—'}
+                                        </span>
+                                    </td>
+                                    <td style={{ padding:'7px 10px', textAlign:'right', fontSize:12, color:'#374151', fontWeight:500 }}>{fmtCLP(fsc.monto_estimado)}</td>
+                                    <td style={{ padding:'7px 10px', textAlign:'center' }}>
+                                        <button onClick={e => { e.stopPropagation(); onVerFSC?.(fsc.id); }} style={{ padding:'3px 10px', border:'1px solid #c4b5fd', borderRadius:6, background:'#f5f3ff', color:'#7c3aed', fontSize:10, fontWeight:600, cursor:'pointer' }}>
+                                            👁 Ver
+                                        </button>
+                                    </td>
+                                </tr>
+                                {isOpen && (
+                                    <tr style={{ background:'#faf5ff' }}>
+                                        <td colSpan={10} style={{ padding:'10px 20px 14px 44px' }}>
+                                            {fsc.productos.length === 0 ? (
+                                                <span style={{ fontSize:12, color:'#94a3b8' }}>Este formulario no registra productos en el carro.</span>
+                                            ) : (
+                                                <>
+                                                    <div style={{ fontSize:11, fontWeight:700, color:'#7c3aed', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.05em' }}>
+                                                        Productos en el carro ({fsc.productos.length}):
+                                                    </div>
+                                                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                                                        <thead>
+                                                            <tr>
+                                                                <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Categoría</th>
+                                                                <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Producto</th>
+                                                                <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Descripción</th>
+                                                                <th style={{ ...thStyle, fontSize:10, padding:'5px 8px', textAlign:'right' }}>Cant.</th>
+                                                                <th style={{ ...thStyle, fontSize:10, padding:'5px 8px', textAlign:'right' }}>Monto</th>
+                                                                <th style={{ ...thStyle, fontSize:10, padding:'5px 8px' }}>Ítem Presupuestario</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {fsc.productos.map((p, j) => (
+                                                                <tr key={j} style={{ borderBottom:'1px solid #ede9fe', background: j%2===0?'#fff':'#f5f3ff' }}>
+                                                                    <td style={{ padding:'5px 8px', color:'#374151' }}>{p.categoria || '—'}</td>
+                                                                    <td style={{ padding:'5px 8px', color:'#374151', fontWeight:500 }}>{p.producto || '—'}</td>
+                                                                    <td style={{ padding:'5px 8px', maxWidth:240 }}><div className="truncate-text" title={p.descripcion} style={{ color:'#64748b' }}>{p.descripcion || '—'}</div></td>
+                                                                    <td style={{ padding:'5px 8px', textAlign:'right', color:'#374151' }}>{fmtN(p.cantidad)}</td>
+                                                                    <td style={{ padding:'5px 8px', textAlign:'right', color:'#374151' }}>{fmtCLP(p.monto)}</td>
+                                                                    <td style={{ padding:'5px 8px', fontFamily:'monospace', fontSize:10, color:'#7c3aed' }}>{p.item_presupuestario || '—'}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )}
+                            </React.Fragment>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+// Tab principal Historial
+const SUBTABS_HISTORIAL = [
+    { id: 'repeticiones', label: 'Repeticiones',      icono: '🔁', desc: 'Productos pedidos más de una vez' },
+    { id: 'pivote',       label: 'Distribución Anual', icono: '📊', desc: 'Ítem / categoría por mes (mapa de calor)' },
+    { id: 'cronologico',  label: 'Por Solicitud',      icono: '📋', desc: 'Cada FSC con su carro de productos' },
+];
+
+const ESTADOS_HISTORIAL = ['FR', 'FA', 'ASDA', 'ADIR', 'AA', 'DC', 'AC'];
+
+function TabHistorial({ anioSeleccionado }) {
+    const [subtab, setSubtab]             = useState('repeticiones');
+    const [datos, setDatos]               = useState([]);
+    const [cargando, setCargando]         = useState(false);
+    const [error, setError]               = useState(null);
+    const [filtroUnidad, setFiltroUnidad]     = useState('');
+    const [filtroUsuario, setFiltroUsuario]   = useState('');
+    const [filtroEstados, setFiltroEstados]   = useState([]);
+    const [drawerFSCId, setDrawerFSCId]       = useState(null);
+
+    useEffect(() => {
+        let activo = true;
+        setCargando(true);
+        setError(null);
+        const params = {};
+        if (anioSeleccionado) params.anho = anioSeleccionado;
+        getFormulariosHistorial(params)
+            .then(({ data }) => { if (activo) setDatos(Array.isArray(data) ? data : (data.results ?? [])); })
+            .catch(() => { if (activo) setError('No se pudieron cargar los datos del historial.'); })
+            .finally(() => { if (activo) setCargando(false); });
+        return () => { activo = false; };
+    }, [anioSeleccionado]);
+
+    // Reset usuario al cambiar unidad
+    useEffect(() => { setFiltroUsuario(''); }, [filtroUnidad]);
+
+    const unidades = useMemo(() => [...new Set(datos.map(f => f.unidad_requirente).filter(Boolean))].sort(), [datos]);
+    const usuarios = useMemo(() => {
+        const base = filtroUnidad ? datos.filter(f => f.unidad_requirente === filtroUnidad) : datos;
+        return [...new Set(base.map(f => f.usuario_requirente).filter(Boolean))].sort();
+    }, [datos, filtroUnidad]);
+
+    const datosFiltrados = useMemo(() => datos.filter(f => {
+        if (filtroUnidad  && f.unidad_requirente  !== filtroUnidad)  return false;
+        if (filtroUsuario && f.usuario_requirente !== filtroUsuario) return false;
+        if (filtroEstados.length > 0 && !filtroEstados.includes(f.estado)) return false;
+        return true;
+    }), [datos, filtroUnidad, filtroUsuario, filtroEstados]);
+
+    const totalProductos = useMemo(() => datosFiltrados.reduce((s, f) => s + f.productos.length, 0), [datosFiltrados]);
+
+    return (
+        <div style={{ display:'flex', flexDirection:'column', gap: 16 }}>
+            {/* Filtros */}
+            <div style={{ display:'flex', alignItems:'center', gap: 10, flexWrap:'wrap', background:'#f8fafc', padding:'12px 16px', borderRadius:10, border:'1px solid #e2e8f0' }}>
+                <span style={{ fontSize:12, color:'#64748b', fontWeight:600 }}>🔍 Filtrar por:</span>
+                <select value={filtroUnidad} onChange={e => setFiltroUnidad(e.target.value)} className="filtro-select" style={{ minWidth:220 }}>
+                    <option value="">Todas las unidades</option>
+                    {unidades.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+                <select value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)} className="filtro-select" style={{ minWidth:180 }}
+                    disabled={!filtroUnidad && usuarios.length > 50}>
+                    <option value="">Todos los usuarios</option>
+                    {usuarios.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+                {(filtroUnidad || filtroUsuario || filtroEstados.length > 0) && (
+                    <button onClick={() => { setFiltroUnidad(''); setFiltroUsuario(''); setFiltroEstados([]); }}
+                        style={{ padding:'5px 12px', background:'#fff', border:'1px solid #e2e8f0', borderRadius:6, fontSize:12, cursor:'pointer', color:'#64748b' }}>
+                        ✕ Limpiar
+                    </button>
+                )}
+                <span style={{ marginLeft:'auto', fontSize:12, color:'#64748b', background:'#fff', padding:'5px 12px', borderRadius:20, border:'1px solid #e2e8f0', fontWeight:600 }}>
+                    {datosFiltrados.length} solicitudes · {totalProductos} productos
+                </span>
+            </div>
+            {/* Filtro por Estado */}
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <span style={{ fontSize:11, color:'#64748b', fontWeight:600, whiteSpace:'nowrap' }}>Bandeja:</span>
+                {ESTADOS_HISTORIAL.map(est => {
+                    const info = ESTADO_FSC_INFO[est] || { nombre: est, color:'#94a3b8' };
+                    return (
+                        <FiltroChip key={est} activo={filtroEstados.includes(est)} color={info.color}
+                            onClick={() => setFiltroEstados(prev => prev.includes(est) ? prev.filter(e => e !== est) : [...prev, est])}>
+                            {est} · {info.nombre}
+                        </FiltroChip>
+                    );
+                })}
+            </div>
+
+            {/* Sub-tabs */}
+            <div style={{ display:'flex', gap: 4, borderBottom:'2px solid #e5e7eb' }}>
+                {SUBTABS_HISTORIAL.map(s => (
+                    <button key={s.id} onClick={() => setSubtab(s.id)} title={s.desc}
+                        style={{
+                            padding:'8px 16px', border:'none', background:'none',
+                            fontWeight:600, fontSize:12, cursor:'pointer',
+                            color: subtab === s.id ? '#7c3aed' : '#64748b',
+                            borderBottom: subtab === s.id ? '2px solid #7c3aed' : '2px solid transparent',
+                            marginBottom: -2, whiteSpace:'nowrap',
+                        }}>
+                        {s.icono} {s.label}
+                    </button>
+                ))}
+            </div>
+
+            {cargando && <div style={{ textAlign:'center', padding: 40, color:'#64748b' }}>Cargando historial…</div>}
+            {error    && <div style={{ color:'#dc2626', padding:16, background:'#fef2f2', borderRadius:8 }}>{error}</div>}
+
+            {!cargando && !error && subtab === 'repeticiones' && <SubTabRepeticiones datos={datosFiltrados} onVerFSC={setDrawerFSCId} />}
+            {!cargando && !error && subtab === 'pivote'       && <SubTabPivote       datos={datosFiltrados} onVerFSC={setDrawerFSCId} />}
+            {!cargando && !error && subtab === 'cronologico'  && <SubTabCronologico  datos={datosFiltrados} onVerFSC={setDrawerFSCId} />}
+
+            <DrawerFormularioDetalle id={drawerFSCId} onCerrar={() => setDrawerFSCId(null)} />
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const TABS = [
     { id: 'solicitudes',  label: 'Solicitudes (FSC)',      icono: '📝' },
     { id: 'derivados',    label: 'Derivados a Comprador',  icono: '➡️' },
     { id: 'unificacion',  label: 'Compras Conjuntas',      icono: '🔗' },
     { id: 'alertas',      label: 'Alertas / Demoras',      icono: '⏰' },
+    { id: 'historial',    label: 'Historial de Compras',   icono: '📦' },
 ];
 
 // ─── Tab Alertas / Demoras ────────────────────────────────────────────────────
@@ -2766,6 +3808,10 @@ export function FormulariosPage() {
 
             {tab === 'alertas' && (
                 <TabAlertas anioSeleccionado={anioGlobal} />
+            )}
+
+            {tab === 'historial' && (
+                <TabHistorial anioSeleccionado={anioGlobal} />
             )}
 
             {modalAbierto && (
