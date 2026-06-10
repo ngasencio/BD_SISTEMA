@@ -11,6 +11,7 @@ export default function Sidebar() {
     const [openGroups, setOpenGroups] = useState({
         abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac') || path.startsWith('/compra-agil'),
         finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas'),
+        admin: path.startsWith('/admin'),
     });
     const [openMods, setOpenMods] = useState({
         mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra') || path.startsWith('/compra-agil') || path.startsWith('/abastecimiento/contratos'),
@@ -198,15 +199,40 @@ export default function Sidebar() {
                     </div>
                 </div>
 
+                {/* ── ADMINISTRACIÓN (solo admin) ─── */}
+                {role === 'admin' && (
+                    <div className={`nav-group ${openGroups.admin ? 'open' : ''}`}>
+                        <div className="nav-group-title" onClick={() => toggleGroup('admin')}>
+                            <span className="nav-group-title-icon">⚙️</span>
+                            <span className="nav-group-title-text">Administración</span>
+                            <span className="nav-group-arrow" style={{ transform: openGroups.admin ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+                        </div>
+                        <div className="nav-group-children" style={{ display: openGroups.admin ? 'block' : 'none' }}>
+                            <div
+                                className={`nav-item ${isActive('/admin/usuarios') ? 'active' : ''}`}
+                                onClick={() => goTo('/admin/usuarios', 'admin', null)}
+                            >
+                                <span>👥</span>
+                                <span className="nav-item-text">Gestión de Usuarios</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
             </nav>
 
             <div className="sidebar-footer">
-                <div className="sidebar-user">
+                <div
+                    className={`sidebar-user ${isActive('/perfil') ? 'active' : ''}`}
+                    onClick={() => navigate('/perfil')}
+                    style={{ cursor: 'pointer' }}
+                    title="Mi Perfil"
+                >
                     <div className="sidebar-user-avatar">
                         {user?.username?.[0]?.toUpperCase() || '👤'}
                     </div>
                     <div className="sidebar-user-info">
-                        <div className="sidebar-user-name">{user?.username || 'Usuario'}</div>
+                        <div className="sidebar-user-name">{user?.nombre || user?.username || 'Usuario'}</div>
                         <div className="sidebar-user-role">{role}</div>
                     </div>
                 </div>

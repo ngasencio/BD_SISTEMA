@@ -31,9 +31,9 @@ import OrdenesCompraDashboard from './pages/OrdenesCompraDashboard';
 // Rutas de features
 import { abastecimientoRoutes } from './features/abastecimiento/routes';
 import { finanzasRoutes } from './features/finanzas/routes';
-
 import { pacRoutes } from './features/pac/routes';
 import { compraAgilRoutes } from './features/compra-agil/routes';
+import { perfilRoute, adminUsuariosRoute } from './features/usuarios/routes';
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
@@ -81,6 +81,14 @@ function AppRoutes() {
             {/* Módulo Finanzas (admin + finanzas) */}
             <Route element={<RequireRole allowed={['admin', 'finanzas']} />}>
               {finanzasRoutes}
+            </Route>
+
+            {/* Perfil propio — todos los autenticados */}
+            {perfilRoute}
+
+            {/* Gestión de usuarios — solo admin */}
+            <Route element={<RequireRole allowed={['admin']} />}>
+              {adminUsuariosRoute}
             </Route>
 
           </Route>

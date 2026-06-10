@@ -30,6 +30,9 @@ _tareas_actualizacion_oc: dict = {}
 
 _RUTA_AG_SERVIDOR = Path(__file__).parent.parent.parent / "api"
 
+from django.contrib.auth.models import User
+from rest_framework.permissions import BasePermission
+
 from .models import (
     BoletaGarantia, BoletaGarantiaAudit, Comprador,
     DetalleLicitacion, DetalleOrdenCompra, Devengo,
@@ -37,6 +40,7 @@ from .models import (
     PlanerPAC, CompraAgilResumen, CompraAgilProducto, CompraAgilProveedor,
     RevisionOCCorregible, GestionContrato,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
+    PerfilUsuario, Departamento, Establecimiento,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
@@ -48,6 +52,8 @@ from .serializers import (
     CompraAgilProductoSerializer, CompraAgilProveedorSerializer,
     RevisionOCCorregibleSerializer, GestionContratoSerializer,
     FormularioFSCSerializer, FormularioFSCDerivadoSerializer, FormularioFSCProductoSerializer,
+    UserAdminSerializer, UserMeSerializer,
+    DepartamentoSerializer, EstablecimientoSerializer,
 )
 
 # Campos de fecha que mapea EVENT_CFG en CalendarioSect.jsx (17 campos)
@@ -2734,4 +2740,81 @@ class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["anho", "folio", "categoria", "tipo_formulario"]
     search_fields = ["producto", "descripcion"]
     ordering_fields = ["folio", "anho", "monto", "cantidad"]
+
+
+# =============================================================================
+# Módulo Usuarios
+# =============================================================================
+
+class _IsAdmin(BasePermission):
+    """Solo usuarios con role='admin' o is_superuser pueden acceder."""
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        try:
+            return request.user.perfil.role == 'admin'
+        except Exception:
+            return False
+
+
+class UsuarioViewSet(viewsets.ModelViewSet):
+    """CRUD de usuarios — solo admin. Sin paginación (max ~500 usuarios)."""
+    queryset           = User.objects.select_related('perfil').order_by('username')
+    serializer_class   = UserAdminSerializer
+    permission_classes = [IsAuthenticated, _IsAdmin]
+    pagination_class   = None
+    filter_backends    = [drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    search_fields      = ['username', 'email', 'first_name', 'last_name',
+                          'perfil__cargo', 'perfil__role']
+    ordering_fields    = ['id', 'username', 'email', 'date_joined', 'last_login',
+                          'perfil__role']
+    ordering           = ['username']
+
+    def get_queryset(self):
+        qs     = super().get_queryset()
+        role   = self.request.query_params.get('role')
+        activo = self.request.query_params.get('activo')
+        if role:
+            qs = qs.filter(perfil__role=role)
+        if activo is not None:
+            qs = qs.filter(is_active=(activo.lower() in ('1', 'true', 's')))
+        return qs
+
+    def perform_destroy(self, instance):
+        if instance.pk == self.request.user.pk:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError('No puedes eliminar tu propia cuenta.')
+        instance.delete()
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def user_me(request):
+    """GET/PATCH del perfil propio."""
+    user = request.user
+    if request.method == 'GET':
+        return Response(UserMeSerializer(user).data)
+    serializer = UserMeSerializer(user, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response(UserMeSerializer(user).data)
+
+
+class DepartamentoViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset           = Departamento.objects.all()
+    serializer_class   = DepartamentoSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends    = [drf_filters.SearchFilter, DjangoFilterBackend]
+    filterset_fields   = ['establecimiento_id', 'es_depto']
+    search_fields      = ['descripcion', 'nombre_corto']
+    pagination_class   = None
+
+
+class EstablecimientoViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset           = Establecimiento.objects.all()
+    serializer_class   = EstablecimientoSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class   = None
 

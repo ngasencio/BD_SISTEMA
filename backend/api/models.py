@@ -990,3 +990,108 @@ class FormularioFSCProducto(models.Model):
 
     def __str__(self):
         return f"Producto FSC {self.folio}/{self.anho} — {self.producto}"
+
+
+# =============================================================================
+# Módulo Usuarios — Panel SSO (read-only proxies + perfil gestionado)
+# =============================================================================
+
+class UsuarioPanel(models.Model):
+    """Proxy read-only de data_usuario_panel — fuente de verdad del Panel SSO."""
+    usuario              = models.CharField(max_length=100)
+    correo_electronico   = models.CharField(max_length=150)
+    descripcion          = models.CharField(max_length=150, blank=True, null=True)
+    activo               = models.CharField(max_length=1)
+    establecimiento_id   = models.IntegerField()
+    alias                = models.CharField(max_length=150, blank=True, null=True)
+    run                  = models.CharField(max_length=15, blank=True, null=True)
+    cargo                = models.CharField(max_length=200, blank=True, null=True)
+
+    class Meta:
+        db_table = 'data_usuario_panel'
+        managed  = False
+
+    def __str__(self):
+        return self.correo_electronico
+
+
+class Departamento(models.Model):
+    """Proxy read-only de data_departamento."""
+    descripcion          = models.CharField(max_length=200, blank=True, null=True)
+    subdireccion_id      = models.IntegerField(blank=True, null=True)
+    estado_id            = models.IntegerField(blank=True, null=True)
+    fecha_mod            = models.DateField(blank=True, null=True)
+    nombre_corto         = models.CharField(max_length=20, blank=True, null=True)
+    tipo_establecimiento = models.CharField(max_length=50, blank=True, null=True)
+    parent_id            = models.IntegerField(blank=True, null=True)
+    es_depto             = models.CharField(max_length=5, blank=True, null=True)
+    establecimiento_id   = models.IntegerField(blank=True, null=True)
+
+    class Meta:
+        db_table = 'data_departamento'
+        managed  = False
+        ordering = ['descripcion']
+
+    def __str__(self):
+        return self.nombre_corto or self.descripcion or str(self.id)
+
+
+class Establecimiento(models.Model):
+    """Proxy read-only de data_establecimiento."""
+    codigo       = models.IntegerField()
+    padre_id     = models.IntegerField(blank=True, null=True)
+    rut          = models.IntegerField()
+    dv           = models.CharField(max_length=1)
+    descripcion  = models.CharField(max_length=200)
+    nombre_corto = models.CharField(max_length=50, blank=True, null=True)
+    comuna_id    = models.IntegerField(blank=True, null=True)
+    estado_id    = models.IntegerField(blank=True, null=True)
+    ubicacion    = models.CharField(max_length=200, blank=True, null=True)
+
+    class Meta:
+        db_table = 'data_establecimiento'
+        managed  = False
+        ordering = ['descripcion']
+
+    def __str__(self):
+        return self.nombre_corto or self.descripcion
+
+
+class PertenenciaUsuario(models.Model):
+    """Proxy read-only de data_pertenencia_usuario."""
+    id_usuario      = models.IntegerField()
+    tipo_dependencia = models.CharField(max_length=10)
+    id_dependencia  = models.IntegerField()
+    id_subdireccion = models.IntegerField()
+
+    class Meta:
+        db_table = 'data_pertenencia_usuario'
+        managed  = False
+
+    def __str__(self):
+        return f"Usuario {self.id_usuario} → dep {self.id_dependencia}"
+
+
+class PerfilUsuario(models.Model):
+    """Extiende auth.User con rol de sistema y vínculo al Panel SSO."""
+    ROLES = [
+        ('admin',           'Administrador'),
+        ('abastecimiento',  'Abastecimiento'),
+        ('finanzas',        'Finanzas'),
+        ('viewer',          'Visualizador'),
+    ]
+
+    user               = models.OneToOneField(
+        'auth.User', on_delete=models.CASCADE, related_name='perfil'
+    )
+    role               = models.CharField(max_length=50, choices=ROLES, default='viewer', db_index=True)
+    panel_id           = models.IntegerField(null=True, blank=True)
+    establecimiento_id = models.IntegerField(null=True, blank=True)
+    cargo              = models.CharField(max_length=200, blank=True, null=True)
+    run                = models.CharField(max_length=15, blank=True, null=True)
+
+    class Meta:
+        db_table = 'api_perfil_usuario'
+
+    def __str__(self):
+        return f"{self.user.username} — {self.role}"

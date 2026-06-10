@@ -1,7 +1,9 @@
 import datetime
 import os
 
+from django.contrib.auth.models import User
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import (
     Licitacion, DetalleLicitacion, Devengo, OrdenCompra, DetalleOrdenCompra,
@@ -10,6 +12,7 @@ from .models import (
     CompraAgilProducto, CompraAgilProductoCotizado, CompraAgilProveedor,
     RevisionOCCorregible, GestionContrato,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
+    PerfilUsuario, Departamento, Establecimiento,
 )
 from .services import generar_id_formulario
 
@@ -382,3 +385,121 @@ class FormularioFSCProductoSerializer(serializers.ModelSerializer):
 
     def get_id_formulario(self, obj):
         return generar_id_formulario(obj.folio, obj.anho, tipo_formulario=obj.tipo_formulario)
+
+
+# =============================================================================
+# Módulo Usuarios
+# =============================================================================
+
+class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """JWT con claims de rol, cargo y establecimiento."""
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        try:
+            p = user.perfil
+            token['role']               = p.role
+            token['cargo']              = p.cargo or ''
+            token['establecimiento_id'] = p.establecimiento_id
+            token['panel_id']           = p.panel_id
+        except Exception:
+            token['role']               = 'admin' if user.is_superuser else 'viewer'
+            token['cargo']              = ''
+            token['establecimiento_id'] = None
+            token['panel_id']           = None
+        token['nombre'] = user.get_full_name() or user.username
+        token['email']  = user.email
+        return token
+
+
+class PerfilUsuarioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = PerfilUsuario
+        fields = ['role', 'panel_id', 'establecimiento_id', 'cargo', 'run']
+
+
+class UserAdminSerializer(serializers.ModelSerializer):
+    """Serializer para admin: CRUD completo de usuarios con perfil embebido."""
+    perfil        = PerfilUsuarioSerializer(required=False)
+    password      = serializers.CharField(write_only=True, required=False)
+    establecimiento_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = User
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name',
+            'is_active', 'is_staff', 'is_superuser',
+            'date_joined', 'last_login',
+            'password', 'perfil', 'establecimiento_nombre',
+        ]
+        read_only_fields = ['date_joined', 'last_login', 'is_staff', 'is_superuser']
+
+    def get_establecimiento_nombre(self, obj):
+        try:
+            eid = obj.perfil.establecimiento_id
+            if eid:
+                est = Establecimiento.objects.filter(id=eid).first()
+                return est.nombre_corto or est.descripcion if est else None
+        except Exception:
+            pass
+        return None
+
+    def create(self, validated_data):
+        perfil_data = validated_data.pop('perfil', {})
+        password    = validated_data.pop('password', None)
+        user        = User(**validated_data)
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+        user.save()
+        PerfilUsuario.objects.create(user=user, **perfil_data)
+        return user
+
+    def update(self, instance, validated_data):
+        perfil_data = validated_data.pop('perfil', None)
+        password    = validated_data.pop('password', None)
+        for attr, val in validated_data.items():
+            setattr(instance, attr, val)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        if perfil_data is not None:
+            perfil, _ = PerfilUsuario.objects.get_or_create(user=instance)
+            for attr, val in perfil_data.items():
+                setattr(perfil, attr, val)
+            perfil.save()
+        return instance
+
+
+class UserMeSerializer(serializers.ModelSerializer):
+    """Serializer para /me: el usuario edita solo su email y contraseña."""
+    perfil       = PerfilUsuarioSerializer(read_only=True)
+    password_new = serializers.CharField(write_only=True, required=False, min_length=8)
+
+    class Meta:
+        model  = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name',
+                  'is_active', 'date_joined', 'last_login', 'perfil', 'password_new']
+        read_only_fields = ['id', 'username', 'is_active', 'date_joined', 'last_login']
+
+    def update(self, instance, validated_data):
+        password_new = validated_data.pop('password_new', None)
+        for attr, val in validated_data.items():
+            setattr(instance, attr, val)
+        if password_new:
+            instance.set_password(password_new)
+        instance.save()
+        return instance
+
+
+class DepartamentoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Departamento
+        fields = '__all__'
+
+
+class EstablecimientoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Establecimiento
+        fields = '__all__'

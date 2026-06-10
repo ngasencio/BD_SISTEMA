@@ -1,7 +1,9 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 
+from .serializers import MyTokenObtainPairSerializer
 from .views import (
     BoletaGarantiaAuditViewSet, BoletaGarantiaViewSet,
     CompradorViewSet, DetalleLicitacionViewSet, DetalleOrdenCompraViewSet,
@@ -31,7 +33,11 @@ from .views import (
     iniciar_actualizacion_formularios, estado_actualizacion_formularios,
     cancelar_actualizacion_formularios, formularios_stats_view, formularios_flujo_view,
     formularios_alertas_view, formularios_unificacion_view, formularios_historial_view,
+    UsuarioViewSet, user_me, DepartamentoViewSet, EstablecimientoViewSet,
 )
+
+class MyTokenObtainPairView(TokenObtainPairView):
+    serializer_class = MyTokenObtainPairSerializer
 
 router = DefaultRouter()
 router.register(r'licitaciones', LicitacionViewSet, basename='licitacion')
@@ -63,10 +69,16 @@ router.register(r'formularios-fsc', FormularioFSCViewSet, basename='formulariofs
 router.register(r'formularios-fsc-derivados', FormularioFSCDerivadoViewSet, basename='formulariofscderivado')
 router.register(r'formularios-fsc-productos', FormularioFSCProductoViewSet, basename='formulariofscproducto')
 
+# Módulo Usuarios
+router.register(r'usuarios', UsuarioViewSet, basename='usuario')
+router.register(r'departamentos', DepartamentoViewSet, basename='departamento')
+router.register(r'establecimientos', EstablecimientoViewSet, basename='establecimiento')
+
 urlpatterns = [
-    # Autenticación JWT
-    path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    # Autenticación JWT (con claims de role/cargo/establecimiento)
+    path('auth/login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/me/', user_me, name='user_me'),
 
     # Estadísticas y endpoints especiales
     path('dashboard/stats/', dashboard_stats, name='dashboard_stats'),
