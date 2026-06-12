@@ -20,7 +20,7 @@ def react_spa(request, path=''):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(api_urls)),
-    re_path(r'^bd_sistema/(?P<path>.*)$', react_spa),
+    re_path(r'^gestion-sso/(?P<path>.*)$', react_spa),
     # Media files (boletas, adjuntos) — siempre activo, incluso DEBUG=False
     re_path(r'^media/(?P<path>.*)$', static_serve, {'document_root': settings.MEDIA_ROOT}),
 ]

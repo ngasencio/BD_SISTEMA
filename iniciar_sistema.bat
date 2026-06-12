@@ -8,7 +8,29 @@ echo   BD SISTEMA — Servicio de Salud Osorno
 echo  ============================================
 echo.
 
-REM Verificar que MySQL este corriendo
+REM --- Limpiar procesos anteriores para evitar acumulacion en puerto 8000 ---
+echo [0/3] Limpiando procesos anteriores...
+
+REM Cerrar ventanas Django/Vite que hayan quedado abiertas
+taskkill /FI "WINDOWTITLE eq Django Backend" /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Vite Frontend" /F >nul 2>&1
+
+REM Matar procesos Python que ocupen el puerto 8000
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8000 " ^| findstr "LISTENING"') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
+
+REM Matar procesos Node que ocupen el puerto 5173
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5173 " ^| findstr "LISTENING"') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
+
+timeout /t 2 /nobreak >nul
+echo  Limpieza OK
+
+echo.
+
+REM --- Verificar MySQL ---
 echo [1/3] Verificando MySQL (XAMPP)...
 "C:\xampp\mysql\bin\mysql.exe" -u bd_sistema_app -pBdSistema2025# -e "SELECT 1;" >nul 2>&1
 IF ERRORLEVEL 1 (
@@ -24,7 +46,7 @@ echo.
 echo [2/3] Iniciando Django (backend :8000)...
 start "Django Backend" cmd /k "cd /d C:\Users\usuario\Desktop\BD_SISTEMA\backend && python manage.py runserver 0.0.0.0:8000"
 
-timeout /t 3 /nobreak >nul
+timeout /t 4 /nobreak >nul
 
 echo.
 echo [3/3] Iniciando Vite (frontend :5173)...
@@ -34,7 +56,7 @@ echo.
 echo  ============================================
 echo   Sistema iniciado correctamente
 echo.
-echo   Frontend: http://10.8.153.227:5173/bd_sistema/
+echo   Frontend: http://10.8.153.227:5173/gestion-sso/
 echo   Backend:  http://10.8.153.227:8000/api/
 echo  ============================================
 echo.

@@ -859,7 +859,7 @@ function SubtabCorregidas({ revisiones, allOrdenes }) {
     const generarPDF = async () => {
         setPdfGenerating(true);
         try {
-            const BASE = import.meta.env.BASE_URL || '/bd_sistema/';
+            const BASE = import.meta.env.BASE_URL || '/gestion-sso/';
 
             // Data para el período del PDF (filtro independiente)
             const pdfEnlazadas = enlazadas.filter(r => {

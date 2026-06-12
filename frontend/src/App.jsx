@@ -102,7 +102,7 @@ function AppRoutes() {
 
 function App() {
   return (
-    <BrowserRouter basename="/bd_sistema">
+    <BrowserRouter basename="/gestion-sso">
       <AuthProvider>
         <AppRoutes />
       </AuthProvider>

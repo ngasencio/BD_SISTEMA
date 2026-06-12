@@ -138,7 +138,7 @@ export const clearSession = () => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     // Redirige al login sin depender de React Router
-    window.location.href = '/bd_sistema/login';
+    window.location.href = '/gestion-sso/login';
 };
 
 export const getAccessToken = () => localStorage.getItem(TOKEN_KEY);
