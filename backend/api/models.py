@@ -850,6 +850,12 @@ class GestionContrato(models.Model):
     class Meta:
         db_table = 'data_gestioncontratos'
         ordering = ['-monto_contrato']
+        indexes = [
+            models.Index(fields=['estado_contrato'],    name='idx_cont_estado'),
+            models.Index(fields=['categoria_contrato'], name='idx_cont_categoria'),
+            models.Index(fields=['unidad_requirente'],  name='idx_cont_unidad'),
+            models.Index(fields=['id_licitacion_oc'],   name='idx_cont_licitacion_oc'),
+        ]
 
     def __str__(self):
         return f"{self.numero_contrato} — {self.nombre_contrato}"

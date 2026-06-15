@@ -78,8 +78,10 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD', default='Nicolas2017#'),
         'HOST':     config('DB_HOST',     default='127.0.0.1'),
         'PORT':     config('DB_PORT',     default='3306'),
+        'CONN_MAX_AGE': 60,
         'OPTIONS': {
             'charset': 'utf8mb4',
+            'connect_timeout': 10,
         },
     }
 }

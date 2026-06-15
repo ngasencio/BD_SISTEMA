@@ -90,7 +90,10 @@ class LicitacionViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['Estado', 'C_NombreOrganismo', 'Tipo', 'EsRenovable']
 
     def get_queryset(self):
-        qs = Licitacion.objects.prefetch_related('detalles').all()
+        # prefetch_related solo en retrieve (detalle individual) — en list carga ~2300 filas extra innecesarias
+        qs = Licitacion.objects.all()
+        if self.action == 'retrieve':
+            qs = qs.prefetch_related('detalles')
         anio = self.request.query_params.get('anio', '').strip()
         if anio and anio.isdigit():
             qs = qs.filter(FechaPublicacion__year=int(anio))
@@ -291,6 +294,14 @@ def ordenes_compra_raw_all(request):
     except (ValueError, TypeError):
         limit = 15000
 
+    estado = request.GET.get('estado', '')
+    anio = request.GET.get('anio', '')
+
+    cache_key = f'oc_raw_all_v2_{estado}_{anio}_{limit}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return Response(cached)
+
     qs = OrdenCompra.objects.values(
         'codigo_oc', 'NombreOC', 'EstadoOC', 'TipoOC', 'TipoMoneda',
         'FechaCreacion', 'FechaEnvio', 'FechaAceptacion',
@@ -302,9 +313,6 @@ def ordenes_compra_raw_all(request):
         'TipoCompraInterna', 'TipoOCInterno', 'DescripcionTipoOC',
     )
 
-    estado = request.GET.get('estado', '')
-    anio = request.GET.get('anio', '')
-
     if estado:
         qs = qs.filter(EstadoOC__iexact=estado)
     if anio:
@@ -313,7 +321,9 @@ def ordenes_compra_raw_all(request):
         except (ValueError, TypeError):
             pass
 
-    return Response(list(qs[:limit]))
+    data = list(qs[:limit])
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
 
 
 @api_view(['GET'])
@@ -366,6 +376,12 @@ def ordenes_compra_proyectos_licitacion(request):
 def facturas_raw_all(request):
     """Devuelve facturas sin paginación. Filtro de año a nivel DB usando __endswith (formato DD-MM-YYYY)."""
     anio = request.GET.get('anio', '').strip()
+
+    cache_key = f'facturas_raw_all_{anio}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return Response(cached)
+
     qs = Factura.objects.values(
         'id', 'tipo_documento', 'folio', 'emisor', 'razon_social_emisor',
         'emision', 'monto_neto', 'monto_exento', 'monto_iva', 'monto_total',
@@ -375,10 +391,11 @@ def facturas_raw_all(request):
         'tarea_actual', 'fecha_ingreso', 'fecha_aceptacion', 'fecha_devengo',
     )
     if anio and anio.isdigit() and len(anio) == 4:
-        # emision almacenado como DD-MM-YYYY → filtrar por sufijo en DB
         qs = qs.filter(emision__endswith=anio)
 
-    return Response(list(qs))
+    data = list(qs)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
 
 
 # =============================================================================
@@ -2191,6 +2208,10 @@ def cancelar_actualizacion_contratos(request, task_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def contratos_stats_view(request):
+    cache_key = 'contratos_stats_v1'
+    if cached := cache.get(cache_key):
+        return Response(cached)
+
     qs = GestionContrato.objects.all()
     total = qs.count()
     if total == 0:
@@ -2244,7 +2265,7 @@ def contratos_stats_view(request):
     con_garantias_vencidas   = qs.filter(garantias_vencidas__gt=0).count()
     con_sanciones            = qs.filter(sanciones_solicitadas__gt=0).count()
 
-    return Response({
+    data = {
         "total":                  total,
         "vigentes":               vigentes,
         "terminados":             terminados,
@@ -2260,7 +2281,9 @@ def contratos_stats_view(request):
         "por_unidad":             por_unidad,
         "por_ejecucion":          por_ejecucion,
         "vacio":                  False,
-    })
+    }
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
 
 
 class GestionContratoViewSet(viewsets.ReadOnlyModelViewSet):
