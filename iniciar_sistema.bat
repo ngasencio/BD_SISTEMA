@@ -32,7 +32,7 @@ echo.
 
 REM --- Verificar MySQL ---
 echo [1/3] Verificando MySQL (XAMPP)...
-"C:\xampp\mysql\bin\mysql.exe" -u bd_sistema_app -pBdSistema2025# -e "SELECT 1;" >nul 2>&1
+netstat -ano 2>nul | findstr ":3306 " | findstr "LISTENING" >nul 2>&1
 IF ERRORLEVEL 1 (
     echo  ERROR: MySQL no esta corriendo.
     echo  Abre XAMPP Control Panel e inicia MySQL primero.
