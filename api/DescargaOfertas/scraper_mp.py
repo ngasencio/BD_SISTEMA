@@ -137,11 +137,14 @@ def main():
 
         # ── ETAPA 5: Resumen ───────────────────────────────────
         _banner("ETAPA 5 - Generando resumen")
+        # FIX BUG-03: pasar log_lista (eventos por archivo) para que el
+        # resumen pueda detallar qué archivos fallaron, no solo los conteos.
         generar_resumen(
             rutas["carpeta_principal"],
             rutas["resumen_txt"],
             codigo, nombre,
-            proveedores, rutas, log_dict
+            proveedores, rutas, log_dict,
+            log_detalle=log_lista,
         )
 
         # ── Fin ────────────────────────────────────────────────

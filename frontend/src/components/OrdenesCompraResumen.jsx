@@ -2280,7 +2280,7 @@ export function OrdenesCompraResumen() {
 
     useEffect(() => {
         Promise.all([
-            api.get('ordenes-compra/raw_all/'),
+            api.get('ordenes-compra/raw_all/', { params: { limit: 25000 } }),
             api.get('ordenes-compra/proyectos-licitacion/'),
         ])
             .then(([ocRes, mapRes]) => {

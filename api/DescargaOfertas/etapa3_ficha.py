@@ -14,6 +14,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
+from _utils import set_download_folder, esperar_descarga
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -25,114 +27,65 @@ REINTENTOS       = 3
 TIMEOUT_DESCARGA = 60
 URL_FICHA_BASE   = "https://proveedor.mercadopublico.cl/ficha/"
 
-EXTS_TEMP = ('.crdownload', '.tmp', '.part', '.download')
-
 
 # ─────────────────────────────────────────────
 #  PRIVADO
 # ─────────────────────────────────────────────
-def _set_download_folder(driver, carpeta: str):
+def _rut_para_url(rut: str) -> str:
     """
-    Redirige las descargas de Chrome a `carpeta` usando CDP.
-    Con behavior='allow' Chrome descarga todo (PDF, docx, etc.)
-    sin abrirlo en el navegador ni mostrar diálogo.
+    FIX BUG-06: el portal de proveedores espera el RUT sin puntos ('76680253-2'),
+    no en el formato de tabla con puntos ('76.680.253-2').
     """
-    os.makedirs(carpeta, exist_ok=True)
-    abs_path = os.path.abspath(carpeta)
-    try:
-        driver.execute_cdp_cmd("Browser.setDownloadBehavior", {
-            "behavior":      "allow",
-            "downloadPath":  abs_path,
-            "eventsEnabled": True,
-        })
-    except Exception:
-        try:
-            driver.execute_cdp_cmd("Page.setDownloadBehavior", {
-                "behavior":     "allow",
-                "downloadPath": abs_path,
-            })
-        except Exception as e:
-            print(f"[WARN] CDP setDownloadBehavior falló: {e}")
-
-
-def _esperar_descarga(carpeta: str, snapshot_antes: set,
-                      timeout: int = TIMEOUT_DESCARGA) -> "str | None":
-    """
-    Espera que aparezca un archivo nuevo y completo en `carpeta`.
-    Ignora archivos temporales de Chrome (.crdownload, .tmp, etc.).
-    Retorna la ruta completa del archivo descargado, o None si timeout.
-    """
-    deadline  = time.time() + timeout
-    detectado = False
-
-    while time.time() < deadline:
-        try:
-            archivos_ahora = set(os.listdir(carpeta))
-        except OSError:
-            time.sleep(1)
-            continue
-
-        # Detectar descarga en curso
-        parciales = {f for f in archivos_ahora if f.endswith(EXTS_TEMP)}
-        if parciales:
-            detectado = True
-            time.sleep(0.5)
-            continue
-
-        # Archivos nuevos y completos
-        nuevos  = archivos_ahora - snapshot_antes
-        validos = {f for f in nuevos if not f.endswith(EXTS_TEMP)}
-        if validos:
-            nombre = sorted(
-                validos,
-                key=lambda f: os.path.getmtime(os.path.join(carpeta, f)),
-                reverse=True
-            )[0]
-            return os.path.join(carpeta, nombre)
-
-        if detectado:
-            time.sleep(0.5)
-            continue
-
-        time.sleep(1)
-
-    return None
+    return rut.replace('.', '')
 
 
 def _buscar_boton_descarga(driver) -> "object | None":
     """
-    Busca el botón de descarga de ficha PDF con tres selectores en cascada.
+    FIX BUG-05: eliminado el selector 'a.sc-hMSOUR' que era un hash de
+    styled-components y se rompía con cada deploy del portal.
+    Ahora usa solo selectores semánticos estables (texto, href, atributos).
     Retorna el WebElement o None si no se encuentra.
     """
-    # Selector 1: XPath por texto visible
-    try:
-        btn = WebDriverWait(driver, 8).until(
-            EC.element_to_be_clickable(
-                (By.XPATH, "//a[contains(., 'Descargar ficha')]")
+    # Selector 1: texto visible exacto o parcial (más robusto)
+    for xpath in [
+        "//a[contains(normalize-space(.), 'Descargar ficha')]",
+        "//button[contains(normalize-space(.), 'Descargar ficha')]",
+        "//a[contains(normalize-space(.), 'Descargar Ficha')]",
+    ]:
+        try:
+            btn = WebDriverWait(driver, 8).until(
+                EC.element_to_be_clickable((By.XPATH, xpath))
             )
-        )
-        print("[INFO] Botón ficha encontrado por texto XPath.")
-        return btn
-    except TimeoutException:
-        pass
+            print(f"[INFO] Botón ficha encontrado por texto: {xpath}")
+            return btn
+        except TimeoutException:
+            continue
 
-    # Selector 2: <a> con href que contenga '/ficha/'
+    # Selector 2: <a> con href descarga + texto contiene 'descargar'
     try:
-        candidatos = driver.find_elements(By.CSS_SELECTOR, "a[href*='/ficha/']")
-        for c in candidatos:
-            if "descargar" in c.text.lower() and c.is_displayed():
-                print("[INFO] Botón ficha encontrado por href + texto.")
-                return c
+        for css in ["a[href*='download']", "a[href*='descargar']",
+                    "a[href*='.pdf']", "a[download]"]:
+            candidatos = driver.find_elements(By.CSS_SELECTOR, css)
+            for c in candidatos:
+                if c.is_displayed() and "descargar" in c.text.lower():
+                    print(f"[INFO] Botón ficha encontrado por href ({css}).")
+                    return c
     except Exception:
         pass
 
-    # Selector 3: clase CSS conocida
+    # Selector 3: botón con aria-label o title relacionado a descarga
     try:
-        btn = driver.find_element(By.CSS_SELECTOR, "a.sc-hMSOUR")
-        if btn.is_displayed():
-            print("[INFO] Botón ficha encontrado por clase CSS sc-hMSOUR.")
-            return btn
-    except NoSuchElementException:
+        for css in [
+            "a[aria-label*='descargar' i]",
+            "a[title*='descargar' i]",
+            "button[aria-label*='descargar' i]",
+        ]:
+            candidatos = driver.find_elements(By.CSS_SELECTOR, css)
+            for c in candidatos:
+                if c.is_displayed():
+                    print(f"[INFO] Botón ficha encontrado por aria/title ({css}).")
+                    return c
+    except Exception:
         pass
 
     return None
@@ -151,6 +104,8 @@ def descargar_ficha(driver, rut: str, nombre: str, carpeta_destino: str) -> bool
     """
     print(f"\n[INFO] Descargando ficha: {rut} - {nombre}")
 
+    rut_url = _rut_para_url(rut)  # FIX BUG-06: sin puntos para la URL
+
     for intento in range(1, REINTENTOS + 1):
         handle_original = driver.current_window_handle
         nueva_tab = None
@@ -166,12 +121,10 @@ def descargar_ficha(driver, rut: str, nombre: str, carpeta_destino: str) -> bool
             driver.switch_to.window(nueva_tab)
 
             # ── 2. Apuntar descargas a la carpeta correcta ANTES de navegar ──
-            # Es crítico hacerlo aquí: si la URL misma sirve el PDF directamente,
-            # Chrome lo descargaría al instante de navegar.
-            _set_download_folder(driver, carpeta_destino)
+            set_download_folder(driver, carpeta_destino)
 
-            # ── 3. Navegar a la ficha ──
-            url = f"{URL_FICHA_BASE}{rut}"
+            # ── 3. Navegar a la ficha (FIX BUG-06: RUT sin puntos) ──
+            url = f"{URL_FICHA_BASE}{rut_url}"
             driver.get(url)
             WebDriverWait(driver, ESPERA_MAX).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
@@ -181,20 +134,21 @@ def descargar_ficha(driver, rut: str, nombre: str, carpeta_destino: str) -> bool
             # ── 4. Buscar botón de descarga ──
             boton = _buscar_boton_descarga(driver)
             if boton is None:
-                print(f"[WARN] Ficha no disponible en portal para {rut}.")
+                print(f"[WARN] Ficha no disponible en portal para {rut_url}.")
                 driver.close()
                 driver.switch_to.window(handle_original)
                 return False
 
             # ── 5. Confirmar ruta CDP y tomar snapshot ──
-            _set_download_folder(driver, carpeta_destino)
+            set_download_folder(driver, carpeta_destino)
             snapshot = set(os.listdir(carpeta_destino))
 
             driver.execute_script("arguments[0].click();", boton)
             print(f"[INFO] Clic en botón de descarga. Esperando PDF en carpeta ficha...")
 
             # ── 6. Esperar el archivo en carpeta_destino ──
-            archivo = _esperar_descarga(carpeta_destino, snapshot, TIMEOUT_DESCARGA)
+            archivo = esperar_descarga(carpeta_destino, snapshot,
+                                       timeout=TIMEOUT_DESCARGA)
             if archivo is None:
                 print(f"[WARN] Intento {intento}/{REINTENTOS}: timeout esperando PDF.")
                 driver.close()

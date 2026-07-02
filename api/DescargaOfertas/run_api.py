@@ -109,21 +109,30 @@ def run(codigo: str, carpeta_base: Path):
                 except Exception:
                     pass
 
+        # FIX BUG-03: pasar log_lista para que el resumen incluya detalle de errores
         generar_resumen(
             rutas["carpeta_principal"],
             rutas["resumen_txt"],
             codigo, nombre,
-            proveedores, rutas, log_dict
+            proveedores, rutas, log_dict,
+            log_detalle=log_lista,
         )
 
-        # Crear ZIP en la misma carpeta base
+        # FIX BUG-13: capturar OSError en la creación del ZIP y reportarlo
+        # correctamente al backend en lugar de dejar el proceso colgado.
         carpeta_principal = Path(rutas["carpeta_principal"])
-        zip_path = carpeta_base / f"{carpeta_principal.name}.zip"
-        _crear_zip(carpeta_principal, zip_path)
+        zip_path = None
+        try:
+            zip_path = carpeta_base / f"{carpeta_principal.name}.zip"
+            _crear_zip(carpeta_principal, zip_path)
+        except OSError as e:
+            print(f"[ERROR] No se pudo crear el ZIP: {e}", file=sys.stderr)
+            zip_path = None
 
         # Estas líneas son leídas por el backend Django
-        print(f"ZIP_PATH:{zip_path}")
         print(f"CARPETA_PATH:{rutas['carpeta_principal']}")
+        if zip_path and zip_path.exists():
+            print(f"ZIP_PATH:{zip_path}")
 
     finally:
         driver.quit()

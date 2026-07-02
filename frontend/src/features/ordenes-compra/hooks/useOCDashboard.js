@@ -42,7 +42,7 @@ export function useOCDashboard() {
         setLoadingOC(true);
         setErrorOC(null);
         try {
-            const { data } = await getOCRawAll({ limit: 20000 });
+            const { data } = await getOCRawAll({ limit: 25000 });
             setRawOC(Array.isArray(data) ? data : (data.results ?? []));
         } catch (err) {
             setErrorOC(err.response?.data?.detail || 'Error al cargar órdenes de compra.');

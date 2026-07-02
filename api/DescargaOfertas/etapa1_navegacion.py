@@ -71,6 +71,18 @@ def iniciar_chrome():
     opciones.add_argument("--disable-blink-features=AutomationControlled")
     opciones.add_experimental_option("excludeSwitches", ["enable-automation"])
     opciones.add_experimental_option("useAutomationExtension", False)
+
+    # OPT-6: flags de rendimiento — reducen tiempo de startup y overhead de red
+    opciones.add_argument("--disable-extensions")
+    opciones.add_argument("--disable-background-networking")
+    opciones.add_argument("--disable-background-timer-throttling")
+    opciones.add_argument("--disable-translate")
+    opciones.add_argument("--disable-default-apps")
+    opciones.add_argument("--no-first-run")
+    opciones.add_argument("--safebrowsing-disable-auto-update")
+    opciones.add_argument("--metrics-recording-only")
+    opciones.add_argument("--password-store=basic")
+
     opciones.add_experimental_option("prefs", {
         "profile.default_content_setting_values.popups": 1,
         "plugins.always_open_pdf_externally": True,
@@ -107,48 +119,34 @@ def iniciar_chrome():
 # ─────────────────────────────────────────────
 def _cerrar_overlays(driver):
     """
-    Cierra banners de cookies, modales de términos y cualquier overlay
-    que pueda interceptar los clics antes de interactuar con el campo.
-    Mercado Público muestra un banner de cookies en la parte inferior
-    y ocasionalmente un modal de aviso al entrar.
+    OPT-2: antes hacía 11 find_element + sleep(0.5) por cada selector = hasta 5.5s.
+    Ahora todo se resuelve en una única llamada JS: 0 round-trips adicionales.
     """
-    # Selectores conocidos de overlays en Mercado Público
-    selectores_cierre = [
-        "button#cookieConsentOkButton",
-        "button.cookie-consent-ok",
-        "button[id*='cookie']",
-        "button[id*='Cookie']",
-        "a[id*='cookie']",
-        "#cookieAccept",
-        ".cookie-accept",
-        "button.btn-mp[data-dismiss='modal']",
-        "button[data-dismiss='modal']",
-        ".modal .close",
-        "#modalInformacion .close",
-        "button.close",
-    ]
-    for selector in selectores_cierre:
-        try:
-            btn = driver.find_element(By.CSS_SELECTOR, selector)
-            if btn.is_displayed():
-                driver.execute_script("arguments[0].click();", btn)
-                print(f"[INFO] Overlay cerrado: {selector}")
-                time.sleep(0.5)
-        except Exception:
-            continue
-
-    # Forzar cierre de cualquier modal Bootstrap activo vía JS
     try:
-        driver.execute_script("""
-            document.querySelectorAll('.modal.show, .modal.in').forEach(function(m) {
-                m.style.display = 'none';
-                m.classList.remove('show', 'in');
+        cerrados = driver.execute_script("""
+            var sels = [
+                "button#cookieConsentOkButton","button.cookie-consent-ok",
+                "button[id*='cookie']","button[id*='Cookie']","a[id*='cookie']",
+                "#cookieAccept",".cookie-accept",
+                "button.btn-mp[data-dismiss='modal']","button[data-dismiss='modal']",
+                ".modal .close","#modalInformacion .close","button.close"
+            ];
+            var n = 0;
+            sels.forEach(function(s) {
+                try {
+                    var el = document.querySelector(s);
+                    if (el && el.offsetParent !== null) { el.click(); n++; }
+                } catch(e) {}
             });
-            document.querySelectorAll('.modal-backdrop').forEach(function(b) {
-                b.remove();
+            document.querySelectorAll('.modal.show,.modal.in').forEach(function(m) {
+                m.style.display='none'; m.classList.remove('show','in');
             });
+            document.querySelectorAll('.modal-backdrop').forEach(function(b){ b.remove(); });
             document.body.classList.remove('modal-open');
+            return n;
         """)
+        if cerrados:
+            print(f"[INFO] Overlays cerrados (JS batch): {cerrados}")
     except Exception:
         pass
 
@@ -286,14 +284,24 @@ def buscar_licitacion(driver, codigo):
             _cerrar_overlays(driver)
 
             # ── 3. Cambiar al iframe que contiene el formulario ──
-            # El campo de búsqueda y el botón están dentro de iframe id='form-iframe'.
+            # OPT-3a: verificar presencia del iframe con JS antes de encolar
+            # WebDriverWait — si ya está en el DOM el timeout se reduce a 5s.
             iframe_localizado = False
+            try:
+                iframe_existe = driver.execute_script(
+                    "return !!(document.getElementById('form-iframe') || "
+                    "document.getElementsByName('form-iframe').length);"
+                )
+            except Exception:
+                iframe_existe = False
+            espera_iframe = 5 if iframe_existe else ESPERA_MAX
+
             for iframe_sel in [
                 (By.ID,   "form-iframe"),
                 (By.NAME, "form-iframe"),
             ]:
                 try:
-                    WebDriverWait(driver, ESPERA_MAX).until(
+                    WebDriverWait(driver, espera_iframe).until(
                         EC.frame_to_be_available_and_switch_to_it(iframe_sel)
                     )
                     iframe_localizado = True
@@ -309,22 +317,32 @@ def buscar_licitacion(driver, codigo):
                 continue
 
             # ── 4. Localizar el campo dentro del iframe ──
+            # OPT-3b: intento no-bloqueante primero (find_elements = 0s timeout),
+            # luego fallback con WebDriverWait breve (5s) si no lo encontró.
             campo = None
-            selectores = [
+            _selectores_campo = [
                 (By.ID,           "textoBusqueda"),
                 (By.NAME,         "textoBusqueda"),
                 (By.CSS_SELECTOR, "input.input-mp"),
                 (By.CSS_SELECTOR, "input[type='text']"),
             ]
-            for metodo, valor in selectores:
-                try:
-                    campo = WebDriverWait(driver, 8).until(
-                        EC.element_to_be_clickable((metodo, valor))
-                    )
-                    print(f"[INFO] Campo clickable localizado con: {valor}")
+            for metodo, valor in _selectores_campo:
+                found = driver.find_elements(metodo, valor)
+                if found and found[0].is_displayed():
+                    campo = found[0]
+                    print(f"[INFO] Campo localizado (no-blocking) con: {valor}")
                     break
-                except TimeoutException:
-                    continue
+
+            if not campo:
+                for metodo, valor in _selectores_campo:
+                    try:
+                        campo = WebDriverWait(driver, 5).until(
+                            EC.element_to_be_clickable((metodo, valor))
+                        )
+                        print(f"[INFO] Campo clickable localizado con: {valor}")
+                        break
+                    except TimeoutException:
+                        continue
 
             if not campo:
                 print(f"[WARN] Intento {intento}/{REINTENTOS}: campo no encontrado en iframe.")
@@ -332,15 +350,14 @@ def buscar_licitacion(driver, codigo):
                 time.sleep(2)
                 continue
 
-            # ── 5. Escribir el código ──
-            campo.click()
-            campo.clear()
-            campo.send_keys(codigo)
-            time.sleep(0.4)
-
-            if campo.get_attribute("value") != codigo:
-                print(f"[WARN] Intento {intento}/{REINTENTOS}: escritura incompleta "
-                      f"(valor='{campo.get_attribute('value')}').")
+            # ── 5. Escribir el código (usa las 5 estrategias) ──
+            # FIX BUG-01: antes se usaba send_keys directo y _escribir_en_campo
+            # nunca se llamaba. Ahora se delega aquí para que las 5 estrategias
+            # (portapapeles, send_keys, JS, execCommand, char-a-char) se activen
+            # cuando el campo rechaza la escritura simple.
+            if not _escribir_en_campo(driver, campo, codigo):
+                print(f"[WARN] Intento {intento}/{REINTENTOS}: ninguna estrategia "
+                      f"logró escribir el código.")
                 driver.switch_to.default_content()
                 time.sleep(2)
                 continue
@@ -435,19 +452,40 @@ def entrar_ficha(driver, codigo):
                     "//h2//ancestor::a[1]",
                 ]:
                     for el in driver.find_elements(By.XPATH, xpath):
-                        if el.is_displayed():
-                            onclick = el.get_attribute("onclick") or ""
-                            m = re.search(r"verFicha\('([^']+)'\)", onclick)
-                            if m:
-                                url_ficha = m.group(1)
-                            # Extraer texto ahora, mientras el contexto es correcto
-                            try:
-                                titulo_iframe = el.text.strip().split('\n')[0]
-                            except Exception:
-                                titulo_iframe = ""
-                            enlace = True  # solo usamos como bandera; no guardamos el WebElement
-                            print(f"[INFO] Estrategia 0 (iframe): {xpath}")
-                            break
+                        if not el.is_displayed():
+                            continue
+                        onclick = el.get_attribute("onclick") or ""
+                        m = re.search(r"verFicha\('([^']+)'\)", onclick)
+                        if not m:
+                            continue
+
+                        url_candidate = m.group(1)
+
+                        # FIX BUG-02: verificar que el resultado corresponde al
+                        # código buscado. La URL interna usa IDs numéricos, así que
+                        # revisamos el texto del contenedor padre del resultado.
+                        try:
+                            parent_text = el.find_element(
+                                By.XPATH, "ancestor::div[1]"
+                            ).text
+                        except Exception:
+                            parent_text = el.text or ""
+
+                        codigo_norm = codigo.upper().replace(" ", "")
+                        if (codigo_norm not in parent_text.upper().replace(" ", "")
+                                and codigo_norm not in url_candidate.upper()):
+                            print(f"[WARN] Estrategia 0: resultado ignorado "
+                                  f"(código no encontrado en contexto).")
+                            continue
+
+                        url_ficha = url_candidate
+                        try:
+                            titulo_iframe = el.text.strip().split('\n')[0]
+                        except Exception:
+                            titulo_iframe = ""
+                        enlace = True
+                        print(f"[INFO] Estrategia 0 (iframe): {xpath}")
+                        break
                     if enlace:
                         break
                 driver.switch_to.default_content()
@@ -548,19 +586,93 @@ def entrar_ficha(driver, codigo):
 #  OBTENER NOMBRE DE LA LICITACIÓN
 # ─────────────────────────────────────────────
 def obtener_nombre_licitacion(driver):
+    """
+    OPT-1 + BUG-11: antes usaba 7 × WebDriverWait(20s) en cascada → hasta 140s de
+    espera innecesaria si ningún selector coincidía. Ahora: una sola espera corta
+    (5s) para que la página cargue al menos un h2, luego scan no-bloqueante con
+    find_elements (retorno inmediato si el elemento no existe).
+    """
+    CHARS_INVALIDOS = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+
+    def _limpiar(texto: str) -> str:
+        for ch in CHARS_INVALIDOS:
+            texto = texto.replace(ch, '-')
+        return texto[:80].strip() or "Licitacion"
+
+    # Esperar a que la página tenga al menos un h2 (máx 5s)
     try:
-        wait = WebDriverWait(driver, ESPERA_MAX)
-        elem = wait.until(EC.presence_of_element_located((By.TAG_NAME, "h2")))
-        nombre = elem.text.strip()
-        # Caracteres inválidos en nombres de carpeta Windows
-        for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']:
-            nombre = nombre.replace(char, '-')
-        nombre = nombre[:80].strip()
-        print(f"[OK]   Nombre licitación: {nombre}")
-        return nombre
-    except Exception as e:
-        print(f"[WARN] No se pudo obtener el nombre: {e}")
-        return "Licitacion"
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.TAG_NAME, "h2"))
+        )
+    except TimeoutException:
+        pass
+
+    # Scan no-bloqueante — find_elements retorna [] de inmediato si no existe
+    SELECTORES = [
+        (By.CSS_SELECTOR, "h2.titulodetalle"),
+        (By.CSS_SELECTOR, ".titulo-licitacion h2"),
+        (By.CSS_SELECTOR, ".ficha-licitacion h2"),
+        (By.CSS_SELECTOR, "#titulo-licitacion"),
+        (By.CSS_SELECTOR, "main h2"),
+        (By.CSS_SELECTOR, "#content h2"),
+        (By.CSS_SELECTOR, ".container h2"),
+    ]
+
+    for metodo, selector in SELECTORES:
+        try:
+            for elem in driver.find_elements(metodo, selector):
+                texto = elem.text.strip()
+                if texto and len(texto) > 5:
+                    nombre = _limpiar(texto)
+                    print(f"[OK]   Nombre licitación ({selector}): {nombre}")
+                    return nombre
+        except Exception:
+            continue
+
+    # Fallback 1: título del documento sin el sufijo del sitio
+    try:
+        titulo_doc = driver.title.strip()
+        for sufijo in [" - Mercado Público", " - MercadoPublico",
+                       " | Mercado Público", " | MercadoPublico"]:
+            if titulo_doc.endswith(sufijo):
+                titulo_doc = titulo_doc[: -len(sufijo)].strip()
+                break
+        if titulo_doc and len(titulo_doc) > 5:
+            nombre = _limpiar(titulo_doc)
+            print(f"[OK]   Nombre licitación (title): {nombre}")
+            return nombre
+    except Exception:
+        pass
+
+    # Fallback 2: cualquier h2 con contenido suficiente
+    try:
+        for elem in driver.find_elements(By.TAG_NAME, "h2"):
+            texto = elem.text.strip()
+            if texto and len(texto) > 10:
+                nombre = _limpiar(texto)
+                print(f"[WARN] Nombre licitación (h2 genérico): {nombre}")
+                return nombre
+    except Exception:
+        pass
+
+    print("[WARN] No se pudo obtener el nombre de la licitación.")
+    return "Licitacion"
+
+
+# ─────────────────────────────────────────────
+#  GENERADOR DE ETIQUETAS PARA PROVEEDORES
+# ─────────────────────────────────────────────
+def _generar_etiqueta(idx: int) -> str:
+    """
+    FIX BUG-12: el esquema original se agotaba en 26 proveedores y caía a
+    números string. Ahora genera etiquetas alfabéticas ilimitadas:
+    a-z (0-25) → aa-az (26-51) → ba-bz (52-77) → … (soporta hasta 702+)
+    """
+    BASE = 'abcdefghijklmnopqrstuvwxyz'
+    if idx < 26:
+        return BASE[idx]
+    idx -= 26
+    return BASE[idx // 26] + BASE[idx % 26]
 
 
 # ─────────────────────────────────────────────
@@ -618,8 +730,7 @@ def abrir_cuadro_ofertas(driver):
 # ─────────────────────────────────────────────
 def extraer_proveedores(driver):
     print("\n[INFO] Extrayendo proveedores del Cuadro de Ofertas...")
-    wait    = WebDriverWait(driver, ESPERA_MAX)
-    letras  = 'abcdefghijklmnopqrstuvwxyz'
+    wait        = WebDriverWait(driver, ESPERA_MAX)
     proveedores = []
 
     for intento in range(1, REINTENTOS + 1):
@@ -634,39 +745,61 @@ def extraer_proveedores(driver):
 
             pagina_actual = 1
             while True:
-                filas = driver.find_elements(By.XPATH,
-                    "//table[@id='grdSupplies']//tr[contains(@class,'cssFwk')]"
-                )
+                # OPT-4: 1 sola llamada JS reemplaza el find_elements de guardia
+                # + los 5×N find_element por fila (antes = 5N+1 round-trips Selenium).
+                # IMPORTANTE: se usa indexOf('cssFwk') en lugar de tr.cssFwk para
+                # replicar el XPath contains(@class,'cssFwk') — que coincide con
+                # clases compuestas como cssFwkRow/cssFwkEven que MP puede generar.
+                filas_data = driver.execute_script("""
+                    var t = document.getElementById('grdSupplies');
+                    if (!t) return [];
+                    var out = [];
+                    var txt = function(el) {
+                        return el ? (el.innerText || el.textContent || '').trim() : '';
+                    };
+                    var cel = function(el, sub) {
+                        if (!el) return '';
+                        var n = el.querySelector(sub);
+                        return n ? txt(n) : txt(el);
+                    };
+                    Array.prototype.filter.call(
+                        t.querySelectorAll('tr'),
+                        function(r) { return r.className.indexOf('cssFwk') >= 0; }
+                    ).forEach(function(r) {
+                        var td = r.querySelectorAll('td');
+                        if (td.length < 3) return;
+                        out.push({
+                            rut:    cel(td[0], 'a'),
+                            nombre: cel(td[1], 'a'),
+                            oferta: cel(td[2], 'span') || txt(td[2]),
+                            total:  cel(td[3], 'span') || txt(td[3]),
+                            estado: cel(td[4], 'span') || txt(td[4])
+                        });
+                    });
+                    return out;
+                """)
 
-                if not filas and pagina_actual == 1:
+                if not filas_data and pagina_actual == 1:
                     print(f"[WARN] Intento {intento}/{REINTENTOS}: tabla sin filas.")
                     break
 
-                print(f"[INFO] Página {pagina_actual}: {len(filas)} proveedor(es).")
+                print(f"[INFO] Página {pagina_actual}: {len(filas_data)} proveedor(es).")
 
-                for i, fila in enumerate(filas):
-                    try:
-                        rut    = fila.find_element(By.XPATH, ".//td[1]//a").text.strip()
-                        nombre = fila.find_element(By.XPATH, ".//td[2]//a").text.strip()
-                        oferta = fila.find_element(By.XPATH, ".//td[3]//span").text.strip()
-                        total  = fila.find_element(By.XPATH, ".//td[4]//span").text.strip()
-                        estado = fila.find_element(By.XPATH, ".//td[5]//span").text.strip()
-                        idx_global = len(proveedores)
-                        letra      = letras[idx_global] if idx_global < len(letras) else str(idx_global + 1)
-
-                        proveedores.append({
-                            "letra":      letra,
-                            "rut":        rut,
-                            "nombre":     nombre,
-                            "oferta":     oferta,
-                            "total":      total,
-                            "estado":     estado,
-                            "fila_index": i,            # índice en la página actual (0-based)
-                            "pagina_grd": pagina_actual, # página del cuadro de ofertas
-                        })
-                    except NoSuchElementException as e:
-                        print(f"[WARN] Fila {i+1} p{pagina_actual}: no se pudo leer → {e}")
+                for i, data in enumerate(filas_data):
+                    if not data or not data.get('rut'):
+                        print(f"[WARN] Fila {i+1} p{pagina_actual}: datos incompletos, omitida.")
                         continue
+                    letra = _generar_etiqueta(len(proveedores))
+                    proveedores.append({
+                        "letra":      letra,
+                        "rut":        data['rut'],
+                        "nombre":     data['nombre'],
+                        "oferta":     data['oferta'],
+                        "total":      data['total'],
+                        "estado":     data['estado'],
+                        "fila_index": i,
+                        "pagina_grd": pagina_actual,
+                    })
 
                 # Buscar link a la siguiente página
                 sig_pag = pagina_actual + 1

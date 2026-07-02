@@ -290,9 +290,9 @@ class DetalleOrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
 def ordenes_compra_raw_all(request):
     """Devuelve todas las OC sin paginación para el dashboard (solo campos necesarios)."""
     try:
-        limit = min(int(request.GET.get('limit', 15000)), 20000)
+        limit = min(int(request.GET.get('limit', 25000)), 25000)
     except (ValueError, TypeError):
-        limit = 15000
+        limit = 25000
 
     estado = request.GET.get('estado', '')
     anio = request.GET.get('anio', '')

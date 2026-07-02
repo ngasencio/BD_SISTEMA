@@ -131,7 +131,7 @@ GET   dashboard/stats/                    KPI aggregates (5 min cache)
 GET   ordenes-compra/                     ?EstadoOC=&C_Unidad=&TipoOC=
 GET   ordenes-compra/{id}/
 GET   ordenes-compra-detalles/
-GET   ordenes-compra/raw_all/             ?estado=&anio=&limit= (max 20 000, unpaginated)
+GET   ordenes-compra/raw_all/             ?estado=&anio=&limit= (max 25 000, unpaginated, default 25 000)
 GET   ordenes-compra/proyectos-licitacion/ CodigoLicitacion→ID_Proyecto map (10 min cache)
 GET   facturas/raw_all/                   ?anio= (unpaginated, emision as DD-MM-YYYY string)
 

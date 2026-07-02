@@ -23,6 +23,8 @@ from selenium.common.exceptions import (
     TimeoutException, NoSuchElementException, StaleElementReferenceException
 )
 
+from _utils import set_download_folder, esperar_descarga
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -31,7 +33,7 @@ if hasattr(sys.stdout, "reconfigure"):
 # ─────────────────────────────────────────────
 REINTENTOS       = 3
 TIMEOUT_DESCARGA = 45
-TIMEOUT_POPUP    = 8
+TIMEOUT_POPUP    = 20   # FIX BUG-04: aumentado de 8s a 20s para servidores lentos de MP
 ESPERA_MAX       = 15
 
 TIPO_MAP = {
@@ -46,38 +48,17 @@ SUBCARPETAS = {
     "Economic":       "Anexos Economicos",
 }
 
-# Extensiones de archivos temporales que Chrome genera durante la descarga
-EXTS_TEMP = ('.crdownload', '.tmp', '.part', '.download')
+# FIX BUG-08: títulos reales del atributo title en MP, revisados con mayúsculas consistentes
+TITULOS_BOTON = {
+    "Administrative": "Anexos Administrativos",
+    "Technical":      "Anexos Técnicos",
+    "Economic":       "Anexos Económicos",
+}
 
 
 # ─────────────────────────────────────────────
 #  AUXILIARES
 # ─────────────────────────────────────────────
-def _set_download_folder(driver, carpeta: str):
-    """
-    Redirige todas las descargas de Chrome a `carpeta` usando CDP.
-    Con behavior='allow' Chrome descarga todo (PDF, docx, xlsx, zip, rar…)
-    en vez de abrirlo en el navegador, sin ningún diálogo de confirmación.
-    """
-    os.makedirs(carpeta, exist_ok=True)
-    abs_path = os.path.abspath(carpeta)
-    try:
-        driver.execute_cdp_cmd("Browser.setDownloadBehavior", {
-            "behavior":      "allow",
-            "downloadPath":  abs_path,
-            "eventsEnabled": True,
-        })
-    except Exception:
-        # Fallback para versiones anteriores de ChromeDriver
-        try:
-            driver.execute_cdp_cmd("Page.setDownloadBehavior", {
-                "behavior":     "allow",
-                "downloadPath": abs_path,
-            })
-        except Exception as e:
-            print(f"[WARN] CDP setDownloadBehavior falló: {e}")
-
-
 def _entrar_frame_cuerpo(driver):
     """
     Ruta: default_content → PopupFicha (iframe RadWindow) → Cuerpo (frame).
@@ -101,51 +82,6 @@ def _entrar_frame_cuerpo(driver):
         except TimeoutException:
             print("[WARN] No se pudo cambiar al frame PopupFicha → Cuerpo.")
             return False
-
-
-def esperar_descarga(carpeta: str, snapshot_antes: set,
-                     nombre_esperado: str,
-                     timeout: int = TIMEOUT_DESCARGA) -> "str | None":
-    """
-    Espera que aparezca un archivo NUEVO y completo en `carpeta`.
-    Ignora archivos temporales (.crdownload, .tmp, etc.).
-    Retorna la ruta completa del archivo descargado, o None si timeout.
-    """
-    inicio = time.time()
-
-    while time.time() - inicio < timeout:
-        try:
-            todos = os.listdir(carpeta)
-        except OSError:
-            time.sleep(0.5)
-            continue
-
-        # Mientras haya archivo temporal → descarga en curso
-        if any(f.endswith(EXTS_TEMP) for f in todos):
-            time.sleep(0.5)
-            continue
-
-        nuevos = [
-            f for f in todos
-            if f not in snapshot_antes
-            and not f.endswith(EXTS_TEMP)
-        ]
-
-        if nuevos:
-            # Preferir el que coincide con el nombre esperado
-            for f in nuevos:
-                if nombre_esperado.lower() in f.lower():
-                    return os.path.join(carpeta, f)
-            # Fallback: el más reciente
-            return os.path.join(
-                carpeta,
-                max(nuevos, key=lambda f: os.path.getmtime(
-                    os.path.join(carpeta, f)))
-            )
-
-        time.sleep(0.5)
-
-    return None
 
 
 def _nombre_unico(carpeta: str, nombre_archivo: str) -> str:
@@ -221,6 +157,24 @@ def _buscar_fila_por_rut(driver, rut_buscado: str) -> "tuple[int, int] | None":
         except NoSuchElementException:
             break  # No hay más páginas
 
+    # FIX BUG-09: si el RUT no se encontró, volver a página 1 para dejar
+    # el grid en estado limpio antes de retornar None.
+    try:
+        old_grd = driver.find_element(By.ID, "grdSupplies")
+        btn_p1  = driver.find_element(
+            By.XPATH,
+            "//table[@id='WucPagerGrid__TblPages']"
+            "//div[contains(@onclick,'fnMovePage(1,')]"
+        )
+        driver.execute_script("arguments[0].click();", btn_p1)
+        wait.until(EC.staleness_of(old_grd))
+        wait.until(EC.presence_of_element_located((By.ID, "grdSupplies")))
+        print("[INFO] Grid vuelto a página 1 tras búsqueda fallida de RUT.")
+    except NoSuchElementException:
+        pass  # ya en página 1
+    except Exception as e:
+        print(f"[WARN] No se pudo volver a página 1 tras búsqueda RUT: {e}")
+
     print(f"[ERROR] RUT {rut_buscado} no encontrado en ninguna hoja del cuadro.")
     return None
 
@@ -254,26 +208,26 @@ def _buscar_boton_tipo(driver, fila_index: int, tipo: str):
     except Exception:
         pass
 
-    # Estrategia C: título del botón en la fila correcta
-    titulos = {
-        "Administrative": "Anexos Administrativos",
-        "Technical":      "Anexos Técnicos",
-        "Economic":       "Anexos económicos",
-    }
+    # FIX BUG-08: Estrategia C usa TITULOS_BOTON (constante del módulo) con
+    # capitalización corregida ('Económicos' con E mayúscula) y matching
+    # por contains en vez de igualdad exacta para tolerar variaciones menores.
     try:
-        titulo = titulos.get(tipo, "")
+        titulo = TITULOS_BOTON.get(tipo, "")
         filas  = driver.find_elements(
             By.XPATH,
             "//table[@id='grdSupplies']//tr[contains(@class,'cssFwk')]"
         )
         if fila_index < len(filas):
             fila = filas[fila_index]
-            btns = fila.find_elements(
-                By.XPATH, f".//input[@type='image'][@title='{titulo}']"
-            )
-            if btns:
-                print(f"[INFO] Botón {tipo} encontrado por título en fila.")
-                return btns[0]
+            # Intentar primero por igualdad exacta, luego por contains
+            for attr in ["title", "alt", "aria-label"]:
+                btns = fila.find_elements(
+                    By.XPATH,
+                    f".//input[@type='image'][contains(@{attr},'{titulo}')]"
+                )
+                if btns:
+                    print(f"[INFO] Botón {tipo} encontrado por {attr} en fila.")
+                    return btns[0]
     except Exception:
         pass
 
@@ -299,7 +253,7 @@ def _descargar_archivos_popup(driver, tipo: str, carpeta_destino: str,
         return -1
 
     # Apuntar Chrome a la carpeta del proveedor/tipo desde el primer momento
-    _set_download_folder(driver, carpeta_destino)
+    set_download_folder(driver, carpeta_destino)
 
     try:
         WebDriverWait(driver, ESPERA_MAX).until(
@@ -346,10 +300,8 @@ def _descargar_archivos_popup(driver, tipo: str, carpeta_destino: str,
             print(f"[INFO] Descargando: {nombre_archivo}")
 
             try:
-                # Re-confirmar destino antes de cada archivo (previene confusiones)
-                _set_download_folder(driver, carpeta_destino)
-
-                # Snapshot de la carpeta destino ANTES de disparar la descarga
+                # OPT-5: set_download_folder ya fue llamado al inicio de la función;
+                # la carpeta no cambia entre archivos del mismo popup → no repetir.
                 snapshot = set(os.listdir(carpeta_destino))
 
                 chk_id = f"DWNL_grdId_{ctl}_chk"
@@ -463,12 +415,18 @@ def descargar_anexos_proveedor(driver, proveedor: dict, rutas: dict,
     conteo            = {"admin": 0, "tec": 0, "econ": 0}
 
     for tipo in ("Administrative", "Technical", "Economic"):
-        clave           = TIPO_MAP[tipo]
-        carpeta_destino = rutas.get(clave, "")
+        clave              = TIPO_MAP[tipo]
+        carpeta_destino    = rutas.get(clave, "")
+
+        # FIX BUG-07: capturar handles AL INICIO DE CADA TIPO, no por intento.
+        # Así el cleanup post-tipo puede cerrar cualquier ventana que haya quedado
+        # abierta durante intentos anteriores del mismo tipo.
+        handles_antes_tipo = set(driver.window_handles)
 
         print(f"\n[INFO] ── {SUBCARPETAS[tipo]} ── {nombre_prov}")
 
         for intento in range(1, REINTENTOS + 1):
+            # handles_antes_intento parte desde el estado limpio del tipo
             handles_antes_intento = set(driver.window_handles)
 
             try:
@@ -481,10 +439,6 @@ def descargar_anexos_proveedor(driver, proveedor: dict, rutas: dict,
                     continue
 
                 # ── 1b. Confirmar página del cuadro usando el paginador ──
-                # En ASP.NET el botón de la página ACTIVA no se renderiza
-                # como div clickeable: si el botón existe → estamos en otra
-                # página → navegar; si no existe → ya estamos en la correcta.
-                # Esto evita timeouts innecesarios y llamadas JS ambiguas.
                 pagina_grd = proveedor.get("pagina_grd", 1)
                 try:
                     old_grd   = driver.find_element(By.ID, "grdSupplies")
@@ -494,7 +448,6 @@ def descargar_anexos_proveedor(driver, proveedor: dict, rutas: dict,
                     )
                     try:
                         btn_pag = driver.find_element(By.XPATH, xpath_btn)
-                        # Botón encontrado → NO estamos en esa página → navegar
                         driver.execute_script("arguments[0].click();", btn_pag)
                         WebDriverWait(driver, 10).until(EC.staleness_of(old_grd))
                         WebDriverWait(driver, 10).until(
@@ -502,19 +455,14 @@ def descargar_anexos_proveedor(driver, proveedor: dict, rutas: dict,
                         )
                         print(f"[INFO] Cuadro navegado a página {pagina_grd}.")
                     except NoSuchElementException:
-                        # Sin botón → ya estamos en la página correcta
                         print(f"[INFO] Cuadro ya en página {pagina_grd}.")
                 except Exception as pe:
                     print(f"[WARN] Navegación a página {pagina_grd} falló: {pe}")
 
                 # ── 1c. Verificar RUT; buscar fila si no coincide ──
-                # Lee el RUT del grid. Si coincide: perfecto.
-                # Si NO coincide: busca el RUT en todas las hojas del cuadro
-                # y usa la fila donde realmente está, sin abrir ningún popup
-                # hasta estar seguros de la fila correcta.
                 n_ctl       = fila_index + 2
                 rut_id      = f"grdSupplies_ctl{n_ctl:02d}__GvLblRutProvider"
-                fila_actual = fila_index   # puede corregirse con la búsqueda
+                fila_actual = fila_index
                 try:
                     rut_en_grid = driver.find_element(By.ID, rut_id).text.strip()
                     if rut_en_grid != rut:
@@ -528,7 +476,7 @@ def descargar_anexos_proveedor(driver, proveedor: dict, rutas: dict,
                             print(f"[ERROR] RUT {rut} no encontrado en ninguna "
                                   f"hoja → se omite {SUBCARPETAS[tipo]}.")
                             driver.switch_to.default_content()
-                            break   # no reintentar, no está en el cuadro
+                            break
                         fila_actual, _ = resultado
                     else:
                         print(f"[OK]   RUT {rut_en_grid} verificado "
@@ -537,7 +485,7 @@ def descargar_anexos_proveedor(driver, proveedor: dict, rutas: dict,
                     print(f"[WARN] No se pudo leer RUT fila {fila_index} "
                           f"→ procediendo con fila original.")
 
-                # ── 2. Buscar botón (usa fila_actual, corregida si hubo búsqueda)
+                # ── 2. Buscar botón ────────────────────────────
                 boton = _buscar_boton_tipo(driver, fila_actual, tipo)
                 if boton is None:
                     print(f"[INFO] Sin botón '{tipo}' → carpeta vacía.")
@@ -562,7 +510,8 @@ def descargar_anexos_proveedor(driver, proveedor: dict, rutas: dict,
                         lambda d: len(d.window_handles) > len(handles_antes_popup)
                     )
                 except TimeoutException:
-                    print(f"[WARN] Intento {intento}/{REINTENTOS}: popup no se abrió.")
+                    print(f"[WARN] Intento {intento}/{REINTENTOS}: popup no se abrió "
+                          f"en {TIMEOUT_POPUP}s.")
                     driver.switch_to.default_content()
                     time.sleep(1)
                     continue
@@ -593,6 +542,7 @@ def descargar_anexos_proveedor(driver, proveedor: dict, rutas: dict,
 
             except Exception as e:
                 print(f"[WARN] Intento {intento}/{REINTENTOS} error: {e}")
+                # Cerrar solo ventanas abiertas en ESTE intento
                 for h in list(driver.window_handles):
                     if h not in handles_antes_intento and h != ventana_principal:
                         try:
@@ -612,11 +562,22 @@ def descargar_anexos_proveedor(driver, proveedor: dict, rutas: dict,
                   f"tras {REINTENTOS} intentos.")
             print(f"[ERROR SIMPLE]  Los {SUBCARPETAS[tipo]} no pudieron descargarse. "
                   "La carpeta quedará vacía.")
-            try:
-                driver.switch_to.window(ventana_principal)
-                driver.switch_to.default_content()
-            except Exception:
-                pass
+
+        # FIX BUG-07: limpieza post-tipo — cerrar cualquier ventana huérfana que
+        # haya sobrevivido a todos los intentos del tipo actual.
+        for h in list(driver.window_handles):
+            if h not in handles_antes_tipo and h != ventana_principal:
+                try:
+                    driver.switch_to.window(h)
+                    driver.close()
+                    print(f"[WARN] Ventana huérfana cerrada tras tipo {tipo}.")
+                except Exception:
+                    pass
+        try:
+            driver.switch_to.window(ventana_principal)
+            driver.switch_to.default_content()
+        except Exception:
+            pass
 
     return conteo
 

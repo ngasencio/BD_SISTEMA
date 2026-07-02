@@ -120,7 +120,7 @@ GET    /api/dashboard/stats/                   KPIs licitaciones (cache 5min)
 GET    /api/ordenes-compra/                    ?EstadoOC=&C_Unidad=&TipoOC=
 GET    /api/ordenes-compra/{id}/
 GET    /api/ordenes-compra-detalles/
-GET    /api/ordenes-compra/raw_all/            ?estado=&anio=&limit= (max 20000, sin paginar)
+GET    /api/ordenes-compra/raw_all/            ?estado=&anio=&limit= (max 25000, sin paginar, default 25000)
 GET    /api/ordenes-compra/proyectos-licitacion/  CodigoLicitacion→ID_Proyecto map (cache 10min)
 GET    /api/facturas/raw_all/                  ?anio= (sin paginar, emision como string DD-MM-YYYY)
 

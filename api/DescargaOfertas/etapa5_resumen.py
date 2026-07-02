@@ -59,10 +59,14 @@ def generar_resumen(
     nombre:            str,
     proveedores:       list,
     rutas:             dict,
-    log:               dict
+    log:               dict,
+    log_detalle:       list = None,
 ) -> str:
     """
     Genera resumen.txt con el detalle de todo lo descargado.
+
+    FIX BUG-03: añadido parámetro log_detalle (lista de eventos por archivo de
+    etapa4) para mostrar qué archivos fallaron o no pudieron descargarse.
 
     Parámetros
     ----------
@@ -73,11 +77,12 @@ def generar_resumen(
     proveedores       : lista de dicts (de etapa1)
     rutas             : dict de rutas (de etapa2)
     log               : {'a': {'ficha_ok': bool, 'admin': int, 'tec': int, 'econ': int}, ...}
-
-    Retorna
-    -------
-    path absoluto de resumen.txt
+    log_detalle       : lista de dicts por archivo:
+                        {proveedor, rut, tipo_anexo, archivo, estado, detalle}
     """
+    if log_detalle is None:
+        log_detalle = []
+
     print("\n[INFO] Generando resumen.txt...")
 
     sep   = "=" * 60
@@ -90,12 +95,18 @@ def generar_resumen(
         sep,
         "  RESUMEN DESCARGA OFERTAS",
         sep,
-        f"  Licitacion : {codigo}",
-        f"  Nombre     : {nombre}",
-        f"  Fecha      : {fecha}",
+        f"  Licitacion   : {codigo}",
+        f"  Nombre       : {nombre}",
+        f"  Fecha        : {fecha}",
         f"  Total ofertas: {len(proveedores)}",
         sep,
     ]
+
+    # Índice rut → eventos de log_detalle para lookup rápido
+    errores_por_rut: dict[str, list] = {}
+    for evento in log_detalle:
+        if evento.get("estado") not in ("Descargado", "Popup vacío"):
+            errores_por_rut.setdefault(evento["rut"], []).append(evento)
 
     # ── Detalle por proveedor ────────────────────────────────────
     for p in proveedores:
@@ -120,18 +131,33 @@ def generar_resumen(
             f"    Anexos Economicos        : {econ_estado}",
         ]
 
+        # Detalle de errores por archivo para este proveedor
+        errores = errores_por_rut.get(p["rut"], [])
+        if errores:
+            lineas.append(f"    Archivos con error ({len(errores)}):")
+            for ev in errores:
+                detalle = f" [{ev['detalle']}]" if ev.get("detalle") else ""
+                lineas.append(
+                    f"      ✗ {ev['tipo_anexo']} / "
+                    f"{ev['archivo'] or '(sin nombre)'} "
+                    f"→ {ev['estado']}{detalle}"
+                )
+
     # ── Totales ──────────────────────────────────────────────────
-    total_fichas  = sum(1 for p in proveedores
-                        if _estado_ficha(
-                            rutas.get("proveedores", {}).get(p["letra"], {}).get("ficha", ""),
-                            log.get(p["letra"], {}).get("ficha_ok", False)
-                        ) == "Descargada")
+    total_fichas = sum(
+        1 for p in proveedores
+        if _estado_ficha(
+            rutas.get("proveedores", {}).get(p["letra"], {}).get("ficha", ""),
+            log.get(p["letra"], {}).get("ficha_ok", False)
+        ) == "Descargada"
+    )
     total_archivos = sum(
         _contar_archivos(rutas.get("proveedores", {}).get(p["letra"], {}).get("admin", "")) +
         _contar_archivos(rutas.get("proveedores", {}).get(p["letra"], {}).get("tec",   "")) +
         _contar_archivos(rutas.get("proveedores", {}).get(p["letra"], {}).get("econ",  ""))
         for p in proveedores
     )
+    total_errores = sum(len(v) for v in errores_por_rut.values())
 
     lineas += [
         "",
@@ -140,6 +166,10 @@ def generar_resumen(
         sep_m,
         f"  Fichas descargadas  : {total_fichas} / {len(proveedores)}",
         f"  Total anexos        : {total_archivos} archivo(s)",
+    ]
+    if total_errores:
+        lineas.append(f"  Archivos con error  : {total_errores} (ver detalle arriba)")
+    lineas += [
         sep,
         "  FIN DEL PROCESO",
         sep,
