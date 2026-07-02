@@ -28,6 +28,7 @@ from etapa2_carpetas import crear_estructura
 from etapa3_ficha    import descargar_ficha
 from etapa4_anexos   import descargar_anexos_proveedor
 from etapa5_resumen  import generar_resumen
+from etapa6_fusion   import fusionar_anexos
 
 
 # ─────────────────────────────────────────────
@@ -137,8 +138,6 @@ def main():
 
         # ── ETAPA 5: Resumen ───────────────────────────────────
         _banner("ETAPA 5 - Generando resumen")
-        # FIX BUG-03: pasar log_lista (eventos por archivo) para que el
-        # resumen pueda detallar qué archivos fallaron, no solo los conteos.
         generar_resumen(
             rutas["carpeta_principal"],
             rutas["resumen_txt"],
@@ -146,6 +145,10 @@ def main():
             proveedores, rutas, log_dict,
             log_detalle=log_lista,
         )
+
+        # ── ETAPA 6: Fusión de anexos ──────────────────────────
+        _banner("ETAPA 6 - Fusionando anexos (PDF + Word por carpeta)")
+        fusionar_anexos(proveedores, rutas, rutas["resumen_txt"])
 
         # ── Fin ────────────────────────────────────────────────
         _banner("PROCESO COMPLETADO")

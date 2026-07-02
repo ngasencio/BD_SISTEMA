@@ -31,6 +31,7 @@ from etapa2_carpetas import crear_estructura
 from etapa3_ficha    import descargar_ficha
 from etapa4_anexos   import descargar_anexos_proveedor
 from etapa5_resumen  import generar_resumen
+from etapa6_fusion   import fusionar_anexos
 
 
 def _crear_zip(carpeta: Path, zip_destino: Path) -> Path:
@@ -109,7 +110,6 @@ def run(codigo: str, carpeta_base: Path):
                 except Exception:
                     pass
 
-        # FIX BUG-03: pasar log_lista para que el resumen incluya detalle de errores
         generar_resumen(
             rutas["carpeta_principal"],
             rutas["resumen_txt"],
@@ -117,6 +117,9 @@ def run(codigo: str, carpeta_base: Path):
             proveedores, rutas, log_dict,
             log_detalle=log_lista,
         )
+
+        # Etapa 6: fusión de anexos — antes de crear el ZIP para que quede incluido
+        fusionar_anexos(proveedores, rutas, rutas["resumen_txt"])
 
         # FIX BUG-13: capturar OSError en la creación del ZIP y reportarlo
         # correctamente al backend en lugar de dejar el proceso colgado.
