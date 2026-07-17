@@ -27,6 +27,11 @@ api/OC_DSSO/MAESTROS/
 api/LI_DSSO/MAESTROS/
 api/CA_DSSO/
 
+# Descargas SIGFE (datos financieros, voluminosos — se sincronizan a la BD, no a git)
+api/data/data_devengo/descargas_sigfe/
+api/data/data_devengo/debug_html/
+api/data/data_devengo/backup_tabla_devengo/
+
 # Logs y archivos temporales de desarrollo
 *.log
 backend/run_err.txt

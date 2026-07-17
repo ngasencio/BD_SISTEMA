@@ -162,52 +162,6 @@ class DetalleLicitacion(models.Model):
         return f"{self.licitacion.codigo_licitacion} - {self.CodigoProducto}"
 
 
-class Devengo(models.Model):
-    """Modelo para registros de devengo — Control de Deuda (Anexo N°3)"""
-    codigo_ue = models.CharField('Código Unidad Ejecutora', max_length=255)
-    folio = models.CharField('Folio', max_length=100, null=True, blank=True)
-    titulo = models.CharField('Título', max_length=500, null=True, blank=True)
-    tipo_presupuesto = models.CharField('Tipo Presupuesto', max_length=255, null=True, blank=True)
-    moneda_presupuestaria = models.CharField('Moneda Presupuestaria', max_length=100, null=True, blank=True)
-    principal = models.CharField('Principal (Proveedor)', max_length=500, null=True, blank=True)
-    principal_relacionado = models.CharField('Principal Relacionado', max_length=500, null=True, blank=True)
-    moneda_documento = models.CharField('Moneda Documento', max_length=100, null=True, blank=True)
-    tipo_cambio = models.DecimalField('Tipo Cambio', max_digits=12, decimal_places=4, null=True, blank=True)
-    tipo_documento = models.CharField('Tipo Documento', max_length=255, null=True, blank=True)
-    numero_documento = models.CharField('Número Documento', max_length=255, null=True, blank=True)
-    fecha_documento = models.DateField('Fecha Documento', null=True, blank=True)
-    fecha_conforme = models.DateField('Fecha Conforme', null=True, blank=True)
-    id_chile_compra = models.CharField('Id Chile Compra', max_length=255, null=True, blank=True)
-    fecha_ingreso = models.DateField('Fecha Ingreso/Recepción', null=True, blank=True)
-    catalogo_01 = models.CharField('Catálogo 01', max_length=500, null=True, blank=True)
-    catalogo_02 = models.CharField('Catálogo 02', max_length=500, null=True, blank=True)
-    catalogo_03 = models.CharField('Catálogo 03', max_length=500, null=True, blank=True)
-    catalogo_04 = models.CharField('Catálogo 04', max_length=500, null=True, blank=True)
-    catalogo_05 = models.CharField('Catálogo 05', max_length=500, null=True, blank=True)
-    concepto_presupuestario = models.CharField('Concepto Presupuestario', max_length=500, null=True, blank=True)
-    monto_vigente = models.DecimalField('Monto Vigente', max_digits=20, decimal_places=2, default=0)
-    monto_disponible = models.DecimalField('Monto Disponible', max_digits=20, decimal_places=2, default=0)
-    monto_consumido = models.DecimalField('Monto Consumido', max_digits=20, decimal_places=2, default=0)
-    archivo_origen = models.CharField('Archivo Origen', max_length=500, null=True, blank=True)
-
-    class Meta:
-        db_table = 'devengo'
-        verbose_name = 'Devengo'
-        verbose_name_plural = 'Devengos'
-        ordering = ['-monto_disponible']
-        indexes = [
-            models.Index(fields=['-monto_disponible']),
-            models.Index(fields=['codigo_ue']),
-            models.Index(fields=['principal']),
-            models.Index(fields=['tipo_documento']),
-            models.Index(fields=['concepto_presupuestario']),
-            models.Index(fields=['codigo_ue', '-monto_disponible']),
-        ]
-
-    def __str__(self):
-        return f"{self.codigo_ue} - {self.principal} - ${self.monto_disponible}"
-
-
 class OrdenCompra(models.Model):
     codigo_oc = models.CharField(max_length=255, primary_key=True, db_column='CodigoOC')
     NombreOC = models.TextField(null=True, blank=True)
@@ -336,6 +290,56 @@ class Anexo1(models.Model):
 
     def __str__(self):
         return f"{self.establecimiento} - {self.concepto_presupuestario} ({self.fecha})"
+
+
+class SigfeAnexo1(models.Model):
+    """Estado de Ejecución Presupuestaria - Anexo N°1, descargado por establecimiento y
+    mes vía Selenium (api/data/data_anexo1/Sigfe_Descargas_Estado_ejecucion_presupuestaria.py)
+    y consolidado con api/data/data_anexo1/consolidar_anexo1_sigfe.py.
+
+    Reemplaza a Anexo1/tabla_anexo1 para datos nuevos (ese modelo queda intacto, sin
+    relación, solo como respaldo histórico DSSO/HBO cargado a mano).
+
+    A diferencia de Anexo1 (DELETE total + bulk_create), la sincronización acá es
+    incremental por tramo: se borra e inserta solo el conjunto (codigo_ue, anho, mes)
+    del archivo procesado, así reprocesar un mes no borra los demás.
+    """
+    codigo_ue = models.CharField('Código Unidad Ejecutora', max_length=20, db_index=True)
+    nombre_establecimiento = models.CharField('Establecimiento', max_length=255)
+    anho = models.IntegerField('Año', db_index=True)
+    mes = models.IntegerField('Mes (1-12)', db_index=True)
+    fecha_desde_tramo = models.DateField('Fecha Desde (tramo descargado)')
+    fecha_hasta_tramo = models.DateField('Fecha Hasta (tramo descargado)')
+
+    nivel = models.IntegerField('Nivel', null=True, blank=True)
+    concepto_presupuestario = models.CharField('Concepto Presupuestario', max_length=500, null=True, blank=True)
+    nivel_cruce = models.CharField('Nivel Cruce', max_length=100, null=True, blank=True)
+    catalogo_cruce = models.CharField('Catálogo Cruce', max_length=500, null=True, blank=True)
+    ruta_jerarquica = models.TextField('Ruta Jerárquica', null=True, blank=True)
+
+    ley_presupuestos = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    requerimiento = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    saldo_por_aplicar = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    compromiso = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    saldo_por_comprometer = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    devengado = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    saldo_por_devengar = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    efectivo = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+    deuda_flotante = models.DecimalField(max_digits=20, decimal_places=2, default=0)
+
+    archivo_origen = models.CharField('Archivo Origen', max_length=500, null=True, blank=True)
+    fecha_sync = models.DateTimeField('Última sincronización', auto_now=True)
+
+    class Meta:
+        db_table = 'api_sigfe_anexo1'
+        verbose_name = 'SIGFE Anexo N°1'
+        verbose_name_plural = 'SIGFE Anexo N°1'
+        indexes = [
+            models.Index(fields=['codigo_ue', 'anho', 'mes'], name='idx_sigfe_anexo1_ue_anho_mes'),
+        ]
+
+    def __str__(self):
+        return f"{self.codigo_ue} {self.anho}-{self.mes:02d} - {self.concepto_presupuestario}"
 
 
 # =============================================================================
@@ -1101,3 +1105,99 @@ class PerfilUsuario(models.Model):
 
     def __str__(self):
         return f"{self.user.username} — {self.role}"
+
+
+class DevengoSigfeAnual(models.Model):
+    """Histórico consolidado de 'Disponibilidad de Devengos Presupuestarios' (SIGFE),
+    descargado por establecimiento vía Selenium (api/data/data_devengo/) y sincronizado
+    de forma incremental — no se reemplaza el contenido completo en cada corrida, se
+    hace upsert por row_hash para acumular el histórico anual sin duplicar filas."""
+    codigo_ue = models.CharField('Código Unidad Ejecutora', max_length=255)
+    folio = models.CharField('Folio', max_length=100, null=True, blank=True)
+    titulo = models.CharField('Título', max_length=500, null=True, blank=True)
+    tipo_presupuesto = models.CharField('Tipo Presupuesto', max_length=255, null=True, blank=True)
+    moneda_presupuestaria = models.CharField('Moneda Presupuestaria', max_length=100, null=True, blank=True)
+    principal = models.CharField('Principal (Proveedor)', max_length=500, null=True, blank=True)
+    principal_relacionado = models.CharField('Principal Relacionado', max_length=500, null=True, blank=True)
+    moneda_documento = models.CharField('Moneda Documento', max_length=100, null=True, blank=True)
+    tipo_cambio = models.DecimalField('Tipo Cambio', max_digits=12, decimal_places=4, null=True, blank=True)
+    tipo_documento = models.CharField('Tipo Documento', max_length=255, null=True, blank=True)
+    numero_documento = models.CharField('Número Documento', max_length=255, null=True, blank=True)
+    fecha_documento = models.DateField('Fecha Documento', null=True, blank=True)
+    fecha_conforme = models.DateField('Fecha Conforme', null=True, blank=True)
+    id_chile_compra = models.CharField('Id Chile Compra', max_length=255, null=True, blank=True)
+    fecha_emision = models.DateTimeField('Fecha Emisión', null=True, blank=True)
+    fecha_ingreso = models.DateField('Fecha Ingreso/Recepción', null=True, blank=True)
+    catalogo_01 = models.CharField('Catálogo 01', max_length=500, null=True, blank=True)
+    catalogo_02 = models.CharField('Catálogo 02', max_length=500, null=True, blank=True)
+    catalogo_03 = models.CharField('Catálogo 03', max_length=500, null=True, blank=True)
+    catalogo_04 = models.CharField('Catálogo 04', max_length=500, null=True, blank=True)
+    catalogo_05 = models.CharField('Catálogo 05', max_length=500, null=True, blank=True)
+    catalogo_06 = models.CharField('Catálogo 06', max_length=500, null=True, blank=True)
+    concepto_presupuestario = models.CharField('Concepto Presupuestario', max_length=500, null=True, blank=True)
+    monto_vigente = models.DecimalField('Monto Vigente', max_digits=20, decimal_places=2, default=0)
+    monto_disponible = models.DecimalField('Monto Disponible', max_digits=20, decimal_places=2, default=0)
+    monto_consumido = models.DecimalField('Monto Consumido', max_digits=20, decimal_places=2, default=0)
+    insumo = models.CharField('Insumo', max_length=500, null=True, blank=True)
+    monto_vigente_insumo = models.DecimalField('Monto Vigente Insumo', max_digits=20, decimal_places=2, null=True, blank=True)
+    archivo_origen = models.CharField('Archivo Origen', max_length=500, null=True, blank=True)
+    row_hash = models.CharField('Hash de fila', max_length=64, unique=True, editable=False)
+    fecha_sync = models.DateTimeField('Última sincronización', auto_now=True)
+
+    class Meta:
+        db_table = 'api_sigfe_devengo_anual'
+        verbose_name = 'Devengo SIGFE Anual'
+        verbose_name_plural = 'Devengos SIGFE Anual'
+        ordering = ['-fecha_documento']
+        indexes = [
+            models.Index(fields=['codigo_ue']),
+            models.Index(fields=['tipo_documento']),
+            models.Index(fields=['concepto_presupuestario']),
+            models.Index(fields=['fecha_documento']),
+            models.Index(fields=['codigo_ue', 'fecha_documento']),
+        ]
+
+    def __str__(self):
+        return f"{self.codigo_ue} - {self.numero_documento} - ${self.monto_vigente}"
+
+
+class ConceptoJerarquia(models.Model):
+    """Jerarquía de conceptos presupuestarios (5 niveles) usada para agrupar
+    Devengo/DevengoSigfeAnual por Subtítulo→Ítem→Asignación→Sub-asignación→Detalle
+    en el reporte de Anexo N°3. Se carga una vez desde un Excel de referencia
+    (702 conceptos, prácticamente estático) vía 'manage.py cargar_jerarquia'.
+
+    N1 (2 chars)  = Subtítulo       (ej: 21 GASTOS EN PERSONAL)
+    N2 (4 chars)  = Ítem            (ej: 2101 Personal de Planta)
+    N3 (7 chars)  = Asignación      (ej: 2101001 Sueldos y Sobresueldos)
+    N4 (10 chars) = Sub-asignación  (ej: 2101001001 Sueldos Bases)
+    N5 (12 chars) = Detalle         (ej: 210100100101 Sueldo B Planta L 15076)
+    """
+    codigo = models.CharField('Código', max_length=12, unique=True)
+    descripcion = models.CharField('Descripción completa', max_length=255)
+    nivel = models.SmallIntegerField('Nivel (1-5)')
+
+    n1_codigo = models.CharField('Código N1', max_length=2, blank=True, default='')
+    n1_desc = models.CharField('Subtítulo (N1)', max_length=100, blank=True, default='')
+    n2_codigo = models.CharField('Código N2', max_length=4, blank=True, default='')
+    n2_desc = models.CharField('Ítem (N2)', max_length=100, blank=True, default='')
+    n3_codigo = models.CharField('Código N3', max_length=7, blank=True, default='')
+    n3_desc = models.CharField('Asignación (N3)', max_length=150, blank=True, default='')
+    n4_codigo = models.CharField('Código N4', max_length=10, blank=True, default='')
+    n4_desc = models.CharField('Sub-asignación (N4)', max_length=200, blank=True, default='')
+    n5_codigo = models.CharField('Código N5', max_length=12, blank=True, default='')
+    n5_desc = models.CharField('Detalle (N5)', max_length=255, blank=True, default='')
+
+    class Meta:
+        db_table = 'concepto_jerarquia'
+        verbose_name = 'Concepto Presupuestario (Jerarquía)'
+        verbose_name_plural = 'Conceptos Presupuestarios (Jerarquía)'
+        ordering = ['codigo']
+        indexes = [
+            models.Index(fields=['n1_codigo']),
+            models.Index(fields=['n2_codigo']),
+            models.Index(fields=['n3_codigo']),
+        ]
+
+    def __str__(self):
+        return f"N{self.nivel} | {self.descripcion}"

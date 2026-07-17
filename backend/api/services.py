@@ -10,6 +10,7 @@ from .models import (
     OrdenCompra, PlanerPAC,
     CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog,
+    SigfeAnexo1,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
@@ -2477,3 +2478,94 @@ def calcular_formularios_historial(anho=None, unidad_requirente=None, usuario_re
         })
 
     return resultado
+
+
+# =============================================================================
+# Anexo N°1 — Estado de Ejecución Presupuestaria (SIGFE)
+# =============================================================================
+
+# Catálogo fijo de los 7 establecimientos SSO — mismo listado que
+# ESTABLECIMIENTOS_SSO en Sigfe_Descargas_Estado_ejecucion_presupuestaria.py.
+# Se usa para que la matriz muestre siempre las 7 filas (en rojo) aunque un
+# establecimiento todavía no tenga ningún mes cargado en la BD.
+ESTABLECIMIENTOS_ANEXO1 = [
+    ('1638001', 'Direccion del Servicio'),
+    ('1638002', 'Hospital de Osorno'),
+    ('1638003', 'Hospital Puerto Octay'),
+    ('1638004', 'Hospital Purranque'),
+    ('1638005', 'Hospital de Rio Negro'),
+    ('1638006', 'Hospital Mision San Juan de la Costa'),
+    ('1638007', 'Hospital del Perpetuo Socorro de Quilacahuin'),
+]
+
+
+def calcular_sigfe_anexo1_estado_bd(anho_desde=None):
+    """
+    Matriz establecimiento x mes con semáforo de cobertura de datos sobre
+    api_sigfe_anexo1, para el tab "Base de datos" de Anexo N°1.
+
+    Semáforo (criterio simple, confirmado con el usuario -- no distingue una
+    carga incompleta por error en un mes ya cerrado, solo expone
+    fecha_hasta_tramo en el detalle de cada celda para inspección manual):
+      - verde:    mes anterior al actual, con datos cargados
+      - amarillo: mes en curso, con datos cargados (parcial por definición)
+      - rojo:     sin datos cargados (incluye el mes en curso si aún no se
+                  ha descargado nada)
+    """
+    hoy = date.today()
+    anho_actual, mes_actual = hoy.year, hoy.month
+    if anho_desde is None:
+        anho_desde = anho_actual - 1
+
+    periodos = []
+    y, m = anho_desde, 1
+    while (y, m) <= (anho_actual, mes_actual):
+        periodos.append((y, m))
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+    filas = (
+        SigfeAnexo1.objects
+        .filter(anho__gte=anho_desde)
+        .values('codigo_ue', 'anho', 'mes')
+        .annotate(n_filas=Count('id'), fecha_hasta=Max('fecha_hasta_tramo'), fecha_sync=Max('fecha_sync'))
+    )
+    datos_por_clave = {(f['codigo_ue'], f['anho'], f['mes']): f for f in filas}
+
+    nombres_bd = dict(
+        SigfeAnexo1.objects.values_list('codigo_ue', 'nombre_establecimiento').distinct()
+    )
+
+    establecimientos = []
+    matriz = {}
+    for codigo_ue, nombre_default in ESTABLECIMIENTOS_ANEXO1:
+        establecimientos.append({
+            'codigo_ue': codigo_ue,
+            'nombre': nombres_bd.get(codigo_ue, nombre_default),
+        })
+
+        fila_matriz = {}
+        for anho, mes in periodos:
+            periodo_str = f'{anho}-{mes:02d}'
+            info = datos_por_clave.get((codigo_ue, anho, mes))
+            if info:
+                es_mes_actual = (anho == anho_actual and mes == mes_actual)
+                fila_matriz[periodo_str] = {
+                    'estado': 'amarillo' if es_mes_actual else 'verde',
+                    'n_filas': info['n_filas'],
+                    'fecha_hasta_tramo': info['fecha_hasta'].isoformat() if info['fecha_hasta'] else None,
+                    'fecha_sync': info['fecha_sync'].isoformat() if info['fecha_sync'] else None,
+                }
+            else:
+                fila_matriz[periodo_str] = {
+                    'estado': 'rojo', 'n_filas': 0, 'fecha_hasta_tramo': None, 'fecha_sync': None,
+                }
+        matriz[codigo_ue] = fila_matriz
+
+    return {
+        'establecimientos': establecimientos,
+        'periodos': [f'{a}-{m:02d}' for a, m in periodos],
+        'matriz': matriz,
+    }

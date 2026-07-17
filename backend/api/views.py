@@ -1,4 +1,5 @@
 import ctypes
+import json
 import logging
 import re
 import subprocess
@@ -11,6 +12,7 @@ from django.core.cache import cache
 from django.db.models import Count, Q, Sum
 from django.db.models import DecimalField
 from django.db.models.functions import Cast
+from django.http import HttpResponse
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters, viewsets
@@ -35,17 +37,18 @@ from rest_framework.permissions import BasePermission
 
 from .models import (
     BoletaGarantia, BoletaGarantiaAudit, Comprador,
-    DetalleLicitacion, DetalleOrdenCompra, Devengo,
+    DetalleLicitacion, DetalleOrdenCompra,
     Factura, Licitacion, OrdenCompra, Proveedor,
     PlanerPAC, CompraAgilResumen, CompraAgilProducto, CompraAgilProveedor,
     RevisionOCCorregible, GestionContrato,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
-    PerfilUsuario, Departamento, Establecimiento,
+    PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
+    ConceptoJerarquia, SigfeAnexo1,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
     CompradorSerializer, DetalleLicitacionSerializer,
-    DetalleOrdenCompraSerializer, DevengoSerializer,
+    DetalleOrdenCompraSerializer,
     LicitacionSerializer, LicitacionCalendarioSerializer,
     OrdenCompraSerializer, ProveedorSerializer,
     PlanerPACSerializer, CompraAgilResumenSerializer, CompraAgilCalendarioSerializer,
@@ -54,6 +57,7 @@ from .serializers import (
     FormularioFSCSerializer, FormularioFSCDerivadoSerializer, FormularioFSCProductoSerializer,
     UserAdminSerializer, UserMeSerializer,
     DepartamentoSerializer, EstablecimientoSerializer,
+    DevengoSigfeAnualSerializer, SigfeAnexo1Serializer,
 )
 
 # Campos de fecha que mapea EVENT_CFG en CalendarioSect.jsx (17 campos)
@@ -205,64 +209,537 @@ def dashboard_stats(request):
 
 
 # =============================================================================
-# Devengo
+# Devengo SIGFE Anual (histórico consolidado, descarga Selenium) — reemplaza
+# por completo al viejo modelo/tabla Devengo (eliminados)
 # =============================================================================
 
-class DevengoViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet para el módulo de Control de Deuda (Anexo N°3)."""
-    queryset = Devengo.objects.all()
-    serializer_class = DevengoSerializer
+class DevengoSigfeAnualViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet de solo lectura para el histórico de Devengo SIGFE consolidado
+    (tabla api_sigfe_devengo_anual). Expone todos los campos del registro."""
+    queryset = DevengoSigfeAnual.objects.all()
+    serializer_class = DevengoSigfeAnualSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['codigo_ue', 'tipo_documento', 'concepto_presupuestario']
-    search_fields = ['principal', 'concepto_presupuestario', 'tipo_documento', 'codigo_ue']
-    ordering_fields = ['monto_disponible', 'monto_vigente', 'fecha_conforme']
-    ordering = ['-monto_disponible']
+    search_fields = ['principal', 'concepto_presupuestario', 'tipo_documento', 'codigo_ue', 'numero_documento', 'titulo']
+    ordering_fields = ['fecha_documento', 'monto_vigente', 'monto_disponible', 'monto_consumido', 'fecha_sync']
+    ordering = ['-fecha_documento']
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def devengo_stats(request):
-    """KPIs agregados para el dashboard de Control de Deuda con caché."""
+def devengo_sigfe_anual_raw_all(request):
+    """Devuelve todo el histórico SIGFE sin paginación, para consumo del futuro
+    reporte de Devengo (frontend). Filtros opcionales: ue, desde, hasta (fecha_documento)."""
+    ue = request.GET.get('ue', '')
+    desde = request.GET.get('desde', '')
+    hasta = request.GET.get('hasta', '')
+    try:
+        # Límite generoso: esta tabla acumula histórico anual y ya supera
+        # 38.000 filas (creciendo con cada sincronización SIGFE) — un tope
+        # bajo la truncaría en silencio para los dashboards que esperan
+        # "todo el histórico" (ex-Devengo).
+        limit = min(int(request.GET.get('limit', 50000)), 100000)
+    except (ValueError, TypeError):
+        limit = 50000
+
+    qs = DevengoSigfeAnual.objects.all()
+    if ue:
+        qs = qs.filter(codigo_ue=ue)
+    if desde:
+        qs = qs.filter(fecha_documento__gte=desde)
+    if hasta:
+        qs = qs.filter(fecha_documento__lte=hasta)
+
+    serializer = DevengoSigfeAnualSerializer(qs[:limit], many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def devengo_sigfe_anual_stats(request):
+    """KPIs agregados (deuda, top proveedores, por UE, por tipo doc, por
+    concepto N1) sobre api_sigfe_devengo_anual — reemplazo directo de
+    devengo_stats() ahora que el módulo Anexo N°3 corre 100% sobre
+    DevengoSigfeAnual. obtener_kpis_devengo() no necesitó ningún cambio:
+    solo usa campos presentes en ambos modelos (monto_*, codigo_ue,
+    principal, tipo_documento, concepto_presupuestario)."""
     ue = request.GET.get('ue', '')
     solo_deuda = request.GET.get('solo_deuda', '1') == '1'
     ue_safe = ue[:50].replace(' ', '_')
-    cache_key = f'devengo_stats_ue_{ue_safe}_sd_{int(solo_deuda)}'
+    cache_key = f'devengo_sigfe_anual_stats_ue_{ue_safe}_sd_{int(solo_deuda)}'
     cached_data = cache.get(cache_key)
     if cached_data:
         return Response(cached_data)
 
-    qs = Devengo.objects.all()
+    qs = DevengoSigfeAnual.objects.all()
     response_data = obtener_kpis_devengo(qs, codigo_ue=ue, solo_deuda=solo_deuda)
     cache.set(cache_key, response_data, timeout=300)
     return Response(response_data)
 
 
+# =============================================================================
+# SIGFE Anexo N°1 (Estado de Ejecución Presupuestaria) — descarga Selenium
+# (api/data/data_anexo1/Sigfe_Descargas_Estado_ejecucion_presupuestaria.py) +
+# consolidación (api/data/data_anexo1/consolidar_anexo1_sigfe.py), disparable
+# desde el dashboard igual patrón que Anexo N°3 (devengo SIGFE). Sin relación
+# con el viejo modelo Anexo1/tabla_anexo1.
+# =============================================================================
+
+class SigfeAnexo1ViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet de solo lectura sobre api_sigfe_anexo1."""
+    queryset = SigfeAnexo1.objects.all()
+    serializer_class = SigfeAnexo1Serializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    filterset_fields = ['codigo_ue', 'anho', 'mes', 'concepto_presupuestario']
+    search_fields = ['concepto_presupuestario', 'ruta_jerarquica', 'nombre_establecimiento']
+    ordering_fields = ['anho', 'mes', 'nivel', 'fecha_sync']
+    ordering = ['-anho', '-mes', 'nivel']
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def devengo_raw_all(request):
-    """Devuelve toda la data de devengo sin paginación para el dashboard."""
-    ue = request.GET.get('ue', '')
-    desde = request.GET.get('desde', '')
-    hasta = request.GET.get('hasta', '')
+def sigfe_anexo1_estado_bd(request):
+    """Matriz establecimiento x mes con semáforo verde/amarillo/rojo de
+    cobertura de datos, para el tab 'Base de datos' de Anexo N°1."""
     try:
-        limit = min(int(request.GET.get('limit', 5000)), 10000)
+        anho_desde = request.GET.get('anho_desde')
+        anho_desde = int(anho_desde) if anho_desde else None
     except (ValueError, TypeError):
-        limit = 5000
+        anho_desde = None
 
-    qs = Devengo.objects.values(
-        'codigo_ue', 'principal', 'tipo_documento', 'fecha_conforme',
-        'id_chile_compra', 'catalogo_01', 'catalogo_02', 'catalogo_04',
-        'concepto_presupuestario', 'monto_vigente', 'monto_disponible', 'monto_consumido',
-    )
-    if ue:
-        qs = qs.filter(codigo_ue=ue)
-    if desde:
-        qs = qs.filter(fecha_conforme__gte=desde)
-    if hasta:
-        qs = qs.filter(fecha_conforme__lte=hasta)
+    cache_key = f'sigfe_anexo1_estado_bd_{anho_desde or "default"}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
 
-    return Response(list(qs[:limit]))
+    from .services import calcular_sigfe_anexo1_estado_bd
+    response_data = calcular_sigfe_anexo1_estado_bd(anho_desde=anho_desde)
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+# -- Actualización desde SIGFE (Selenium, disparada desde el dashboard) -------
+
+_tareas_actualizacion_anexo1: dict = {}
+
+_RUTA_DATA_ANEXO1 = Path(__file__).parent.parent.parent / "api" / "data" / "data_anexo1"
+
+_PATRON_FECHA_ISO_ANEXO1 = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def _ejecutar_actualizacion_anexo1(task_id: str, usuario: str, password: str,
+                                    fecha_desde: str, fecha_hasta: str):
+    """Descarga (Selenium headless) + consolida Anexo N°1 por establecimiento,
+    delegando en Sigfe_Descargas_Estado_ejecucion_presupuestaria. Mismo
+    patrón que _ejecutar_actualizacion_sigfe (Anexo N°3)."""
+    _tareas_actualizacion_anexo1[task_id]["thread_id"] = threading.current_thread().ident
+
+    ruta_modulo = str(_RUTA_DATA_ANEXO1)
+    if ruta_modulo not in sys.path:
+        sys.path.insert(0, ruta_modulo)
+
+    try:
+        import Sigfe_Descargas_Estado_ejecucion_presupuestaria as anexo1_etl
+    except ImportError as exc:
+        _tareas_actualizacion_anexo1[task_id].update(
+            status="error", error=f"No se pudo cargar el módulo de descarga: {exc}"
+        )
+        return
+
+    logs = []
+
+    def _cb(paso=None, paso_desc=None, progreso_pct=None, log=None):
+        upd = {}
+        if paso is not None:
+            upd["paso"] = paso
+        if paso_desc is not None:
+            upd["paso_desc"] = paso_desc
+        if progreso_pct is not None:
+            upd["progreso_pct"] = progreso_pct
+        if log:
+            logs.append(log)
+            upd["logs_recientes"] = logs[-40:]
+        if upd:
+            _tareas_actualizacion_anexo1[task_id].update(**upd)
+
+    try:
+        _tareas_actualizacion_anexo1[task_id].update(status="en_proceso")
+        _cb(paso=1, paso_desc="Iniciando navegador y autenticando en SIGFE...", progreso_pct=1,
+            log=f"Descargando Anexo N°1 del {fecha_desde} al {fecha_hasta}...")
+
+        resultado = anexo1_etl.ejecutar_actualizacion_anexo1(
+            usuario, password, fecha_desde, fecha_hasta, progress_callback=_cb,
+        )
+
+        consolidacion = resultado["consolidacion"]
+        diff = {
+            "tramos_ok": resultado["tramos_ok"],
+            "tramos_fallidos": resultado["tramos_fallidos"],
+            "archivos_procesados": consolidacion.get("archivos_procesados", 0),
+            "archivos_fallidos": consolidacion.get("archivos_fallidos", 0),
+            "filas_totales": consolidacion.get("filas_totales", 0),
+            "resumen": consolidacion.get("resumen", []),
+            "fallidos_detalle": consolidacion.get("fallidos_detalle", []),
+        }
+
+        # El panel 'Base de datos' cachea 5 min por año-desde -- invalidar el
+        # default (el que usa la página) para que refleje lo recién cargado.
+        cache.delete('sigfe_anexo1_estado_bd_default')
+
+        _tareas_actualizacion_anexo1[task_id].update(
+            status="completado", paso=5,
+            paso_desc=(
+                f"Completado: {consolidacion.get('archivos_procesados', 0)} tramo(s) sincronizados "
+                f"({len(resultado['tramos_ok'])}/{len(resultado['tramos_ok']) + len(resultado['tramos_fallidos'])} OK)."
+            ),
+            logs_recientes=logs[-40:],
+            progreso_pct=100,
+            diff=diff,
+        )
+
+    except Exception as exc:
+        logger.exception("Error actualizando Anexo N°1 SIGFE")
+        _tareas_actualizacion_anexo1[task_id].update(
+            status="error", error=str(exc), logs_recientes=logs[-40:],
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def iniciar_actualizacion_anexo1(request):
+    """Inicia la descarga + consolidación de Anexo N°1 por establecimiento.
+    Body: {usuario, password, fecha_desde, fecha_hasta} (fechas YYYY-MM-DD)."""
+    for tarea in _tareas_actualizacion_anexo1.values():
+        if tarea.get("status") in ("iniciado", "en_proceso"):
+            return Response({"error": "Ya hay una actualización de Anexo N°1 en curso."}, status=409)
+
+    usuario = str(request.data.get("usuario", "")).strip()
+    password = str(request.data.get("password", "")).strip()
+    fecha_desde = str(request.data.get("fecha_desde", "")).strip()
+    fecha_hasta = str(request.data.get("fecha_hasta", "")).strip()
+
+    if not usuario or not password:
+        return Response({"error": "Debe indicar usuario y contraseña de SIGFE."}, status=400)
+    if not _PATRON_FECHA_ISO_ANEXO1.match(fecha_desde) or not _PATRON_FECHA_ISO_ANEXO1.match(fecha_hasta):
+        return Response({"error": "Fechas inválidas (se esperan como YYYY-MM-DD)."}, status=400)
+    if fecha_desde > fecha_hasta:
+        return Response({"error": "La fecha 'desde' no puede ser posterior a 'hasta'."}, status=400)
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_actualizacion_anexo1[task_id] = {
+        "status": "iniciado",
+        "paso": 0,
+        "paso_desc": "Iniciando...",
+        "error": None,
+        "logs_recientes": [],
+        "progreso_pct": 0,
+        "diff": None,
+    }
+    threading.Thread(
+        target=_ejecutar_actualizacion_anexo1,
+        args=(task_id, usuario, password, fecha_desde, fecha_hasta),
+        daemon=True,
+    ).start()
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def estado_actualizacion_anexo1(request, task_id):
+    """Retorna el estado de una tarea de actualización de Anexo N°1."""
+    tarea = _tareas_actualizacion_anexo1.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id":        task_id,
+        "status":         tarea["status"],
+        "paso":           tarea["paso"],
+        "paso_desc":      tarea["paso_desc"],
+        "progreso_pct":   tarea.get("progreso_pct", 0),
+        "logs_recientes": tarea.get("logs_recientes", []),
+        "error":          tarea.get("error"),
+        "diff":           tarea.get("diff"),
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancelar_actualizacion_anexo1(request, task_id):
+    """Cancela una tarea de actualización de Anexo N°1 en curso (mata el
+    hilo real y, al desenrollar el try/finally del ETL, también cierra
+    Chrome)."""
+    return _cancelar_tarea(_tareas_actualizacion_anexo1, task_id)
+
+
+_NIVELES_PREFIJO_HIER = (10, 7, 4, 2)
+
+
+def _construir_hier_lookup() -> dict:
+    """{codigo: [n1_desc, n2_desc, n3_desc, n4_desc, n5_desc, nivel]} — mismo
+    formato que el HIER_LOOKUP ya embebido en el HTML standalone, para poder
+    reutilizar exactamente la misma lógica de resolución (resolveHier)."""
+    lookup = {}
+    for c in ConceptoJerarquia.objects.all().values(
+        'codigo', 'n1_desc', 'n2_desc', 'n3_desc', 'n4_desc', 'n5_desc', 'nivel'
+    ):
+        lookup[c['codigo']] = [
+            c['n1_desc'], c['n2_desc'], c['n3_desc'], c['n4_desc'], c['n5_desc'], c['nivel'],
+        ]
+    return lookup
+
+
+def _resolver_hier(lookup: dict, codigo: str):
+    """Réplica de resolveHier() del HTML: match exacto, si no, prefijos
+    progresivos de largo 10/7/4/2 (N4→N1)."""
+    if codigo in lookup:
+        return lookup[codigo]
+    for largo in _NIVELES_PREFIJO_HIER:
+        prefijo = codigo[:largo]
+        if prefijo in lookup:
+            return lookup[prefijo]
+    return None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def devengo_sigfe_anual_reporte_html(request):
+    """Sirve el reporte HTML standalone (Anexo N°3 — árbol jerárquico +
+    Chart.js) con D_SLIM pre-cargado desde api_sigfe_devengo_anual. Protegido
+    igual que el resto del API (JWT); el frontend debe pedirlo con la
+    instancia de axios autenticada y renderizarlo vía iframe.srcDoc, NO como
+    <iframe src=...> directo (eso no llevaría el header Authorization).
+
+    ?rango=completo carga TODO el histórico; por defecto ('reciente') se
+    limita a año actual + anterior. api_sigfe_devengo_anual acumula
+    histórico indefinidamente (ya ~39.000 filas) — mandar todo sin filtro
+    genera una respuesta de ~20+ MB que el navegador debe parsear y sobre
+    la que corren varios Chart.js: en equipos con poca RAM libre puede
+    colgar o hacer crashear la pestaña/navegador. El filtro usa
+    fecha_documento (siempre poblada) y no fecha_conforme, que puede venir
+    vacía justo en la deuda pendiente de confirmar — filtrar por esa
+    dejaría afuera lo más relevante de un reporte de control de deuda."""
+    from datetime import date
+
+    rango = request.GET.get('rango', 'reciente')  # 'reciente' (default) | 'completo'
+    cache_key = f'devengo_sigfe_anual_reporte_html_{rango}'
+    html = cache.get(cache_key)
+    if html is None:
+        qs = DevengoSigfeAnual.objects.exclude(
+            monto_vigente=0, monto_disponible=0, monto_consumido=0,
+        )
+        if rango != 'completo':
+            qs = qs.filter(fecha_documento__year__gte=date.today().year - 1)
+        qs = qs.values(
+            'codigo_ue', 'principal', 'tipo_documento', 'fecha_conforme', 'fecha_documento',
+            'id_chile_compra', 'catalogo_01', 'catalogo_03', 'catalogo_04',
+            'concepto_presupuestario', 'monto_vigente', 'monto_disponible', 'monto_consumido',
+        )
+
+        hier_lookup = _construir_hier_lookup()
+
+        d_slim = []
+        for r in qs.iterator(chunk_size=2000):
+            f = r['fecha_conforme'].isoformat() if r['fecha_conforme'] else ''
+            fd = r['fecha_documento'].isoformat() if r['fecha_documento'] else ''
+
+            c3_raw = (r['catalogo_03'] or '').strip()
+            c4_raw = (r['catalogo_04'] or '').strip()
+            if '0404-PRAIS' in c3_raw:
+                c3_raw, c4_raw = 'No Aplica', c3_raw
+            c3 = c3_raw.replace('DetalledeTransferencias - ', '')[:50]
+            c4 = c4_raw.replace('UnidadesDemandantes - ', '')[:50]
+
+            idcc = r['id_chile_compra'] or ''
+            cp = (r['concepto_presupuestario'] or 'Sin concepto').strip()[:60]
+            cp_code = cp.split(' ')[0] if cp else ''
+            h = _resolver_hier(hier_lookup, cp_code)
+
+            d_slim.append({
+                'u': r['codigo_ue'] or '',
+                'pr': r['principal'] or 'Desconocido',
+                'td': (r['tipo_documento'] or '')[:30],
+                'f': f, 'fd': fd, 'me': fd[:7],
+                'mp': 1 if idcc.strip() else 0,
+                'c1': (r['catalogo_01'] or '').replace('ProgramaPresupuestario - ', '')[:40],
+                'c3': c3, 'c4': c4,
+                'cp': cp,
+                'vg': int(r['monto_vigente'] or 0),
+                'di': int(r['monto_disponible'] or 0),
+                'co': int(r['monto_consumido'] or 0),
+                'a': f[:4], 'm': f[:7],
+                'h1': h[0] if h else '', 'h2': h[1] if h else '', 'h3': h[2] if h else '',
+                'h4': h[3] if h else '', 'h5': h[4] if h else '', 'hn': h[5] if h else 0,
+            })
+
+        # El sidebar interno, el header institucional propio y el tab de
+        # "Carga de Archivos" ya se removieron/ocultaron directamente en la
+        # plantilla (backend/api/templates/anexo3_reporte_sigfe.html) — no
+        # hace falta parchear el HTML en cada request.
+        html_path = Path(__file__).parent / 'templates' / 'anexo3_reporte_sigfe.html'
+        html = html_path.read_text(encoding='utf-8')
+
+        d_slim_json = json.dumps(d_slim, ensure_ascii=False, separators=(',', ':'))
+        html = html.replace('const D_SLIM=[];', f'const D_SLIM={d_slim_json};', 1)
+
+        cache.set(cache_key, html, timeout=300)
+
+    return HttpResponse(html, content_type='text/html; charset=utf-8')
+
+
+# -- Actualización desde SIGFE (Selenium, disparada desde el dashboard) -------
+
+_tareas_actualizacion_sigfe: dict = {}
+
+_RUTA_DATA_DEVENGO = Path(__file__).parent.parent.parent / "api" / "data" / "data_devengo"
+
+_PATRON_FECHA_ISO_SIGFE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+
+def _ejecutar_actualizacion_sigfe(task_id: str, usuario: str, password: str,
+                                   fecha_desde: str, fecha_hasta: str):
+    """Descarga (Selenium headless) + consolida los devengos SIGFE por
+    establecimiento, delegando en sigfe_descarga_devengos_Completo."""
+    _tareas_actualizacion_sigfe[task_id]["thread_id"] = threading.current_thread().ident
+
+    ruta_modulo = str(_RUTA_DATA_DEVENGO)
+    if ruta_modulo not in sys.path:
+        sys.path.insert(0, ruta_modulo)
+
+    try:
+        import sigfe_descarga_devengos_Completo as sigfe_etl
+    except ImportError as exc:
+        _tareas_actualizacion_sigfe[task_id].update(
+            status="error", error=f"No se pudo cargar sigfe_descarga_devengos_Completo: {exc}"
+        )
+        return
+
+    logs = []
+
+    def _cb(paso=None, paso_desc=None, progreso_pct=None, log=None):
+        upd = {}
+        if paso is not None:
+            upd["paso"] = paso
+        if paso_desc is not None:
+            upd["paso_desc"] = paso_desc
+        if progreso_pct is not None:
+            upd["progreso_pct"] = progreso_pct
+        if log:
+            logs.append(log)
+            upd["logs_recientes"] = logs[-40:]
+        if upd:
+            _tareas_actualizacion_sigfe[task_id].update(**upd)
+
+    try:
+        _tareas_actualizacion_sigfe[task_id].update(status="en_proceso")
+        _cb(paso=1, paso_desc="Iniciando navegador y autenticando en SIGFE...", progreso_pct=1,
+            log=f"Descargando devengos SIGFE del {fecha_desde} al {fecha_hasta}...")
+
+        resultado = sigfe_etl.ejecutar_actualizacion_sigfe(
+            usuario, password, fecha_desde, fecha_hasta, progress_callback=_cb,
+        )
+
+        consolidacion = resultado["consolidacion"]
+        diff = {
+            "establecimientos_ok": resultado["establecimientos_ok"],
+            "establecimientos_fallidos": resultado["establecimientos_fallidos"],
+            "filas_leidas": consolidacion.get("filas_leidas", 0),
+            "insertadas": consolidacion.get("insertadas", 0),
+            "ya_existian": consolidacion.get("ya_existian", 0),
+            "nuevos_detalle": consolidacion.get("nuevos_detalle", []),
+            "nuevos_detalle_truncado": consolidacion.get("nuevos_detalle_truncado", False),
+            "resumen_por_ue": consolidacion.get("resumen_por_ue", []),
+        }
+
+        # El reporte HTML cachea D_SLIM 5 min (una entrada por 'rango') —
+        # invalidar ambas para que la próxima apertura del reporte ya
+        # muestre los documentos recién sincronizados.
+        cache.delete('devengo_sigfe_anual_reporte_html_reciente')
+        cache.delete('devengo_sigfe_anual_reporte_html_completo')
+
+        _tareas_actualizacion_sigfe[task_id].update(
+            status="completado", paso=5,
+            paso_desc=(
+                f"Completado: {consolidacion.get('insertadas', 0)} documentos nuevos "
+                f"({len(resultado['establecimientos_ok'])}/{len(resultado['establecimientos_ok']) + len(resultado['establecimientos_fallidos'])} establecimientos)."
+            ),
+            logs_recientes=logs[-40:],
+            progreso_pct=100,
+            diff=diff,
+        )
+
+    except Exception as exc:
+        logger.exception("Error actualizando devengos SIGFE")
+        _tareas_actualizacion_sigfe[task_id].update(
+            status="error", error=str(exc), logs_recientes=logs[-40:],
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def iniciar_actualizacion_sigfe(request):
+    """Inicia la descarga + consolidación de devengos SIGFE por establecimiento.
+    Body: {usuario, password, fecha_desde, fecha_hasta} (fechas YYYY-MM-DD)."""
+    for tarea in _tareas_actualizacion_sigfe.values():
+        if tarea.get("status") in ("iniciado", "en_proceso"):
+            return Response({"error": "Ya hay una actualización SIGFE en curso."}, status=409)
+
+    usuario = str(request.data.get("usuario", "")).strip()
+    password = str(request.data.get("password", "")).strip()
+    fecha_desde = str(request.data.get("fecha_desde", "")).strip()
+    fecha_hasta = str(request.data.get("fecha_hasta", "")).strip()
+
+    if not usuario or not password:
+        return Response({"error": "Debe indicar usuario y contraseña de SIGFE."}, status=400)
+    if not _PATRON_FECHA_ISO_SIGFE.match(fecha_desde) or not _PATRON_FECHA_ISO_SIGFE.match(fecha_hasta):
+        return Response({"error": "Fechas inválidas (se esperan como YYYY-MM-DD)."}, status=400)
+    if fecha_desde > fecha_hasta:
+        return Response({"error": "La fecha 'desde' no puede ser posterior a 'hasta'."}, status=400)
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_actualizacion_sigfe[task_id] = {
+        "status": "iniciado",
+        "paso": 0,
+        "paso_desc": "Iniciando...",
+        "error": None,
+        "logs_recientes": [],
+        "progreso_pct": 0,
+        "diff": None,
+    }
+    threading.Thread(
+        target=_ejecutar_actualizacion_sigfe,
+        args=(task_id, usuario, password, fecha_desde, fecha_hasta),
+        daemon=True,
+    ).start()
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def estado_actualizacion_sigfe(request, task_id):
+    """Retorna el estado de una tarea de actualización SIGFE."""
+    tarea = _tareas_actualizacion_sigfe.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id":        task_id,
+        "status":         tarea["status"],
+        "paso":           tarea["paso"],
+        "paso_desc":      tarea["paso_desc"],
+        "progreso_pct":   tarea.get("progreso_pct", 0),
+        "logs_recientes": tarea.get("logs_recientes", []),
+        "error":          tarea.get("error"),
+        "diff":           tarea.get("diff"),
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def cancelar_actualizacion_sigfe(request, task_id):
+    """Cancela una tarea de actualización SIGFE en curso (mata el hilo real
+    y, al desenrollar el try/finally del ETL, también cierra Chrome)."""
+    return _cancelar_tarea(_tareas_actualizacion_sigfe, task_id)
 
 
 # =============================================================================

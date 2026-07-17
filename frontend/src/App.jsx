@@ -8,7 +8,7 @@
  *  /login                       → Pública
  *  /                            → Protegida → AppLayout > Home
  *  /licitaciones                → Protegida → AppLayout > Dashboard
- *  /anexo3                      → Protegida → AppLayout > AnexoDeudaPage
+ *  /anexo3/reporte-sigfe         → Protegida → AppLayout > ReporteSigfePage (único reporte Anexo N°3 — el viejo AnexoDeudaPage se eliminó)
  *  /abastecimiento/dashboard    → Protegida (rol: admin, abastecimiento)
  *  /abastecimiento/fsc          → Protegida (rol: admin, abastecimiento)
  *  /finanzas/dashboard          → Protegida (rol: admin, finanzas)
@@ -25,7 +25,6 @@ import { AppLayout } from './components/ui/AppLayout';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import { LoginPage } from './features/auth/pages/LoginPage';
-import AnexoDeudaPage from './pages/AnexoDeudaPage';
 import OrdenesCompraDashboard from './pages/OrdenesCompraDashboard';
 
 // Rutas de features
@@ -34,6 +33,8 @@ import { finanzasRoutes } from './features/finanzas/routes';
 import { pacRoutes } from './features/pac/routes';
 import { compraAgilRoutes } from './features/compra-agil/routes';
 import { perfilRoute, adminUsuariosRoute } from './features/usuarios/routes';
+import { devengoSigfeRoutes } from './features/devengo-sigfe/routes';
+import { anexo1SigfeRoutes } from './features/anexo1-sigfe/routes';
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
@@ -66,7 +67,8 @@ function AppRoutes() {
             {/* Rutas generales */}
             <Route path="/" element={<Home />} />
             <Route path="/licitaciones" element={<Dashboard />} />
-            <Route path="/anexo3" element={<AnexoDeudaPage />} />
+            {anexo1SigfeRoutes}
+            {devengoSigfeRoutes}
             <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
             {/* Módulo PAC (todos los autenticados) */}
             {pacRoutes}

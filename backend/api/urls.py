@@ -7,8 +7,11 @@ from .serializers import MyTokenObtainPairSerializer
 from .views import (
     BoletaGarantiaAuditViewSet, BoletaGarantiaViewSet,
     CompradorViewSet, DetalleLicitacionViewSet, DetalleOrdenCompraViewSet,
-    DevengoViewSet, LicitacionViewSet, OrdenCompraViewSet, ProveedorViewSet,
-    dashboard_stats, devengo_raw_all, devengo_stats, facturas_raw_all,
+    LicitacionViewSet, OrdenCompraViewSet, ProveedorViewSet,
+    dashboard_stats, facturas_raw_all,
+    DevengoSigfeAnualViewSet, devengo_sigfe_anual_raw_all, devengo_sigfe_anual_reporte_html,
+    devengo_sigfe_anual_stats,
+    iniciar_actualizacion_sigfe, estado_actualizacion_sigfe, cancelar_actualizacion_sigfe,
     ordenes_compra_raw_all, ordenes_compra_proyectos_licitacion,
     PlanerPACViewSet, CompraAgilResumenViewSet, CompraAgilProductoViewSet,
     CompraAgilProveedorViewSet, pac_indicadores_view, pac_oc_stats_view,
@@ -34,6 +37,8 @@ from .views import (
     cancelar_actualizacion_formularios, formularios_stats_view, formularios_flujo_view,
     formularios_alertas_view, formularios_unificacion_view, formularios_historial_view,
     UsuarioViewSet, user_me, DepartamentoViewSet, EstablecimientoViewSet,
+    SigfeAnexo1ViewSet, sigfe_anexo1_estado_bd,
+    iniciar_actualizacion_anexo1, estado_actualizacion_anexo1, cancelar_actualizacion_anexo1,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -42,7 +47,8 @@ class MyTokenObtainPairView(TokenObtainPairView):
 router = DefaultRouter()
 router.register(r'licitaciones', LicitacionViewSet, basename='licitacion')
 router.register(r'detalles', DetalleLicitacionViewSet, basename='detallicitacion')
-router.register(r'devengo', DevengoViewSet)
+router.register(r'devengo-sigfe-anual', DevengoSigfeAnualViewSet, basename='devengosigfeanual')
+router.register(r'sigfe-anexo1', SigfeAnexo1ViewSet, basename='sigfeanexo1')
 router.register(r'ordenes-compra', OrdenCompraViewSet)
 router.register(r'ordenes-compra-detalles', DetalleOrdenCompraViewSet)
 
@@ -82,8 +88,16 @@ urlpatterns = [
 
     # Estadísticas y endpoints especiales
     path('dashboard/stats/', dashboard_stats, name='dashboard_stats'),
-    path('devengo/stats/', devengo_stats, name='devengo_stats'),
-    path('devengo/raw_all/', devengo_raw_all, name='devengo_raw_all'),
+    path('devengo-sigfe-anual/raw_all/', devengo_sigfe_anual_raw_all, name='devengo_sigfe_anual_raw_all'),
+    path('devengo-sigfe-anual/stats/', devengo_sigfe_anual_stats, name='devengo_sigfe_anual_stats'),
+    path('devengo-sigfe-anual/reporte-html/', devengo_sigfe_anual_reporte_html, name='devengo_sigfe_anual_reporte_html'),
+    path('devengo-sigfe-anual/actualizar/', iniciar_actualizacion_sigfe, name='sigfe_actualizar'),
+    path('devengo-sigfe-anual/actualizar-estado/<str:task_id>/', estado_actualizacion_sigfe, name='sigfe_actualizar_estado'),
+    path('devengo-sigfe-anual/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_sigfe, name='sigfe_actualizar_cancelar'),
+    path('sigfe-anexo1/estado-bd/', sigfe_anexo1_estado_bd, name='sigfe_anexo1_estado_bd'),
+    path('sigfe-anexo1/actualizar/', iniciar_actualizacion_anexo1, name='anexo1_actualizar'),
+    path('sigfe-anexo1/actualizar-estado/<str:task_id>/', estado_actualizacion_anexo1, name='anexo1_actualizar_estado'),
+    path('sigfe-anexo1/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_anexo1, name='anexo1_actualizar_cancelar'),
     path('ordenes-compra/raw_all/', ordenes_compra_raw_all, name='ordenes_compra_raw_all'),
     path('ordenes-compra/proyectos-licitacion/', ordenes_compra_proyectos_licitacion, name='oc_proyectos_licitacion'),
     path('facturas/raw_all/', facturas_raw_all, name='facturas_raw_all'),

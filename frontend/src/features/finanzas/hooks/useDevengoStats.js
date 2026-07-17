@@ -2,7 +2,7 @@
  * @file features/finanzas/hooks/useDevengoStats.js
  * @description Hook para estadísticas del dashboard financiero.
  *
- * La API /api/devengo/stats/ devuelve:
+ * La API /api/devengo-sigfe-anual/stats/ devuelve:
  *   { kpis: { deuda_total, deuda_pagada, monto_vigente, pct_pendiente, n_registros,
  *             top_proveedor, top_proveedor_monto, top_ue, top_ue_monto },
  *     por_ue, top_proveedores, por_tipo_doc, por_n1 }

@@ -6,13 +6,14 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import (
-    Licitacion, DetalleLicitacion, Devengo, OrdenCompra, DetalleOrdenCompra,
+    Licitacion, DetalleLicitacion, OrdenCompra, DetalleOrdenCompra,
     Proveedor, Comprador, BoletaGarantia, BoletaGarantiaAudit, Factura,
     PlanerPAC, CompraAgilResumen, CompraAgilDocumento,
     CompraAgilProducto, CompraAgilProductoCotizado, CompraAgilProveedor,
     RevisionOCCorregible, GestionContrato,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
-    PerfilUsuario, Departamento, Establecimiento,
+    PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
+    SigfeAnexo1,
 )
 from .services import generar_id_formulario
 
@@ -78,21 +79,19 @@ class LicitacionCalendarioSerializer(serializers.ModelSerializer):
 
 
 # =============================================================================
-# Devengo
+# Devengo SIGFE Anual (histórico consolidado — reemplaza al viejo modelo Devengo)
 # =============================================================================
 
-class DevengoSerializer(serializers.ModelSerializer):
+class DevengoSigfeAnualSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Devengo
-        fields = [
-            'id', 'codigo_ue', 'folio', 'titulo', 'tipo_presupuesto',
-            'moneda_presupuestaria', 'principal', 'principal_relacionado',
-            'moneda_documento', 'tipo_cambio', 'tipo_documento', 'numero_documento',
-            'fecha_documento', 'fecha_conforme', 'id_chile_compra', 'fecha_ingreso',
-            'catalogo_01', 'catalogo_02', 'catalogo_03', 'catalogo_04', 'catalogo_05',
-            'concepto_presupuestario', 'monto_vigente', 'monto_disponible',
-            'monto_consumido', 'archivo_origen',
-        ]
+        model = DevengoSigfeAnual
+        fields = '__all__'
+
+
+class SigfeAnexo1Serializer(serializers.ModelSerializer):
+    class Meta:
+        model = SigfeAnexo1
+        fields = '__all__'
 
 
 # =============================================================================

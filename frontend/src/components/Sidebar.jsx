@@ -189,10 +189,16 @@ export default function Sidebar() {
                             </div>
                             <div className="nav-mod-items" style={{ display: openMods.finReportes ? 'block' : 'none' }}>
                                 <div
-                                    className={`nav-item ${isActive('/anexo3') ? 'active' : ''}`}
-                                    onClick={() => goTo('/anexo3', 'finanzas', 'finReportes')}
+                                    className={`nav-item ${isActive('/anexo1/base-datos') ? 'active' : ''}`}
+                                    onClick={() => goTo('/anexo1/base-datos', 'finanzas', 'finReportes')}
                                 >
-                                    <span>📋</span> <span className="nav-item-text">Anexo N°3 — Control Deuda</span>
+                                    <span>📑</span> <span className="nav-item-text">Anexo N°1 — Ejecución Presupuestaria</span>
+                                </div>
+                                <div
+                                    className={`nav-item ${isActive('/anexo3/reporte-sigfe') ? 'active' : ''}`}
+                                    onClick={() => goTo('/anexo3/reporte-sigfe', 'finanzas', 'finReportes')}
+                                >
+                                    <span>🌳</span> <span className="nav-item-text">Anexo N°3 — Reporte Jerárquico SIGFE</span>
                                 </div>
                             </div>
                         </div>

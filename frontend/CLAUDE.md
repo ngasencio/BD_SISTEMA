@@ -41,7 +41,6 @@ src/
 │       └── Sidebar.jsx       # DUPLICADO LEGACY — NO usar
 ├── pages/                    # Páginas legacy (aún no migradas a features/)
 │   ├── Dashboard.jsx         # /licitaciones
-│   ├── AnexoDeudaPage.jsx    # /anexo3
 │   ├── Home.jsx              # /
 │   └── OrdenesCompraDashboard.jsx  # /ordenes-compra — pendiente migrar a features/
 └── features/                 # Módulos por dominio — PATRÓN PREFERIDO
@@ -49,7 +48,8 @@ src/
     ├── compra-agil/          # /compra-agil — ML análisis incluido
     ├── pac/                  # /pac — PAC, Res.188, indicadores
     ├── abastecimiento/       # /abastecimiento/* — FSC, boletas
-    └── finanzas/             # /finanzas/* — devengo, dashboard finanzas
+    ├── finanzas/             # /finanzas/* — devengo, dashboard finanzas
+    └── devengo-sigfe/        # /anexo3/reporte-sigfe — Anexo N°3, reporte jerárquico SIGFE (iframe + fetch autenticado)
 ```
 
 ---
@@ -84,7 +84,7 @@ Rol se extrae del JWT payload: `user.role` o `user.groups?.[0]` o `'viewer'` por
 | `/login` | `features/auth/pages/LoginPage` | Público |
 | `/` | `pages/Home` | Autenticado |
 | `/licitaciones` | `pages/Dashboard` | Autenticado |
-| `/anexo3` | `pages/AnexoDeudaPage` | Autenticado |
+| `/anexo3/reporte-sigfe` | `features/devengo-sigfe/components/ReporteSigfePage` | Autenticado |
 | `/ordenes-compra` | `pages/OrdenesCompraDashboard` | Autenticado |
 | `/compra-agil` | `features/compra-agil/components/CompraAgilPage` | Autenticado |
 | `/pac` | `features/pac/components/PacDashboardPage` | Autenticado |
@@ -268,7 +268,7 @@ Si necesitas una clase nueva → agregarla en `frontend/src/index.css`.
 |---|---|---|---|
 | Licitaciones | `/licitaciones` | ✅ Completo | Dashboard + filtros + gráficos + **botón ETL + panel de cambios** |
 | Órdenes de Compra | `/ordenes-compra` | ✅ Funcional | Pendiente migrar a `features/` + **botón ETL + panel de cambios**. Tab Comparativo Anual implementado en `OCDashboardPage.jsx`. |
-| Anexo N°3 | `/anexo3` | ✅ Funcional | |
+| Anexo N°3 | `/anexo3/reporte-sigfe` | ✅ Funcional | Reporte HTML standalone (árbol jerárquico + Chart.js) servido por Django con D_SLIM inyectado desde `api_sigfe_devengo_anual`, embebido vía Blob URL (fetch autenticado, no `<iframe src=...>` público). Botón "Actualizar desde SIGFE" dispara ETL Selenium headless con modal usuario/contraseña/fechas. El viejo dashboard en `/anexo3` (`AnexoDeudaPage`/`DeudaDashboard`, tabla `devengo`) fue eliminado — este reporte es el único Anexo N°3. |
 | Compra Ágil | `/compra-agil` | ✅ Completo | Tablas + análisis ML + **botón ETL + panel de cambios** |
 | PAC | `/pac` | ✅ Completo | Res.188 indicadores + Informe PDF (tab OC eliminado) |
 | Boletas de Garantía | `/abastecimiento/boletas` | ✅ Completo | CRUD + auditoría + archivo adjunto |

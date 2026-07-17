@@ -100,7 +100,6 @@ Two naming conventions coexist — **do not mix them in new code**:
 | `CompraAgilProductoCotizado` | `api_compraagil_productos_cotizados` | `id` | Quoted prices |
 | `CompraAgilProveedor` | `api_compraagil_proveedores` | `id` | `proveedorseleccionado` field is **inconsistent**: values are `"1"`, `"Si"`, `"si"`, `"True"`, `"true"` — check with `str(val) in ['1','Si','si','True','true']` |
 | `RevisionOCCorregible` | (auto) | `id` | Manual PAC-link review with resultado/motivo/observaciones |
-| `Devengo` | `devengo` | `id` | snake_case |
 | `Anexo1` | `tabla_anexo1` | `id` | snake_case |
 | `Proveedor` | `T_Proveedores` | `rut` | Custom table name |
 | `Comprador` | `T_Comprador` | `id` | Custom table name |
@@ -110,6 +109,8 @@ Two naming conventions coexist — **do not mix them in new code**:
 | `FormularioFSC` | `data_formularios_fsc` | `id` | snake_case. Sin clave natural única — `folio`/`folio+anho` se repiten (~33% colisión); ETL usa `update_or_create` por `folio+anho+unidad_requirente+fecha_solicitud` (no destructivo, preserva historial). Campos `adj_espec_tecnicas`, `adj_cotizacion`, `adj_validacion`, `adj_form_justificacion` (TextField nullable): URLs de adjuntos del Panel SSO. `destino_actual` (TextField nullable): persona que actualmente tiene el formulario. `item_presupuestario`/`folio_requerimiento` (CharField 200, nullable). `fecha_solicitud` como string `YYYY-MM-DD`. ViewSet filtra `?estado=DC,AA` (CSV) via `FormularioFSCFilter(BaseInFilter)` |
 | `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Misma clave de upsert que `FormularioFSC`. También tiene los 4 campos `adj_*` |
 | `FormularioFSCProducto` | `data_formularios_fsc_productos` | `id` | snake_case. `tipo_formulario` usa `db_column='t_form'`. Clave de upsert: `folio+anho+tipo_formulario+categoria+producto+descripcion` |
+| `DevengoSigfeAnual` | `api_sigfe_devengo_anual` | `id` | snake_case. Reemplaza por completo al viejo modelo `Devengo` (tabla `devengo`, eliminada). Histórico consolidado de devengo SIGFE por establecimiento — sincronización incremental (upsert por `row_hash`, nunca borra) vía `api/data/data_devengo/sigfe_descarga_devengos_Completo.py` + `consolidar_devengo_anual.py`, disparable desde el dashboard (`/api/devengo-sigfe-anual/actualizar/`). Todo el módulo Anexo N°3 (Control de Deuda) corre sobre esta tabla. |
+| `ConceptoJerarquia` | `concepto_jerarquia` | `id` | snake_case. Jerarquía de 5 niveles (Subtítulo→Ítem→Asignación→Sub-asignación→Detalle) de conceptos presupuestarios, 702 registros, prácticamente estática. Se carga con `python manage.py cargar_jerarquia`. Usada para enriquecer el reporte HTML jerárquico de Anexo N°3. |
 
 ---
 
@@ -135,11 +136,15 @@ GET   ordenes-compra/raw_all/             ?estado=&anio=&limit= (max 25 000, unp
 GET   ordenes-compra/proyectos-licitacion/ CodigoLicitacion→ID_Proyecto map (10 min cache)
 GET   facturas/raw_all/                   ?anio= (unpaginated, emision as DD-MM-YYYY string)
 
-# Devengo (Anexo N°3)
-GET   devengo/                            ?codigo_ue=&tipo_documento=&concepto_presupuestario=&search=&ordering=
-GET   devengo/{id}/
-GET   devengo/stats/                      ?ue=&solo_deuda= (5 min cache per ue/flag combo)
-GET   devengo/raw_all/                    ?ue=&desde=&hasta=&limit= (max 10 000)
+# Devengo SIGFE Anual (Anexo N°3 — reemplaza al viejo modelo/tabla Devengo, eliminado)
+GET   devengo-sigfe-anual/                ?codigo_ue=&tipo_documento=&concepto_presupuestario=&search=&ordering=
+GET   devengo-sigfe-anual/{id}/
+GET   devengo-sigfe-anual/stats/          ?ue=&solo_deuda= (5 min cache per ue/flag combo)
+GET   devengo-sigfe-anual/raw_all/        ?ue=&desde=&hasta=&limit= (max 100 000, default 50 000)
+GET   devengo-sigfe-anual/reporte-html/   Reporte HTML standalone (árbol jerárquico + Chart.js) con D_SLIM inyectado — pedir con axios autenticado + iframe.srcDoc/Blob, NUNCA <iframe src=...> directo (5 min cache)
+POST  devengo-sigfe-anual/actualizar/     {usuario, password, fecha_desde, fecha_hasta} (YYYY-MM-DD) → {task_id}. Selenium headless server-side.
+GET   devengo-sigfe-anual/actualizar-estado/<task_id>/  Progreso + diff (nuevos_detalle, resumen_por_ue)
+POST  devengo-sigfe-anual/actualizar-cancelar/<task_id>/  Cancelación real (mata el hilo + cierra Chrome)
 
 # PAC
 GET   planer-pac/                         PAC plan rows
@@ -244,7 +249,7 @@ Feature pages (`features/*/components/*Page.jsx`) use `<div className="feature-p
 | `/login` | `features/auth/pages/LoginPage` | Public |
 | `/` | `pages/Home` | Authenticated |
 | `/licitaciones` | `pages/Dashboard` | Authenticated |
-| `/anexo3` | `pages/AnexoDeudaPage` | Authenticated |
+| `/anexo3/reporte-sigfe` | `features/devengo-sigfe/components/ReporteSigfePage` | Authenticated |
 | `/ordenes-compra` | `pages/OrdenesCompraDashboard` | Authenticated |
 | `/compra-agil` | `features/compra-agil/components/CompraAgilPage` | Authenticated |
 | `/pac` | `features/pac/components/PacDashboardPage` | Authenticated |
