@@ -39,6 +39,10 @@ from .views import (
     UsuarioViewSet, user_me, DepartamentoViewSet, EstablecimientoViewSet,
     SigfeAnexo1ViewSet, sigfe_anexo1_estado_bd,
     iniciar_actualizacion_anexo1, estado_actualizacion_anexo1, cancelar_actualizacion_anexo1,
+    pac_cumplimiento_dentro_fuera_view, pac_cumplimiento_temporal_view,
+    pac_cumplimiento_jerarquia_view, pac_cumplimiento_rankings_view,
+    pac_cumplimiento_actualizar_maestro, pac_cumplimiento_actualizar_jerarquia,
+    pac_cumplimiento_reporte_word, pac_cumplimiento_reporte_ppt, pac_cumplimiento_reporte_pdf,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -167,6 +171,17 @@ urlpatterns = [
     path('formularios/alertas/', formularios_alertas_view, name='formularios_alertas'),
     path('formularios/unificacion/', formularios_unificacion_view, name='formularios_unificacion'),
     path('formularios/historial/', formularios_historial_view, name='formularios_historial'),
+
+    # Módulo PAC — Seguimiento y Rendimiento del Plan Anual de Compras
+    path('pac-cumplimiento/dentro-fuera/', pac_cumplimiento_dentro_fuera_view, name='pac_cumplimiento_dentro_fuera'),
+    path('pac-cumplimiento/temporal/', pac_cumplimiento_temporal_view, name='pac_cumplimiento_temporal'),
+    path('pac-cumplimiento/jerarquia/', pac_cumplimiento_jerarquia_view, name='pac_cumplimiento_jerarquia'),
+    path('pac-cumplimiento/rankings/', pac_cumplimiento_rankings_view, name='pac_cumplimiento_rankings'),
+    path('pac-cumplimiento/actualizar-maestro/', pac_cumplimiento_actualizar_maestro, name='pac_cumplimiento_actualizar_maestro'),
+    path('pac-cumplimiento/actualizar-jerarquia/', pac_cumplimiento_actualizar_jerarquia, name='pac_cumplimiento_actualizar_jerarquia'),
+    path('pac-cumplimiento/reporte/word/', pac_cumplimiento_reporte_word, name='pac_cumplimiento_reporte_word'),
+    path('pac-cumplimiento/reporte/ppt/', pac_cumplimiento_reporte_ppt, name='pac_cumplimiento_reporte_ppt'),
+    path('pac-cumplimiento/reporte/pdf/', pac_cumplimiento_reporte_pdf, name='pac_cumplimiento_reporte_pdf'),
 
     # Router ViewSets
     path('', include(router.urls)),

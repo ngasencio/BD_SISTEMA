@@ -93,7 +93,9 @@ Two naming conventions coexist — **do not mix them in new code**:
 | `OrdenCompra` | `api_ordencompra` | `codigo_oc` | PascalCase legacy. `TotalNeto`/`TotalBruto` are **TextField** — convert with `Number()` / `Decimal()` |
 | `DetalleOrdenCompra` | `api_detalleordencompra` | `id` | FK→OrdenCompra |
 | `Factura` | (auto) | `id` | `emision` stored as DD-MM-YYYY string |
-| `PlanerPAC` | (auto) | `id` | PAC plan data loaded from Excel |
+| `PlanerPAC` | `data_planerpac` | `id` | snake_case. PAC plan vigente, cargado desde `PlanificacionPACxxxx.xlsx` vía `api/data/data_planificacionPac/cargar_pac_servidor.py` (upsert por `id_proyecto+nombre_item+pac+fecha_inicio_compra` — un mismo ítem puede repetirse en tramos con distinta fecha). `managed=True` desde que se retrofiteó la PK (antes el loader hacía `DROP TABLE`+`to_sql` crudo sin `id`). Se acumula año sobre año, nunca se borra. `cantidad_oc`/`meses_envio_oc` (TextField) agregados para el módulo PAC Cumplimiento. |
+| `PacProyectoMaestro` | `data_pac_proyecto_maestro` | `id` | snake_case. Maestro histórico multi-año (PC20-PC26+) de proyectos PAC, cargado desde `OCPAC_Maestro.csv` (actualización manual) vía `python manage.py cargar_pac_maestro`. Usado solo para verificar si un `FormularioFSCDerivado.id_plan` corresponde a un proyecto PAC real (columna `dentro_fuera_pac`) — no trae fechas ni montos, eso vive en `PlanerPAC`. |
+| `SsoSubdireccion` | `data_sso_subdireccion` | `subdireccion_id` | snake_case. Solo 4 filas (IDs 2-5) — nombres de las subdirecciones institucionales (Dirección SS Osorno), cargadas desde `mapa_sso.xlsx` vía `python manage.py cargar_jerarquia_sso`. Resuelve el nombre de `Departamento.subdireccion_id` cuando `establecimiento_id=1`; los otros 6 hospitales de la red se agrupan por `Establecimiento.descripcion` en su lugar (no tienen nombre propio de subdirección). |
 | `CompraAgilResumen` | `api_compraagil_resumen` | `codigocompraagil` | `presupuestoestimado` is **TextField** |
 | `CompraAgilDocumento` | `api_compraagil_documentos` | `id` | FK→CompraAgilResumen |
 | `CompraAgilProducto` | `api_compraagil_productos` | `id` | FK→CompraAgilResumen |
@@ -107,7 +109,7 @@ Two naming conventions coexist — **do not mix them in new code**:
 | `BoletaGarantiaAudit` | `T_BoletaGarantia_Audit` | `id` | Auto-written on update/delete |
 | `GestionContrato` | `data_gestioncontratos` | `numero_contrato` (PK) | snake_case. `monto_por_ejecutar` nullable (>10^13 → None). `fecha_inicio`/`fecha_termino` malformed strings ("07-00-2026"). Join: `id_licitacion_oc = OrdenCompra.CodigoLicitacion` |
 | `FormularioFSC` | `data_formularios_fsc` | `id` | snake_case. Sin clave natural única — `folio`/`folio+anho` se repiten (~33% colisión); ETL usa `update_or_create` por `folio+anho+unidad_requirente+fecha_solicitud` (no destructivo, preserva historial). Campos `adj_espec_tecnicas`, `adj_cotizacion`, `adj_validacion`, `adj_form_justificacion` (TextField nullable): URLs de adjuntos del Panel SSO. `destino_actual` (TextField nullable): persona que actualmente tiene el formulario. `item_presupuestario`/`folio_requerimiento` (CharField 200, nullable). `fecha_solicitud` como string `YYYY-MM-DD`. ViewSet filtra `?estado=DC,AA` (CSV) via `FormularioFSCFilter(BaseInFilter)` |
-| `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Misma clave de upsert que `FormularioFSC`. También tiene los 4 campos `adj_*` |
+| `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Misma clave de upsert que `FormularioFSC`. También tiene los 4 campos `adj_*`. **Módulo PAC Cumplimiento:** `dentro_fuera_pac` (choices `DENTRO`/`FUERA`, null) y `sso_departamento` (FK→`Departamento`, `db_constraint=False` porque esa tabla es `managed=False` con `id` tipo `int(11)` incompatible con el `bigint` que genera Django) — ambos calculados por `_clasificar_dentro_fuera_pac()` en `page_data_panel.py`, recalculado en cada sync. Null en `sso_departamento` = "Sin Clasificar" (unidad_requirente sin match), nunca se descarta. |
 | `FormularioFSCProducto` | `data_formularios_fsc_productos` | `id` | snake_case. `tipo_formulario` usa `db_column='t_form'`. Clave de upsert: `folio+anho+tipo_formulario+categoria+producto+descripcion` |
 | `DevengoSigfeAnual` | `api_sigfe_devengo_anual` | `id` | snake_case. Reemplaza por completo al viejo modelo `Devengo` (tabla `devengo`, eliminada). Histórico consolidado de devengo SIGFE por establecimiento — sincronización incremental (upsert por `row_hash`, nunca borra) vía `api/data/data_devengo/sigfe_descarga_devengos_Completo.py` + `consolidar_devengo_anual.py`, disparable desde el dashboard (`/api/devengo-sigfe-anual/actualizar/`). Todo el módulo Anexo N°3 (Control de Deuda) corre sobre esta tabla. |
 | `ConceptoJerarquia` | `concepto_jerarquia` | `id` | snake_case. Jerarquía de 5 niveles (Subtítulo→Ítem→Asignación→Sub-asignación→Detalle) de conceptos presupuestarios, 702 registros, prácticamente estática. Se carga con `python manage.py cargar_jerarquia`. Usada para enriquecer el reporte HTML jerárquico de Anexo N°3. |
@@ -151,6 +153,15 @@ GET   planer-pac/                         PAC plan rows
 GET   pac/indicadores-res188/             Res.188/2026 savings indicators
 GET   pac/oc-stats/                       OC stats aggregated for PAC
 GET   pac/oc-productos/                   Products per OC for PAC analysis
+
+# PAC — Seguimiento y Rendimiento del Plan Anual de Compras (módulo separado del bloque PAC de arriba)
+GET   pac-cumplimiento/dentro-fuera/      ?anho=&subdireccion=&depto= % Dentro/Fuera + comparativa histórica por año (5 min cache)
+GET   pac-cumplimiento/temporal/          ?anho=&subdireccion=&depto= En fecha/Atrasado/Pendiente/Sin planificación (5 min cache)
+GET   pac-cumplimiento/jerarquia/         ?anho= Árbol Subdirección→Departamento(raíz)→Sub-departamento (5 min cache)
+GET   pac-cumplimiento/rankings/          ?anho=&tipo=depto|formulario Mejores/peores, score compuesto (5 min cache)
+POST  pac-cumplimiento/actualizar-maestro/     Recarga OCPAC_Maestro.csv → PacProyectoMaestro (síncrono, sin task_id)
+POST  pac-cumplimiento/actualizar-jerarquia/   Recarga nombres de subdirección desde mapa_sso.xlsx (síncrono)
+GET   pac-cumplimiento/reporte/word|ppt|pdf/   ?periodo=YYYY-MM|YYYY-QN Descarga informe/presentación/PDF (python-docx/python-pptx/reportlab)
 
 # Compra Ágil
 GET   compraagil-resumen/                 ?estadoglosa=&unidadcompra=&search=
@@ -196,6 +207,8 @@ GET   formularios-fsc-productos/          ?anho=&categoria=
 ```
 
 **Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`, `calcular_contratos_evaluaciones`, `calcular_contratos_financiero`, `calcular_contratos_oc_detalle`, `calcular_contratos_plazos`, `calcular_contratos_pac`, `calcular_formularios_stats`, `calcular_formularios_unificacion`, `calcular_formularios_historial`. **Helpers en views.py (NO en services):** `_snapshot_fsc()` (captura estado pre-ETL), `_diff_fsc()` (compara snapshots y produce diff con 4 categorías: nuevos/cambiaron_estado/derivados_nuevos/pegados).
+
+**Módulo PAC Cumplimiento** (`api/services.py`): `calcular_pac_dentro_fuera_stats`, `calcular_pac_comparativa_periodos`, `calcular_pac_cumplimiento_temporal`, `calcular_pac_jerarquia`, `calcular_pac_rankings` — todas aceptan `fecha_desde`/`fecha_hasta` (ISO, prioridad) o `anho`. `calcular_pac_jerarquia` resuelve sub-departamentos vía `_resolver_depto_raiz()`: sube la cadena `Departamento.parent_id` (hasta 3 niveles reales observados) hasta el departamento de primer nivel dentro de la misma subdirección/establecimiento — `es_depto == 'SI'` es la señal autoritativa de "soy de primer nivel" y corta la cadena ahí aunque `parent_id` apunte a otro lado (hay departamentos reales, ej. PRAIS, cuyo `parent_id` apunta al nodo que representa la propia Subdirección, no a un par). Sin este rollup, sub-departamentos (ej. "AYEKAN" bajo "DEPARTAMENTO DE SALUD MENTAL") aparecían como hermanos sueltos fragmentando las métricas — ver `_mapa_departamentos()`/`_resolver_depto_raiz()`. Generación de reportes en `api/services_reportes.py` (`generar_informe_word`/`generar_presentacion_ppt`/`generar_reporte_pdf`, matplotlib backend `Agg`) + `api/plantillas_narrativas.py` (frases condicionales, sin IA — usar `_n()`/`_money()` para formatear números, nunca `str.replace(',', '.')` sobre un párrafo completo, corrompe comas de la prosa).
 
 **Cache pattern** — all stat endpoints use `LocMemCache` (volatile — lost on restart, not shared across workers):
 ```python
@@ -253,6 +266,7 @@ Feature pages (`features/*/components/*Page.jsx`) use `<div className="feature-p
 | `/ordenes-compra` | `pages/OrdenesCompraDashboard` | Authenticated |
 | `/compra-agil` | `features/compra-agil/components/CompraAgilPage` | Authenticated |
 | `/pac` | `features/pac/components/PacDashboardPage` | Authenticated |
+| `/pac-cumplimiento` | `features/pac-cumplimiento/components/PacCumplimientoPage` | Authenticated — feature separada de `/pac` (Res.188/OC/Compra Ágil); 5 tabs: Resumen, Jerarquía, Rankings, Cumplimiento Temporal, Reportes |
 | `/abastecimiento/*` | `features/abastecimiento/` | admin, abastecimiento, viewer |
 | `/finanzas/*` | `features/finanzas/` | admin, finanzas |
 

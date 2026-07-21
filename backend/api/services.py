@@ -1,3 +1,4 @@
+import calendar
 import re
 from collections import defaultdict
 from datetime import date, datetime
@@ -11,6 +12,7 @@ from .models import (
     CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog,
     SigfeAnexo1,
+    PacProyectoMaestro, Departamento, Establecimiento, SsoSubdireccion,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
@@ -2569,3 +2571,533 @@ def calcular_sigfe_anexo1_estado_bd(anho_desde=None):
         'periodos': [f'{a}-{m:02d}' for a, m in periodos],
         'matriz': matriz,
     }
+
+
+# =============================================================================
+# Módulo PAC — Seguimiento y Rendimiento del Plan Anual de Compras
+# =============================================================================
+# dentro_fuera_pac y sso_departamento se calculan en page_data_panel.py en cada
+# sync (ver _clasificar_dentro_fuera_pac). Estas funciones solo agregan/leen.
+
+def _rango_fechas_periodo(periodo):
+    """'YYYY-MM' (mes) o 'YYYY-QN' (trimestre) -> (date_desde, date_hasta) inclusive."""
+    periodo = periodo.upper()
+    if 'Q' in periodo:
+        anho_str, q_str = periodo.split('-Q')
+        anho, trimestre = int(anho_str), int(q_str)
+        mes_ini = (trimestre - 1) * 3 + 1
+        mes_fin = mes_ini + 2
+    else:
+        anho_str, mes_str = periodo.split('-')
+        anho = int(anho_str)
+        mes_ini = mes_fin = int(mes_str)
+    fecha_desde = date(anho, mes_ini, 1)
+    fecha_hasta = date(anho, mes_fin, calendar.monthrange(anho, mes_fin)[1])
+    return fecha_desde, fecha_hasta
+
+
+def _periodo_anterior(periodo):
+    periodo = periodo.upper()
+    if 'Q' in periodo:
+        anho_str, q_str = periodo.split('-Q')
+        anho, trimestre = int(anho_str), int(q_str)
+        return f'{anho - 1}-Q4' if trimestre == 1 else f'{anho}-Q{trimestre - 1}'
+    anho_str, mes_str = periodo.split('-')
+    anho, mes = int(anho_str), int(mes_str)
+    return f'{anho - 1}-12' if mes == 1 else f'{anho}-{mes - 1:02d}'
+
+
+def _mismo_periodo_anho_anterior(periodo):
+    periodo = periodo.upper()
+    if 'Q' in periodo:
+        anho_str, q_str = periodo.split('-Q')
+        return f'{int(anho_str) - 1}-Q{q_str}'
+    anho_str, mes_str = periodo.split('-')
+    return f'{int(anho_str) - 1}-{mes_str}'
+
+
+def _comparativa_anual_dentro_fuera(qs_base):
+    """Agrupa por año de fecha_derivado (string 'YYYY-MM-DD') — no usa PlanerPAC."""
+    por_anho = defaultdict(lambda: {'dentro': 0, 'fuera': 0})
+    for fecha_derivado, estado in qs_base.values_list('fecha_derivado', 'dentro_fuera_pac'):
+        if not fecha_derivado or len(fecha_derivado) < 4:
+            continue
+        bucket = por_anho[fecha_derivado[:4]]
+        bucket['dentro' if estado == FormularioFSCDerivado.DENTRO else 'fuera'] += 1
+    resultado = []
+    for anho_str in sorted(por_anho):
+        d, f = por_anho[anho_str]['dentro'], por_anho[anho_str]['fuera']
+        t = d + f
+        resultado.append({
+            'anho': int(anho_str), 'dentro': d, 'fuera': f, 'total': t,
+            'pct_dentro': round(d / t * 100, 1) if t else 0,
+        })
+    return resultado
+
+
+def calcular_pac_dentro_fuera_stats(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None):
+    """% Dentro/Fuera PAC + comparativa histórica por año, a nivel FSC individual.
+
+    Granularidad y fuente de verdad acordadas con el usuario: 100% desde
+    FormularioFSCDerivado.dentro_fuera_pac (verificado contra PacProyectoMaestro),
+    agrupado por el año de fecha_derivado — nunca depende de PlanerPAC.
+    `fecha_desde`/`fecha_hasta` (ISO 'YYYY-MM-DD') tienen prioridad sobre `anho`;
+    se usan para las comparativas de período de la reportería (ver Fase E).
+    """
+    qs_base = (
+        FormularioFSCDerivado.objects
+        .exclude(dentro_fuera_pac__isnull=True)
+        .exclude(fecha_derivado__isnull=True).exclude(fecha_derivado='')
+    )
+    if subdireccion:
+        qs_base = qs_base.filter(sso_departamento__subdireccion_id=subdireccion)
+    if depto:
+        qs_base = qs_base.filter(sso_departamento_id=depto)
+
+    qs = qs_base
+    if fecha_desde:
+        qs = qs.filter(fecha_derivado__gte=fecha_desde)
+    if fecha_hasta:
+        qs = qs.filter(fecha_derivado__lte=fecha_hasta)
+    elif anho:
+        qs = qs.filter(fecha_derivado__gte=f'{anho}-01-01', fecha_derivado__lte=f'{anho}-12-31')
+
+    total = qs.count()
+    dentro = qs.filter(dentro_fuera_pac=FormularioFSCDerivado.DENTRO).count()
+    fuera = total - dentro
+    montos = qs.aggregate(
+        monto_dentro=Sum('monto_estimado', filter=Q(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)),
+        monto_fuera=Sum('monto_estimado', filter=Q(dentro_fuera_pac=FormularioFSCDerivado.FUERA)),
+    )
+
+    return {
+        'kpis': {
+            'total': total,
+            'dentro': dentro,
+            'fuera': fuera,
+            'pct_dentro': round(dentro / total * 100, 1) if total else 0,
+            'monto_dentro': float(montos['monto_dentro'] or 0),
+            'monto_fuera': float(montos['monto_fuera'] or 0),
+        },
+        'comparativa_anual': _comparativa_anual_dentro_fuera(qs_base),
+    }
+
+
+def calcular_pac_comparativa_periodos(periodo, subdireccion=None, depto=None):
+    """Compara el % Dentro PAC de `periodo` ('YYYY-MM' o 'YYYY-QN') contra el
+    período inmediatamente anterior y contra el mismo período del año anterior.
+    Reutilizada por el dashboard y por la reportería (Word/PPT/PDF, Fase E).
+    """
+    def _kpis_periodo(p):
+        desde, hasta = _rango_fechas_periodo(p)
+        stats = calcular_pac_dentro_fuera_stats(
+            fecha_desde=desde.isoformat(), fecha_hasta=hasta.isoformat(),
+            subdireccion=subdireccion, depto=depto,
+        )['kpis']
+        return {'periodo': p, **stats}
+
+    actual = _kpis_periodo(periodo)
+    anterior = _kpis_periodo(_periodo_anterior(periodo))
+    interanual = _kpis_periodo(_mismo_periodo_anho_anterior(periodo))
+
+    return {
+        'actual': actual,
+        'periodo_anterior': {**anterior, 'variacion_pp': round(actual['pct_dentro'] - anterior['pct_dentro'], 1)},
+        'mismo_periodo_anho_anterior': {
+            **interanual, 'variacion_pp': round(actual['pct_dentro'] - interanual['pct_dentro'], 1),
+        },
+    }
+
+
+EN_FECHA, ATRASADO, PENDIENTE, SIN_PLANIFICACION = 'EN_FECHA', 'ATRASADO', 'PENDIENTE', 'SIN_PLANIFICACION_CON_FECHA'
+
+
+def _parsear_fecha_planer(s):
+    if not s:
+        return None
+    s = str(s).strip()[:19]
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _eventos_planificados_por_proyecto(anho=None):
+    """Agrupa PlanerPAC por (id_proyecto, fecha_inicio_compra) = 'evento de compra'
+    — un mismo proyecto puede tener varios ítems programados en meses distintos."""
+    qs = PlanerPAC.objects.exclude(id_proyecto__isnull=True).exclude(fecha_inicio_compra__isnull=True)
+    if anho:
+        qs = qs.filter(pac=str(anho))
+    eventos = defaultdict(set)
+    for id_proyecto, fecha_str in qs.values_list('id_proyecto', 'fecha_inicio_compra'):
+        fecha = _parsear_fecha_planer(fecha_str)
+        if fecha:
+            eventos[id_proyecto].add(fecha)
+    return {k: sorted(v) for k, v in eventos.items()}
+
+
+def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None):
+    """Cumplimiento temporal del PAC: cruza FormularioFSCDerivado (solo los Dentro
+    PAC) contra los eventos planificados de PlanerPAC. Tolerancia: mes calendario
+    (acordado con el usuario). Acotado a los años que PlanerPAC tenga cargados.
+
+    `fecha_desde`/`fecha_hasta` (ISO 'YYYY-MM-DD') tienen prioridad sobre `anho` —
+    usados por la reportería (Fase E) para acotar a un mes/trimestre específico.
+
+    Un proyecto con varias fechas planificadas se compara contra el evento MÁS
+    CERCANO a la fecha_derivado de cada FSC — es una aproximación documentada
+    (ver riesgos del plan), no un match exacto ítem-a-ítem.
+
+    Categorías:
+      - En fecha: fecha_derivado en el mismo mes/año del evento, o antes.
+      - Atrasado: fecha_derivado posterior al mes/año del evento — o el evento ya
+        venció y ningún FSC Dentro PAC de ese proyecto se ha derivado todavía.
+      - Pendiente: evento futuro sin ningún FSC Dentro PAC derivado aún.
+      - Sin planificación con fecha: el FSC está Dentro PAC pero su proyecto no
+        tiene fecha_inicio_compra cargada en PlanerPAC (años no cargados aún).
+    """
+    hoy = date.today()
+    eventos = _eventos_planificados_por_proyecto(anho)
+
+    fsc_qs = (
+        FormularioFSCDerivado.objects
+        .filter(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)
+        .exclude(fecha_derivado__isnull=True).exclude(fecha_derivado='')
+        .exclude(id_plan__isnull=True).exclude(id_plan='')
+    )
+    if fecha_desde:
+        fsc_qs = fsc_qs.filter(fecha_derivado__gte=fecha_desde)
+    if fecha_hasta:
+        fsc_qs = fsc_qs.filter(fecha_derivado__lte=fecha_hasta)
+    elif anho:
+        fsc_qs = fsc_qs.filter(fecha_derivado__gte=f'{anho}-01-01', fecha_derivado__lte=f'{anho}-12-31')
+    if subdireccion:
+        fsc_qs = fsc_qs.filter(sso_departamento__subdireccion_id=subdireccion)
+    if depto:
+        fsc_qs = fsc_qs.filter(sso_departamento_id=depto)
+
+    proyectos_con_fsc = set()
+    detalle = []
+    conteo = {EN_FECHA: 0, ATRASADO: 0, SIN_PLANIFICACION: 0}
+
+    for fsc in fsc_qs.only(
+        'id', 'folio', 'anho', 'id_plan', 'fecha_derivado', 'unidad_requirente',
+        'monto_estimado', 'sso_departamento_id',
+    ):
+        fecha_derivado = _parsear_fecha_planer(fsc.fecha_derivado)
+        eventos_proyecto = eventos.get(fsc.id_plan)
+        if not fecha_derivado or not eventos_proyecto:
+            estado, evento_cercano = SIN_PLANIFICACION, None
+            conteo[SIN_PLANIFICACION] += 1
+        else:
+            proyectos_con_fsc.add(fsc.id_plan)
+            evento_cercano = min(eventos_proyecto, key=lambda e: abs((e - fecha_derivado).days))
+            mismo_mes = (fecha_derivado.year, fecha_derivado.month) == (evento_cercano.year, evento_cercano.month)
+            estado = EN_FECHA if (mismo_mes or fecha_derivado < evento_cercano) else ATRASADO
+            conteo[estado] += 1
+
+        detalle.append({
+            'id': fsc.id, 'folio': fsc.folio, 'anho': fsc.anho, 'id_plan': fsc.id_plan,
+            'fecha_derivado': fsc.fecha_derivado,
+            'fecha_evento_mas_cercano': evento_cercano.isoformat() if evento_cercano else None,
+            'estado': estado,
+            'unidad_requirente': fsc.unidad_requirente,
+            'sso_departamento_id': fsc.sso_departamento_id,
+            'monto_estimado': float(fsc.monto_estimado) if fsc.monto_estimado else 0,
+        })
+
+    # Proyectos planificados sin ningún FSC Dentro PAC derivado todavía.
+    proyectos_sin_iniciar = []
+    n_pendientes = n_atrasados_sin_iniciar = 0
+    primer_dia_mes_actual = date(hoy.year, hoy.month, 1)
+    for id_proyecto, fechas in eventos.items():
+        if id_proyecto in proyectos_con_fsc:
+            continue
+        primera_fecha = fechas[0]
+        estado_proyecto = PENDIENTE if primera_fecha >= primer_dia_mes_actual else ATRASADO
+        n_pendientes += estado_proyecto == PENDIENTE
+        n_atrasados_sin_iniciar += estado_proyecto == ATRASADO
+        proyectos_sin_iniciar.append({
+            'id_proyecto': id_proyecto,
+            'fecha_inicio_compra': primera_fecha.isoformat(),
+            'estado': estado_proyecto,
+        })
+
+    total = conteo[EN_FECHA] + conteo[ATRASADO] + n_pendientes + n_atrasados_sin_iniciar
+    return {
+        'kpis': {
+            'en_fecha': conteo[EN_FECHA],
+            'atrasado': conteo[ATRASADO] + n_atrasados_sin_iniciar,
+            'pendiente': n_pendientes,
+            'sin_planificacion_con_fecha': conteo[SIN_PLANIFICACION],
+            'total_evaluado': total,
+            'pct_en_fecha': round(conteo[EN_FECHA] / total * 100, 1) if total else 0,
+        },
+        'detalle_formularios': detalle,
+        'proyectos_sin_iniciar': proyectos_sin_iniciar,
+    }
+
+
+def _mapa_nombres_subdireccion():
+    """Resuelve el nombre de 'rama superior' de un Departamento:
+      - establecimiento_id=1 (Dirección SS Osorno): nombre real de subdirección
+        (SsoSubdireccion, IDs 2-5 — los 4 capítulos del informe institucional).
+      - otros 6 establecimientos (hospitales de red): cada uno tiene su propio
+        rango de subdireccion_id, no solapado y sin nombre propio — se agrupan
+        bajo el nombre del hospital (Establecimiento.descripcion) en su lugar.
+    Retorna {(establecimiento_id, subdireccion_id): nombre}.
+    """
+    mapa = {}
+    for s in SsoSubdireccion.objects.all():
+        mapa[(1, s.subdireccion_id)] = s.nombre
+    establecimientos = dict(Establecimiento.objects.values_list('id', 'descripcion'))
+    for depto in Departamento.objects.exclude(establecimiento_id=1).values('establecimiento_id', 'subdireccion_id').distinct():
+        clave = (depto['establecimiento_id'], depto['subdireccion_id'])
+        mapa.setdefault(clave, establecimientos.get(depto['establecimiento_id'], 'Sin Clasificar'))
+    return mapa, establecimientos
+
+
+def _mapa_departamentos():
+    """Todos los Departamento indexados por id, con solo los campos necesarios
+    para resolver la cadena parent_id → depto raíz. Tabla chica (147 filas hoy)
+    — se carga completa una vez por llamada, no solo los deptos con FSC, porque
+    nodos intermedios de la cadena pueden no tener ningún FSC matcheado directo."""
+    return {
+        d['id']: d for d in Departamento.objects.values(
+            'id', 'parent_id', 'subdireccion_id', 'establecimiento_id', 'es_depto', 'descripcion', 'nombre_corto',
+        )
+    }
+
+
+def _resolver_depto_raiz(depto_id, mapa_deptos, _visitados=None):
+    """Sube la cadena parent_id hasta el departamento de primer nivel ('raíz')
+    dentro de la MISMA subdirección/establecimiento — evita que sub-departamentos
+    (ej. 'AYEKAN' colgando de 'DEPARTAMENTO DE SALUD MENTAL', o cadenas de 3
+    niveles como Sub-depto→Depto medio→Depto mayor) aparezcan como hermanos
+    sueltos del departamento del que en realidad dependen.
+
+    `es_depto == 'SI'` es la señal AUTORITATIVA de "soy un departamento de
+    primer nivel" y corta la cadena ahí, incluso si `parent_id` apunta a otro
+    lado (el origen tiene casos así: departamentos reales — ej. PRAIS — cuyo
+    parent_id apunta al nodo que representa la propia Subdirección, no a un
+    departamento par; sin este corte se fusionarían incorrectamente con ese
+    nodo). Solo se sigue la cadena cuando `es_depto` NO está marcado, es decir,
+    cuando el propio origen dice "no soy de primer nivel".
+    """
+    visitados = _visitados or set()
+    nodo = mapa_deptos.get(depto_id)
+    if not nodo or depto_id in visitados:
+        return depto_id
+    if nodo['es_depto'] == 'SI':
+        return depto_id
+    padre_id = nodo['parent_id']
+    if not padre_id or padre_id == depto_id:
+        return depto_id
+    padre = mapa_deptos.get(padre_id)
+    if not padre or padre['subdireccion_id'] != nodo['subdireccion_id'] or padre['establecimiento_id'] != nodo['establecimiento_id']:
+        return depto_id
+    visitados.add(depto_id)
+    return _resolver_depto_raiz(padre_id, mapa_deptos, visitados)
+
+
+def calcular_pac_jerarquia(anho=None, fecha_desde=None, fecha_hasta=None):
+    """Árbol Subdirección/Hospital → Departamento (raíz) → Sub-departamento con
+    métricas PAC agregadas (Dentro/Fuera, % en fecha, monto). Incluye el bucket
+    'Sin Clasificar' (formularios cuyo unidad_requirente no calzó con ningún
+    Departamento) como una rama más al mismo nivel — nunca se descarta.
+
+    Un mismo departamento puede tener sub-departamentos colgando de él
+    (`Departamento.parent_id`, hasta 3 niveles reales observados en el origen)
+    — sin agruparlos, sus métricas quedarían fragmentadas entre el padre y cada
+    hijo como si fueran unidades independientes. `_resolver_depto_raiz` los
+    consolida bajo el departamento de primer nivel; el detalle del
+    sub-departamento real se conserva en `subdepartamentos` para drill-down.
+
+    `fecha_desde`/`fecha_hasta` (ISO) tienen prioridad sobre `anho` — usados por
+    la reportería para acotar a un mes/trimestre específico.
+    """
+    fsc_qs = FormularioFSCDerivado.objects.exclude(dentro_fuera_pac__isnull=True)
+    if fecha_desde:
+        fsc_qs = fsc_qs.filter(fecha_derivado__gte=fecha_desde)
+    if fecha_hasta:
+        fsc_qs = fsc_qs.filter(fecha_derivado__lte=fecha_hasta)
+    elif anho:
+        fsc_qs = fsc_qs.filter(fecha_derivado__gte=f'{anho}-01-01', fecha_derivado__lte=f'{anho}-12-31')
+
+    filas = fsc_qs.values(
+        'sso_departamento_id', 'sso_departamento__descripcion',
+        'sso_departamento__subdireccion_id', 'sso_departamento__establecimiento_id',
+    ).annotate(
+        total=Count('id'),
+        dentro=Count('id', filter=Q(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)),
+        monto_dentro=Sum('monto_estimado', filter=Q(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)),
+        monto_fuera=Sum('monto_estimado', filter=Q(dentro_fuera_pac=FormularioFSCDerivado.FUERA)),
+    )
+
+    # % en fecha por depto real (antes de rollup), reutilizando el detalle ya
+    # calculado en cumplimiento temporal (evita recalcular evento-más-cercano acá).
+    temporal = calcular_pac_cumplimiento_temporal(anho=anho, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+    en_fecha_por_depto = defaultdict(lambda: [0, 0])  # [en_fecha, evaluados_con_evento]
+    for d in temporal['detalle_formularios']:
+        if d['estado'] in (EN_FECHA, ATRASADO):
+            bucket = en_fecha_por_depto[d['sso_departamento_id']]
+            bucket[1] += 1
+            bucket[0] += d['estado'] == EN_FECHA
+
+    nombres_rama, _ = _mapa_nombres_subdireccion()
+    mapa_deptos = _mapa_departamentos()
+
+    def _fila_metricas(fila_o_dict):
+        total, dentro = fila_o_dict['total'], fila_o_dict['dentro']
+        en_fecha, evaluados = en_fecha_por_depto.get(fila_o_dict['depto_id'], [0, 0])
+        return {
+            'depto_id': fila_o_dict['depto_id'], 'nombre': fila_o_dict['nombre'],
+            'total': total, 'dentro': dentro, 'fuera': total - dentro,
+            'pct_dentro': round(dentro / total * 100, 1) if total else 0,
+            'monto_dentro': fila_o_dict['monto_dentro'], 'monto_fuera': fila_o_dict['monto_fuera'],
+            'pct_en_fecha': round(en_fecha / evaluados * 100, 1) if evaluados else None,
+        }
+
+    subdirecciones = {}
+    for fila in filas:
+        depto_id = fila['sso_departamento_id']
+        establecimiento_id = fila['sso_departamento__establecimiento_id']
+        subdireccion_id = fila['sso_departamento__subdireccion_id']
+        subdireccion_nombre = nombres_rama.get((establecimiento_id, subdireccion_id), 'Sin Clasificar')
+        nombre_depto = fila['sso_departamento__descripcion'] or 'Sin Clasificar'
+        total, dentro = fila['total'], fila['dentro']
+        monto_dentro, monto_fuera = float(fila['monto_dentro'] or 0), float(fila['monto_fuera'] or 0)
+
+        clave_sub = (establecimiento_id, subdireccion_id) if depto_id is not None else 'sin_clasificar'
+        if clave_sub not in subdirecciones:
+            subdirecciones[clave_sub] = {
+                'subdireccion_id': subdireccion_id, 'nombre': subdireccion_nombre,
+                'departamentos': {}, 'total': 0, 'dentro': 0, 'monto_dentro': 0.0, 'monto_fuera': 0.0,
+            }
+        nodo_sub = subdirecciones[clave_sub]
+
+        raiz_id = _resolver_depto_raiz(depto_id, mapa_deptos) if depto_id is not None else None
+        raiz_info = mapa_deptos.get(raiz_id)
+        nombre_raiz = (raiz_info['descripcion'] if raiz_info else None) or nombre_depto
+
+        clave_depto = raiz_id if depto_id is not None else 'sin_clasificar'
+        if clave_depto not in nodo_sub['departamentos']:
+            nodo_sub['departamentos'][clave_depto] = {
+                'depto_id': raiz_id, 'nombre': nombre_raiz,
+                'total': 0, 'dentro': 0, 'monto_dentro': 0.0, 'monto_fuera': 0.0,
+                'subdepartamentos': [],
+            }
+        nodo_depto = nodo_sub['departamentos'][clave_depto]
+        nodo_depto['total'] += total
+        nodo_depto['dentro'] += dentro
+        nodo_depto['monto_dentro'] += monto_dentro
+        nodo_depto['monto_fuera'] += monto_fuera
+        if raiz_id != depto_id:
+            nodo_depto['subdepartamentos'].append(_fila_metricas({
+                'depto_id': depto_id, 'nombre': nombre_depto, 'total': total, 'dentro': dentro,
+                'monto_dentro': monto_dentro, 'monto_fuera': monto_fuera,
+            }))
+
+        nodo_sub['total'] += total
+        nodo_sub['dentro'] += dentro
+        nodo_sub['monto_dentro'] += monto_dentro
+        nodo_sub['monto_fuera'] += monto_fuera
+
+    resultado = []
+    for nodo_sub in subdirecciones.values():
+        nodo_sub['pct_dentro'] = round(nodo_sub['dentro'] / nodo_sub['total'] * 100, 1) if nodo_sub['total'] else 0
+        deptos_lista = []
+        for d in nodo_sub['departamentos'].values():
+            en_fecha, evaluados = en_fecha_por_depto.get(d['depto_id'], [0, 0])
+            for sub in d['subdepartamentos']:
+                if sub['depto_id'] != d['depto_id']:
+                    e2, ev2 = en_fecha_por_depto.get(sub['depto_id'], [0, 0])
+                    en_fecha += e2
+                    evaluados += ev2
+            deptos_lista.append({
+                'depto_id': d['depto_id'], 'nombre': d['nombre'],
+                'total': d['total'], 'dentro': d['dentro'], 'fuera': d['total'] - d['dentro'],
+                'pct_dentro': round(d['dentro'] / d['total'] * 100, 1) if d['total'] else 0,
+                'monto_dentro': d['monto_dentro'], 'monto_fuera': d['monto_fuera'],
+                'pct_en_fecha': round(en_fecha / evaluados * 100, 1) if evaluados else None,
+                'subdepartamentos': sorted(d['subdepartamentos'], key=lambda s: -s['total']),
+            })
+        deptos_lista.sort(key=lambda d: -d['total'])
+        nodo_sub['departamentos'] = deptos_lista
+        resultado.append(nodo_sub)
+    resultado.sort(key=lambda n: (n['nombre'] == 'Sin Clasificar', -n['total']))
+    return {'subdirecciones': resultado}
+
+
+def _score_compuesto(pct_dentro, pct_en_fecha, pct_dentro_valor):
+    """Score de ranking acordado con el usuario: % Dentro (cantidad) + % cumplimiento
+    temporal + % Dentro ponderado por monto (evita que el score dependa del tamaño
+    absoluto del presupuesto — un depto chico y uno grande son comparables)."""
+    partes = [p for p in (pct_dentro, pct_en_fecha, pct_dentro_valor) if p is not None]
+    pesos = {0: 0.4, 1: 0.4, 2: 0.2}
+    disponibles = [(i, p) for i, p in enumerate((pct_dentro, pct_en_fecha, pct_dentro_valor)) if p is not None]
+    peso_total = sum(pesos[i] for i, _ in disponibles)
+    if not peso_total:
+        return 0.0
+    return round(sum(pesos[i] * p for i, p in disponibles) / peso_total, 1)
+
+
+def calcular_pac_rankings(anho=None, fecha_desde=None, fecha_hasta=None, tipo='depto', limite=15):
+    """Mejores/peores departamentos o formularios, con el score compuesto acordado.
+    `tipo`: 'depto' o 'formulario'. `fecha_desde`/`fecha_hasta` tienen prioridad
+    sobre `anho` — usados por la reportería para acotar a un mes/trimestre.
+    """
+    if tipo == 'depto':
+        jerarquia = calcular_pac_jerarquia(anho=anho, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+        filas = []
+        for sub in jerarquia['subdirecciones']:
+            for d in sub['departamentos']:
+                if d['total'] < 3:  # muestra insuficiente para rankear con sentido
+                    continue
+                monto_total = d['monto_dentro'] + d['monto_fuera']
+                pct_dentro_valor = round(d['monto_dentro'] / monto_total * 100, 1) if monto_total else None
+                filas.append({
+                    'nombre': d['nombre'], 'subdireccion': sub['nombre'],
+                    'total': d['total'], 'pct_dentro': d['pct_dentro'], 'pct_en_fecha': d['pct_en_fecha'],
+                    'monto_dentro': d['monto_dentro'], 'monto_fuera': d['monto_fuera'],
+                    'pct_dentro_valor': pct_dentro_valor,
+                    'score': _score_compuesto(d['pct_dentro'], d['pct_en_fecha'], pct_dentro_valor),
+                })
+    else:
+        # Clave por `id` (PK real), no (folio, anho): esa combinación NO es única en
+        # FormularioFSCDerivado (colisiones documentadas — folio se reasigna por
+        # unidad/año), usarla como clave mezclaría el estado temporal entre formularios.
+        temporal_por_id = {
+            d['id']: d for d in calcular_pac_cumplimiento_temporal(
+                anho=anho, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
+            )['detalle_formularios']
+        }
+        fsc_qs = FormularioFSCDerivado.objects.exclude(dentro_fuera_pac__isnull=True)
+        if fecha_desde:
+            fsc_qs = fsc_qs.filter(fecha_derivado__gte=fecha_desde)
+        if fecha_hasta:
+            fsc_qs = fsc_qs.filter(fecha_derivado__lte=fecha_hasta)
+        elif anho:
+            fsc_qs = fsc_qs.filter(fecha_derivado__gte=f'{anho}-01-01', fecha_derivado__lte=f'{anho}-12-31')
+        filas = []
+        for fsc in fsc_qs.only('folio', 'anho', 'unidad_requirente', 'monto_estimado', 'dentro_fuera_pac', 'requerimiento'):
+            temporal = temporal_por_id.get(fsc.id)
+            pct_dentro = 100.0 if fsc.dentro_fuera_pac == FormularioFSCDerivado.DENTRO else 0.0
+            pct_en_fecha = None if not temporal else (100.0 if temporal['estado'] == EN_FECHA else 0.0)
+            filas.append({
+                'folio': fsc.folio, 'anho': fsc.anho, 'unidad_requirente': fsc.unidad_requirente,
+                'requerimiento': (fsc.requerimiento or '')[:200],
+                'dentro_fuera_pac': fsc.dentro_fuera_pac,
+                'estado_temporal': temporal['estado'] if temporal else None,
+                'monto_estimado': float(fsc.monto_estimado) if fsc.monto_estimado else 0,
+                'score': _score_compuesto(pct_dentro, pct_en_fecha, None),
+            })
+
+    filas.sort(key=lambda f: -f['score'])
+    # Si hay pocos elementos elegibles, top-N y bottom-N pueden solaparse (ej. 26
+    # elegibles con límite 15+15). Se acota el límite efectivo para que "mejores"
+    # y "peores" nunca compartan un mismo departamento/formulario.
+    limite_efectivo = min(limite, len(filas) // 2)
+    return {'mejores': filas[:limite_efectivo], 'peores': list(reversed(filas))[:limite_efectivo]}

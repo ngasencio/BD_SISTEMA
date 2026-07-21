@@ -1,44 +1,42 @@
 """
 cargar_pac_servidor.py
 ======================
-Carga el archivo PlanificacionPAC2026.xlsx a la base de datos bd_sistema.
-Tabla destino: data_planerPAC
+Carga un archivo PlanificacionPACxxxx.xlsx a la tabla `data_planerpac` (modelo
+Django `PlanerPAC`).
 
-Cada ejecucion reemplaza completamente la tabla con el contenido actual del Excel.
+A diferencia de la versión anterior, esta carga es un **upsert** (no destructivo):
+usa `update_or_create` con clave `(id_proyecto, nombre_item, pac)`, así que cargar
+un nuevo año (ej. PlanificacionPAC2027.xlsx) se SUMA a lo ya cargado en vez de
+reemplazarlo — necesario para poder comparar cumplimiento temporal entre años.
 
 Uso:
-    python cargar_pac_servidor.py
+    python cargar_pac_servidor.py                              # autodetecta el .xlsx más reciente en esta carpeta
+    python cargar_pac_servidor.py PlanificacionPAC2027.xlsx     # archivo específico
 """
 
+import os
+import sys
 import pathlib
-import urllib.parse
 
 import pandas as pd
-from sqlalchemy import create_engine, text
 
 # --- Rutas --------------------------------------------------------------------
-RUTA_SCRIPT = pathlib.Path(__file__).parent
-ARCHIVO_PAC = RUTA_SCRIPT / "PlanificacionPAC2026.xlsx"
-HOJA        = "Hoja1"
+RUTA_SCRIPT = pathlib.Path(__file__).parent.absolute()
+HOJA = "Hoja1"
 
-# --- Base de datos ------------------------------------------------------------
-DB_HOST     = "127.0.0.1"
-DB_PORT     = 3306
-DB_NAME     = "bd_sistema"
-DB_USER     = "root"
-DB_PASSWORD = "Nicolas2017#"
-TABLA_DB    = "data_planerPAC"
-
-# --- Nombres de columnas limpios (16 columnas, asignacion por posicion) -------
+# --- Nombres de columnas limpios (18 columnas, asignación por posición) -------
+# Debe calzar exactamente con el orden de columnas del Excel origen (Plan Anual
+# de Compras exportado/editado internamente). Si el Excel cambia de estructura,
+# el chequeo de cantidad de columnas más abajo aborta la carga con un aviso.
 COLUMNAS = [
     "unidad_compra",          # Unidad de Compra
     "id_proyecto",            # ID Proyecto
-    "codigo_presupuestario",  # Codigo presupuestario
+    "codigo_presupuestario",  # Código presupuestario
     "nombre_proyecto",        # Nombre Proyecto
-    "cantidad_items",         # Cantidad de Items
-    "nombre_item",            # Nombre Item
-    "monto_unitario_item",    # Monto Unitario Item
-    "monto_total_item",       # Monto Total Item Ano 2026
+    "cantidad_items",         # Cantidad de Ítems
+    "nombre_item",            # Nombre Ítem
+    "monto_unitario_item",    # Monto Unitario Ítem
+    "monto_total_item",       # Monto Total Ítem Año
     "nombre_responsable",     # Nombre responsable
     "cargo_responsable",      # Cargo responsable
     "fecha_inicio_compra",    # Fecha de Inicio Compra
@@ -46,94 +44,109 @@ COLUMNAS = [
     "sub",                    # sub
     "unidad",                 # unidad
     "tipo_proyecto",          # Tipo Proyecto
-    "pac",                    # PAC
+    "pac",                    # PAC (año)
+    "cantidad_oc",            # Cantidad OC
+    "meses_envio_oc",         # Meses envío OC
 ]
 
-
-def get_engine():
-    pwd_enc = urllib.parse.quote_plus(DB_PASSWORD) if DB_PASSWORD else ""
-    auth    = f"{DB_USER}:{pwd_enc}@" if DB_PASSWORD else f"{DB_USER}@"
-    for dialect in ("mysql+mysqldb", "mysql+pymysql"):
-        try:
-            dsn = f"{dialect}://{auth}{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
-            eng = create_engine(dsn, pool_pre_ping=True)
-            with eng.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            return eng
-        except Exception:
-            continue
-    return None
+# Clave de upsert: identifica una fila "ítem de proyecto PAC" de forma estable
+# entre cargas sucesivas del mismo año o de años distintos. Un mismo nombre_item
+# puede repetirse dentro del mismo proyecto en tramos con distinta fecha (ej. un
+# insumo comprado en abril Y en mayo con montos distintos) — fecha_inicio_compra
+# es necesaria en la clave para no colapsar esos tramos en una sola fila.
+CLAVE_UPSERT = ["id_proyecto", "nombre_item", "pac", "fecha_inicio_compra"]
 
 
-def cargar():
+def _setup_django():
+    sys.path.insert(0, str(RUTA_SCRIPT.parent.parent.parent / "backend"))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+    import django
+    django.setup()
+
+
+def _archivo_mas_reciente():
+    candidatos = sorted(
+        RUTA_SCRIPT.glob("PlanificacionPAC*.xlsx"),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+    return candidatos[0] if candidatos else None
+
+
+def _upsert(modelo, lookup, defaults):
+    """update_or_create tolerante a colisiones de clave (mismo patrón que page_data_panel.py)."""
+    from django.core.exceptions import MultipleObjectsReturned
+    try:
+        return modelo.objects.update_or_create(defaults=defaults, **lookup)
+    except MultipleObjectsReturned:
+        obj = modelo.objects.filter(**lookup).first()
+        for campo, valor in defaults.items():
+            setattr(obj, campo, valor)
+        obj.save(update_fields=list(defaults.keys()))
+        return obj, False
+
+
+def _limpiar_valor(v):
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    s = str(v).strip()
+    return s if s not in ("", "nan", "None", "NaT") else None
+
+
+def cargar(archivo_pac=None):
     print("\n" + "=" * 60)
-    print("  CARGANDO PAC 2026 -> bd_sistema")
-    print(f"  Archivo : {ARCHIVO_PAC.name}")
-    print(f"  Tabla   : {TABLA_DB}")
+    print("  CARGANDO PLAN ANUAL DE COMPRAS -> data_planerpac (upsert)")
     print("=" * 60)
 
-    # 1. Verificar que el archivo existe
-    if not ARCHIVO_PAC.exists():
-        print(f"\n[ERROR] No se encontro el archivo:\n   {ARCHIVO_PAC.resolve()}")
+    archivo = pathlib.Path(archivo_pac) if archivo_pac else _archivo_mas_reciente()
+    if not archivo or not archivo.exists():
+        print(f"\n[ERROR] No se encontró ningún archivo PlanificacionPAC*.xlsx en {RUTA_SCRIPT}")
         return
 
-    # 2. Leer Excel
-    print("\nLeyendo Excel ...")
-    df = pd.read_excel(ARCHIVO_PAC, sheet_name=HOJA, header=0, dtype=str)
+    print(f"  Archivo : {archivo.name}")
 
+    df = pd.read_excel(archivo, sheet_name=HOJA, header=0, dtype=str)
     if df.empty:
-        print("[ERROR] El archivo esta vacio.")
+        print("[ERROR] El archivo está vacío.")
         return
 
-    print(f"   [OK] {len(df)} filas leidas con {len(df.columns)} columnas.")
+    print(f"  [OK] {len(df)} filas leídas con {len(df.columns)} columnas.")
 
-    # 3. Asignar nombres limpios
     if len(df.columns) != len(COLUMNAS):
         print(f"[AVISO] Columnas esperadas: {len(COLUMNAS)} | Encontradas: {len(df.columns)}")
-        print("   Verifica que el archivo no haya cambiado de estructura.")
-        print(f"   Columnas encontradas: {list(df.columns)}")
+        print("  Verifica que el archivo no haya cambiado de estructura.")
+        print(f"  Columnas encontradas: {list(df.columns)}")
         return
 
     df.columns = COLUMNAS
-
-    # 4. Limpiar datos
     df.dropna(how="all", inplace=True)
-    df.fillna("", inplace=True)
 
-    print(f"   [OK] {len(df)} filas despues de limpieza.")
+    _setup_django()
+    from django.db import transaction
+    from api.models import PlanerPAC
 
-    # 5. Conectar a la base de datos
-    print(f"\nConectando a {DB_HOST}:{DB_PORT} / {DB_NAME} ...")
-    engine = get_engine()
-    if engine is None:
-        print("[ERROR] No se pudo conectar a MariaDB.")
-        print("   Verifica que XAMPP este activo.")
-        return
-    print("   [OK] Conexion exitosa.")
+    nuevos, actualizados, omitidos = 0, 0, 0
+    with transaction.atomic():
+        for _, row in df.iterrows():
+            valores = {col: _limpiar_valor(row[col]) for col in COLUMNAS}
+            lookup = {clave: valores.pop(clave) for clave in CLAVE_UPSERT}
+            if not lookup["id_proyecto"] or not lookup["nombre_item"]:
+                omitidos += 1
+                continue
+            _, creado = _upsert(PlanerPAC, lookup, valores)
+            if creado:
+                nuevos += 1
+            else:
+                actualizados += 1
 
-    # 6. Reemplazar tabla (DROP + INSERT)
-    print(f"\nCargando datos en '{TABLA_DB}' ...")
-    try:
-        with engine.connect() as conn:
-            conn.execute(text(f"DROP TABLE IF EXISTS `{TABLA_DB}`"))
-            conn.commit()
-
-        df.to_sql(TABLA_DB, con=engine, if_exists="append", index=False, chunksize=500)
-
-        print("\n" + "=" * 60)
-        print("  OK - CARGA COMPLETADA EXITOSAMENTE")
-        print("=" * 60)
-        print(f"  Tabla   : {DB_NAME}.{TABLA_DB}")
-        print(f"  Filas   : {len(df)}")
-        print(f"  Columnas: {', '.join(COLUMNAS[:4])} (+{len(COLUMNAS) - 4} mas)")
-        print("=" * 60)
-
-    except Exception as e:
-        print(f"\n[ERROR] Al cargar los datos: {e}")
-
-    finally:
-        engine.dispose()
+    print("\n" + "=" * 60)
+    print("  OK - CARGA COMPLETADA (sin borrar años anteriores)")
+    print(f"  Nuevos       : {nuevos}")
+    print(f"  Actualizados : {actualizados}")
+    print(f"  Omitidos     : {omitidos} (sin id_proyecto o nombre_item)")
+    print(f"  Total en data_planerpac ahora: {PlanerPAC.objects.count()}")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
-    cargar()
+    cargar(sys.argv[1] if len(sys.argv) > 1 else None)

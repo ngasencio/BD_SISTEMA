@@ -379,6 +379,11 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                     _avisar(log=f"Derivados: {i + 1}/{len(tabla)} procesados...")
         _avisar(log=f"Derivados → {resumen['derivados']['nuevos']} nuevos, {resumen['derivados']['actualizados']} actualizados.")
 
+        # Módulo PAC: (re)clasifica Dentro/Fuera + departamento en cada sync, sobre
+        # TODOS los derivados con id_plan (no solo los recién tocados) — así un
+        # formulario viejo se corrige si el maestro PAC se actualiza después.
+        _clasificar_dentro_fuera_pac(_avisar)
+
     if "carro" in archivos:
         tabla = pd.read_html(str(archivos["carro"]))[0]
         tabla.columns = columnas_producto
@@ -420,6 +425,72 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         "actualizados": total_actualizados,
         "total": total,
     }
+
+
+_TABLA_TILDES = str.maketrans("ÁÉÍÓÚÜÑ", "AEIOUUN")
+
+
+def _normalizar_texto(s):
+    """Mayúsculas, sin tildes, espacios colapsados — para matchear unidad_requirente
+    (texto libre de los formularios) contra descripcion/nombre_corto de Departamento."""
+    if not s:
+        return ""
+    return " ".join(str(s).upper().translate(_TABLA_TILDES).split())
+
+
+def _clasificar_dentro_fuera_pac(_avisar=lambda **kw: None):
+    """Módulo PAC — recalcula, para TODOS los FormularioFSCDerivado con id_plan:
+    (a) dentro_fuera_pac: existe id_plan en PacProyectoMaestro (id_proyecto) → DENTRO, si no → FUERA.
+    (b) sso_departamento: match normalizado de unidad_requirente contra descripcion/nombre_corto
+        de Departamento (data_departamento, módulo Usuarios). Sin match → None
+        ("Sin Clasificar" en el análisis, nunca se descarta).
+
+    No cruza con OC todavía (decisión explícita, ver plan del módulo PAC) — solo
+    verifica existencia del proyecto en el maestro histórico.
+    """
+    from django.db import close_old_connections
+    from api.models import FormularioFSCDerivado, PacProyectoMaestro, Departamento
+
+    close_old_connections()
+
+    ids_pac = set(PacProyectoMaestro.objects.values_list("id_proyecto", flat=True).distinct())
+
+    # Departamento (data_departamento) ya existe en el sistema (módulo Usuarios,
+    # importado del Panel SSO) y cubre los 7 establecimientos de la red — mejor
+    # cobertura (98.9%) que un maestro propio construido solo desde mapa_sso.xlsx.
+    mapa_deptos = {}
+    for depto in Departamento.objects.all():
+        mapa_deptos.setdefault(_normalizar_texto(depto.descripcion), depto)
+        if depto.nombre_corto:
+            mapa_deptos.setdefault(_normalizar_texto(depto.nombre_corto), depto)
+
+    qs = FormularioFSCDerivado.objects.exclude(id_plan__isnull=True).exclude(id_plan="")
+    total = qs.count()
+    if total == 0:
+        _avisar(log="Clasificación PAC: no hay formularios derivados con id_plan, nada que clasificar.")
+        return
+
+    actualizados = 0
+    sin_clasificar = 0
+    dentro = 0
+    for i, fsc in enumerate(qs.iterator(chunk_size=200)):
+        nuevo_estado = FormularioFSCDerivado.DENTRO if fsc.id_plan in ids_pac else FormularioFSCDerivado.FUERA
+        depto = mapa_deptos.get(_normalizar_texto(fsc.unidad_requirente))
+        if depto is None:
+            sin_clasificar += 1
+        if nuevo_estado == FormularioFSCDerivado.DENTRO:
+            dentro += 1
+
+        if fsc.dentro_fuera_pac != nuevo_estado or fsc.sso_departamento_id != (depto.id if depto else None):
+            fsc.dentro_fuera_pac = nuevo_estado
+            fsc.sso_departamento = depto
+            fsc.save(update_fields=["dentro_fuera_pac", "sso_departamento"])
+            actualizados += 1
+
+    _avisar(log=(
+        f"Clasificación PAC: {total} formularios evaluados, {dentro} Dentro / {total - dentro} Fuera, "
+        f"{sin_clasificar} sin depto reconocido ('Sin Clasificar'), {actualizados} filas actualizadas."
+    ))
 
 
 def ejecutar_proceso_completo(rut=None, dv=None, clave=None, progress_callback=None):

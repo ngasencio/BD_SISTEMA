@@ -3318,3 +3318,157 @@ class EstablecimientoViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class   = None
 
+
+# =============================================================================
+# Módulo PAC — Seguimiento y Rendimiento del Plan Anual de Compras
+# =============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_dentro_fuera_view(request):
+    from .services import calcular_pac_dentro_fuera_stats
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    subdireccion = request.GET.get('subdireccion', '').strip()
+    subdireccion_int = int(subdireccion) if subdireccion.isdigit() else None
+    depto = request.GET.get('depto', '').strip()
+    depto_int = int(depto) if depto.isdigit() else None
+    cache_key = f'pac_dentro_fuera_v1_{anho_int}_{subdireccion_int}_{depto_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_dentro_fuera_stats(anho=anho_int, subdireccion=subdireccion_int, depto=depto_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_temporal_view(request):
+    from .services import calcular_pac_cumplimiento_temporal
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    subdireccion = request.GET.get('subdireccion', '').strip()
+    subdireccion_int = int(subdireccion) if subdireccion.isdigit() else None
+    depto = request.GET.get('depto', '').strip()
+    depto_int = int(depto) if depto.isdigit() else None
+    cache_key = f'pac_temporal_v1_{anho_int}_{subdireccion_int}_{depto_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_cumplimiento_temporal(anho=anho_int, subdireccion=subdireccion_int, depto=depto_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_jerarquia_view(request):
+    from .services import calcular_pac_jerarquia
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    cache_key = f'pac_jerarquia_v1_{anho_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_jerarquia(anho=anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_rankings_view(request):
+    from .services import calcular_pac_rankings
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    tipo = request.GET.get('tipo', 'depto').strip()
+    if tipo not in ('depto', 'formulario'):
+        tipo = 'depto'
+    cache_key = f'pac_rankings_v1_{anho_int}_{tipo}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_rankings(anho=anho_int, tipo=tipo)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_actualizar_maestro(request):
+    """Recarga OCPAC_Maestro.csv → PacProyectoMaestro. Sincrónico (CSV chico,
+    sin necesidad del patrón de tarea async con task_id de los demás ETL)."""
+    from io import StringIO
+    from django.core.management import call_command, CommandError
+    salida = StringIO()
+    try:
+        call_command('cargar_pac_maestro', stdout=salida)
+    except CommandError as exc:
+        return Response({'error': str(exc)}, status=400)
+    cache.clear()
+    return Response({'ok': True, 'detalle': salida.getvalue().strip()})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_actualizar_jerarquia(request):
+    """Recarga los nombres de subdirección desde mapa_sso.xlsx. Sincrónico."""
+    from io import StringIO
+    from django.core.management import call_command, CommandError
+    salida = StringIO()
+    try:
+        call_command('cargar_jerarquia_sso', stdout=salida)
+    except CommandError as exc:
+        return Response({'error': str(exc)}, status=400)
+    cache.clear()
+    return Response({'ok': True, 'detalle': salida.getvalue().strip()})
+
+
+_RE_PERIODO_VALIDO = re.compile(r'^\d{4}-(0[1-9]|1[0-2]|Q[1-4])$', re.IGNORECASE)
+
+
+def _validar_periodo(periodo):
+    return bool(periodo and _RE_PERIODO_VALIDO.match(periodo))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_reporte_word(request):
+    periodo = request.GET.get('periodo', '').strip()
+    if not _validar_periodo(periodo):
+        return Response({'error': "Parámetro 'periodo' inválido. Formato esperado: 'YYYY-MM' o 'YYYY-QN'."}, status=400)
+    from .services_reportes import generar_informe_word
+    buf = generar_informe_word(periodo)
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+    response['Content-Disposition'] = f'attachment; filename="Informe_PAC_{periodo}.docx"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_reporte_ppt(request):
+    periodo = request.GET.get('periodo', '').strip()
+    if not _validar_periodo(periodo):
+        return Response({'error': "Parámetro 'periodo' inválido. Formato esperado: 'YYYY-MM' o 'YYYY-QN'."}, status=400)
+    from .services_reportes import generar_presentacion_ppt
+    buf = generar_presentacion_ppt(periodo)
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    )
+    response['Content-Disposition'] = f'attachment; filename="Informe_PAC_{periodo}.pptx"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_reporte_pdf(request):
+    periodo = request.GET.get('periodo', '').strip()
+    if not _validar_periodo(periodo):
+        return Response({'error': "Parámetro 'periodo' inválido. Formato esperado: 'YYYY-MM' o 'YYYY-QN'."}, status=400)
+    from .services_reportes import generar_reporte_pdf
+    buf = generar_reporte_pdf(periodo)
+    response = HttpResponse(buf.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="Informe_PAC_{periodo}.pdf"'
+    return response
+

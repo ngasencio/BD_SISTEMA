@@ -22,6 +22,7 @@ export default function Sidebar() {
         finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas'),
     });
     const pacTab = path === '/pac' ? (new URLSearchParams(location.search).get('tab') || 'indicadores') : null;
+    const pacCumplimientoTab = path === '/pac-cumplimiento' ? (new URLSearchParams(location.search).get('tab') || 'resumen') : null;
 
     const handleLogout = () => {
         logout();
@@ -135,6 +136,13 @@ export default function Sidebar() {
                                 >
                                     <span>🖨️</span>
                                     <span className="nav-item-text">Informe PDF</span>
+                                </div>
+                                <div
+                                    className={`nav-item ${isActive('/pac-cumplimiento') && pacCumplimientoTab === 'resumen' ? 'active' : ''}`}
+                                    onClick={() => goTo('/pac-cumplimiento?tab=resumen', 'abast', 'pac')}
+                                >
+                                    <span>✅</span>
+                                    <span className="nav-item-text">Cumplimiento PAC</span>
                                 </div>
                             </div>
                         </div>

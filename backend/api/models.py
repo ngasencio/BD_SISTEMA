@@ -688,13 +688,52 @@ class PlanerPAC(models.Model):
     unidad = models.TextField(blank=True, null=True)
     tipo_proyecto = models.TextField(blank=True, null=True)
     pac = models.TextField(blank=True, null=True)
+    cantidad_oc = models.TextField(blank=True, null=True)
+    meses_envio_oc = models.TextField(blank=True, null=True)
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'data_planerpac'
 
     def __str__(self):
         return f"{self.id_proyecto} — {self.nombre_proyecto}"
+
+
+class PacProyectoMaestro(models.Model):
+    """Maestro histórico de proyectos PAC (desde OCPAC_Maestro.csv, multi-año PC20-PC26+).
+
+    Usado para verificar si un FormularioFSCDerivado.id_plan corresponde a un
+    proyecto real del PAC (columna dentro_fuera_pac). Distinto de PlanerPAC:
+    este maestro es solo existencia histórica del proyecto, no trae fechas ni
+    montos ni jerarquía — eso vive en PlanerPAC (año vigente).
+    """
+    id_proyecto = models.CharField(max_length=100, db_index=True)
+    nombre_proyecto = models.TextField(blank=True, null=True)
+    oc_asociada = models.CharField(max_length=100, blank=True, null=True)
+    anho_pac = models.IntegerField(blank=True, null=True, db_index=True)
+
+    class Meta:
+        db_table = 'data_pac_proyecto_maestro'
+
+    def __str__(self):
+        return f"{self.id_proyecto} — {self.oc_asociada}"
+
+
+class SsoSubdireccion(models.Model):
+    """Nombres de subdirección para Departamento.subdireccion_id (hoja 'subdireccion'
+    de mapa_sso.xlsx) — Departamento (data_departamento, módulo Usuarios) ya trae el
+    id pero no el nombre. Solo cubre establecimiento_id=1 (Dirección SS Osorno,
+    subdireccion_id 2-5); los otros 6 establecimientos (hospitales de red) tienen su
+    propio rango de subdireccion_id no solapado y sin nombre — services.py los agrupa
+    por Establecimiento.descripcion en su lugar (ver calcular_pac_jerarquia)."""
+    subdireccion_id = models.IntegerField(primary_key=True)
+    nombre = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'data_sso_subdireccion'
+
+    def __str__(self):
+        return self.nombre
 
 
 class CompraAgilResumen(models.Model):
@@ -947,6 +986,22 @@ class FormularioFSCDerivado(models.Model):
     adj_cotizacion              = models.TextField(blank=True, null=True)
     adj_validacion              = models.TextField(blank=True, null=True)
     adj_form_justificacion      = models.TextField(blank=True, null=True)
+
+    # --- Módulo PAC: clasificación calculada en cada sync de page_data_panel.py ---
+    DENTRO, FUERA = 'DENTRO', 'FUERA'
+    DENTRO_FUERA_CHOICES = [(DENTRO, 'Dentro del PAC'), (FUERA, 'Fuera del PAC')]
+    dentro_fuera_pac = models.CharField(
+        max_length=10, choices=DENTRO_FUERA_CHOICES, blank=True, null=True, db_index=True,
+        help_text='Verificado contra PacProyectoMaestro (id_plan), no contra el campo autodeclarado plan_anual.',
+    )
+    sso_departamento = models.ForeignKey(
+        'Departamento', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='formularios_derivados', db_constraint=False,
+        help_text='Resuelto por match normalizado de unidad_requirente contra Departamento '
+                   '(data_departamento, módulo Usuarios — mejor cobertura que un maestro propio). '
+                   'Null = "Sin Clasificar". db_constraint=False: Departamento es managed=False '
+                   '(tabla externa, id es int(11) vs bigint aquí) — no se fuerza FK física.',
+    )
 
     class Meta:
         db_table = 'data_formularios_fsc_derivados'

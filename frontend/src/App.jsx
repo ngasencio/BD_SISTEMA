@@ -31,6 +31,7 @@ import OrdenesCompraDashboard from './pages/OrdenesCompraDashboard';
 import { abastecimientoRoutes } from './features/abastecimiento/routes';
 import { finanzasRoutes } from './features/finanzas/routes';
 import { pacRoutes } from './features/pac/routes';
+import { pacCumplimientoRoutes } from './features/pac-cumplimiento/routes';
 import { compraAgilRoutes } from './features/compra-agil/routes';
 import { perfilRoute, adminUsuariosRoute } from './features/usuarios/routes';
 import { devengoSigfeRoutes } from './features/devengo-sigfe/routes';
@@ -72,6 +73,8 @@ function AppRoutes() {
             <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
             {/* Módulo PAC (todos los autenticados) */}
             {pacRoutes}
+            {/* Módulo PAC — Cumplimiento del Plan Anual de Compras (todos los autenticados) */}
+            {pacCumplimientoRoutes}
             {/* Módulo Compra Ágil (todos los autenticados) */}
             {compraAgilRoutes}
 
