@@ -21,7 +21,7 @@ from .views import (
     licitaciones_ahorro_stats, licitaciones_gestion_stats, licitaciones_anos_view,
     licitaciones_calendario, licitaciones_anos_calendario,
     compraagil_calendario, compraagil_anos_calendario,
-    iniciar_descarga_ofertas, estado_descarga_ofertas,
+    iniciar_descarga_ofertas, estado_descarga_ofertas, descargar_archivo_ofertas,
     iniciar_actualizacion_compraagil, estado_actualizacion_compraagil,
     iniciar_actualizacion_oc, estado_actualizacion_oc,
     iniciar_actualizacion_li, estado_actualizacion_li,
@@ -41,6 +41,10 @@ from .views import (
     iniciar_actualizacion_anexo1, estado_actualizacion_anexo1, cancelar_actualizacion_anexo1,
     pac_cumplimiento_dentro_fuera_view, pac_cumplimiento_temporal_view,
     pac_cumplimiento_jerarquia_view, pac_cumplimiento_rankings_view,
+    pac_cumplimiento_temporalidad_mensual_view, pac_cumplimiento_resumen_subdireccion_view,
+    pac_cumplimiento_serie_mensual_view,
+    pac_ficha_lista_view, pac_ficha_detalle_view,
+    pac_temporal_mensual_planer_view, pac_jerarquia_planer_view,
     pac_cumplimiento_actualizar_maestro, pac_cumplimiento_actualizar_jerarquia,
     pac_cumplimiento_reporte_word, pac_cumplimiento_reporte_ppt, pac_cumplimiento_reporte_pdf,
 )
@@ -129,6 +133,7 @@ urlpatterns = [
     # Descarga de ofertas (scraper)
     path('licitaciones/descarga-ofertas/', iniciar_descarga_ofertas, name='iniciar_descarga_ofertas'),
     path('licitaciones/descarga-estado/<str:task_id>/', estado_descarga_ofertas, name='estado_descarga_ofertas'),
+    path('licitaciones/descarga-archivo/<str:task_id>/', descargar_archivo_ofertas, name='descargar_archivo_ofertas'),
 
     # Compra Ágil — Actualización ETL desde dashboard
     path('compraagil/actualizar/', iniciar_actualizacion_compraagil, name='iniciar_actualizacion_compraagil'),
@@ -177,6 +182,16 @@ urlpatterns = [
     path('pac-cumplimiento/temporal/', pac_cumplimiento_temporal_view, name='pac_cumplimiento_temporal'),
     path('pac-cumplimiento/jerarquia/', pac_cumplimiento_jerarquia_view, name='pac_cumplimiento_jerarquia'),
     path('pac-cumplimiento/rankings/', pac_cumplimiento_rankings_view, name='pac_cumplimiento_rankings'),
+    path('pac-cumplimiento/temporalidad-mensual/', pac_cumplimiento_temporalidad_mensual_view, name='pac_cumplimiento_temporalidad_mensual'),
+    path('pac-cumplimiento/resumen-subdireccion/', pac_cumplimiento_resumen_subdireccion_view, name='pac_cumplimiento_resumen_subdireccion'),
+    path('pac-cumplimiento/serie-mensual/', pac_cumplimiento_serie_mensual_view, name='pac_cumplimiento_serie_mensual'),
+
+    # Módulo PAC — Ejecución del Plan de Compras (Ficha PAC ↔ Formulario ↔ OC)
+    path('pac-cumplimiento/fichas/', pac_ficha_lista_view, name='pac_ficha_lista'),
+    path('pac-cumplimiento/fichas/<str:id_proyecto>/', pac_ficha_detalle_view, name='pac_ficha_detalle'),
+    path('pac-cumplimiento/temporal-mensual-planer/', pac_temporal_mensual_planer_view, name='pac_temporal_mensual_planer'),
+    path('pac-cumplimiento/jerarquia-planer/', pac_jerarquia_planer_view, name='pac_jerarquia_planer'),
+
     path('pac-cumplimiento/actualizar-maestro/', pac_cumplimiento_actualizar_maestro, name='pac_cumplimiento_actualizar_maestro'),
     path('pac-cumplimiento/actualizar-jerarquia/', pac_cumplimiento_actualizar_jerarquia, name='pac_cumplimiento_actualizar_jerarquia'),
     path('pac-cumplimiento/reporte/word/', pac_cumplimiento_reporte_word, name='pac_cumplimiento_reporte_word'),

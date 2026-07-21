@@ -176,10 +176,15 @@ def _archivos_locales_mas_recientes():
 def cargar_formularios_a_django(archivos=None, progress_callback=None):
     """
     Lee los reportes (recién descargados o los más recientes en disco) y los **sincroniza**
-    con la base de datos mediante upsert (`update_or_create`) por clave compuesta — nunca
-    borra registros: la base acumula años de formularios y cada descarga del Panel solo
-    trae un subconjunto (p.ej. el año en curso), así que un DELETE+bulk_create destruiría
-    historial.
+    con la base de datos mediante upsert (`update_or_create`) por clave compuesta.
+
+    El Panel SSO expone en cada descarga el histórico completo (no un subconjunto por
+    año), así que la BD debe reflejar exactamente lo que trae la nueva actualización:
+    si una fila existía en la BD para un año que la descarga cubre, pero su clave ya
+    no aparece en el archivo, se elimina (ver `_sincronizar_borrado`) — el origen ya no
+    la tiene. El borrado se acota a los años presentes en el archivo descargado, nunca
+    global, para no arriesgar datos de años que por cualquier motivo no vinieran en esa
+    pasada.
 
     Claves de coincidencia ("¿es el mismo FSC que ya tengo?"):
       - FormularioFSC / FormularioFSCDerivado → folio + anho + unidad_requirente + fecha_solicitud
@@ -191,7 +196,12 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
     Esos pocos casos ambiguos se resuelven actualizando la primera coincidencia (ver _upsert).
 
     Si encuentra coincidencia → actualiza sus campos (lo "edita"); si no la encuentra →
-    lo inserta como nuevo; los registros que no aparecen en la descarga actual quedan intactos.
+    lo inserta como nuevo; si una clave que antes existía ya no aparece → se elimina.
+
+    Nota: borrar un FormularioFSC elimina en cascada su `historial_estados`
+    (FormularioFSCEstadoLog.formulario tiene on_delete=CASCADE) — aceptable porque su
+    ausencia total del histórico completo del panel implica que el FSC ya no existe
+    en el origen.
     """
     _setup_django()
     import math
@@ -244,6 +254,29 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                 setattr(obj, campo, valor)
             obj.save(update_fields=list(defaults.keys()))
             return obj, False
+
+    def _sincronizar_borrado(modelo, campos_clave, anhos_vigentes, claves_vigentes, _avisar, etiqueta):
+        """Elimina filas de `modelo` cuyo anho esté entre los años que trajo la
+        descarga actual (anhos_vigentes) pero cuya clave compuesta ya no aparece
+        en ella (claves_vigentes).
+
+        Acotado a `anhos_vigentes` (no toda la tabla) para no borrar datos de
+        años que, por cualquier motivo, no vinieran en esta pasada del archivo.
+        """
+        if not anhos_vigentes:
+            return 0
+        candidatos = modelo.objects.filter(anho__in=anhos_vigentes).only("id", *campos_clave)
+        a_borrar = [
+            obj.id for obj in candidatos
+            if tuple(getattr(obj, c) for c in campos_clave) not in claves_vigentes
+        ]
+        if a_borrar:
+            modelo.objects.filter(id__in=a_borrar).delete()
+            _avisar(log=f"🗑️ {etiqueta}: {len(a_borrar)} registro(s) eliminado(s) por no estar en la nueva actualización.")
+        return len(a_borrar)
+
+    _CAMPOS_CLAVE_FSC = ("folio", "anho", "unidad_requirente", "fecha_solicitud")
+    _CAMPOS_CLAVE_PRODUCTO = ("folio", "anho", "tipo_formulario", "categoria", "producto", "descripcion")
 
     hoy = date.today()
 
@@ -331,9 +364,9 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         }
 
     resumen = {
-        "fsc": {"nuevos": 0, "actualizados": 0},
-        "derivados": {"nuevos": 0, "actualizados": 0},
-        "carro": {"nuevos": 0, "actualizados": 0},
+        "fsc": {"nuevos": 0, "actualizados": 0, "eliminados": 0},
+        "derivados": {"nuevos": 0, "actualizados": 0, "eliminados": 0},
+        "carro": {"nuevos": 0, "actualizados": 0, "eliminados": 0},
     }
 
     close_old_connections()
@@ -342,6 +375,8 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         tabla = pd.read_html(str(archivos["fsc"]))[0]
         tabla.columns = columnas_fsc
         _avisar(paso_desc=f"Sincronizando {len(tabla)} formularios FSC...", progreso_pct=55)
+        claves_vigentes = set()
+        anhos_vigentes = set()
         with transaction.atomic():
             for i, (_, row) in enumerate(tabla.iterrows()):
                 campos = _campos_comunes(row)
@@ -351,21 +386,30 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                     folio_requerimiento=_to_str(row["folio_requerimiento"]),
                 )
                 lookup = _clave_fsc(campos)
+                claves_vigentes.add(tuple(lookup[c] for c in _CAMPOS_CLAVE_FSC))
+                anhos_vigentes.add(lookup["anho"])
                 fsc, creado = _upsert(FormularioFSC, lookup, campos)
                 _registrar_cambio_estado(fsc)
                 resumen["fsc"]["nuevos" if creado else "actualizados"] += 1
                 if (i + 1) % 300 == 0:
                     _avisar(log=f"FSC: {i + 1}/{len(tabla)} procesados...")
-        _avisar(log=f"FSC → {resumen['fsc']['nuevos']} nuevos, {resumen['fsc']['actualizados']} actualizados.")
+            resumen["fsc"]["eliminados"] = _sincronizar_borrado(
+                FormularioFSC, _CAMPOS_CLAVE_FSC, anhos_vigentes, claves_vigentes, _avisar, "FSC"
+            )
+        _avisar(log=f"FSC → {resumen['fsc']['nuevos']} nuevos, {resumen['fsc']['actualizados']} actualizados, {resumen['fsc']['eliminados']} eliminados.")
 
     if "derivados" in archivos:
         tabla = pd.read_html(str(archivos["derivados"]))[0]
         tabla.columns = columnas_derivado
         _avisar(paso_desc=f"Sincronizando {len(tabla)} formularios derivados...", progreso_pct=72)
+        claves_vigentes = set()
+        anhos_vigentes = set()
         with transaction.atomic():
             for i, (_, row) in enumerate(tabla.iterrows()):
                 campos = _campos_comunes(row)
                 lookup = _clave_fsc(campos)
+                claves_vigentes.add(tuple(lookup[c] for c in _CAMPOS_CLAVE_FSC))
+                anhos_vigentes.add(lookup["anho"])
                 campos.update(
                     fecha_derivado=_to_str(row["fecha_derivado"]),
                     comprador=_to_str(row["comprador"]),
@@ -377,7 +421,10 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                 resumen["derivados"]["nuevos" if creado else "actualizados"] += 1
                 if (i + 1) % 300 == 0:
                     _avisar(log=f"Derivados: {i + 1}/{len(tabla)} procesados...")
-        _avisar(log=f"Derivados → {resumen['derivados']['nuevos']} nuevos, {resumen['derivados']['actualizados']} actualizados.")
+            resumen["derivados"]["eliminados"] = _sincronizar_borrado(
+                FormularioFSCDerivado, _CAMPOS_CLAVE_FSC, anhos_vigentes, claves_vigentes, _avisar, "Derivados"
+            )
+        _avisar(log=f"Derivados → {resumen['derivados']['nuevos']} nuevos, {resumen['derivados']['actualizados']} actualizados, {resumen['derivados']['eliminados']} eliminados.")
 
         # Módulo PAC: (re)clasifica Dentro/Fuera + departamento en cada sync, sobre
         # TODOS los derivados con id_plan (no solo los recién tocados) — así un
@@ -388,6 +435,8 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         tabla = pd.read_html(str(archivos["carro"]))[0]
         tabla.columns = columnas_producto
         _avisar(paso_desc=f"Sincronizando {len(tabla)} líneas de productos...", progreso_pct=88)
+        claves_vigentes = set()
+        anhos_vigentes = set()
         with transaction.atomic():
             for i, (_, row) in enumerate(tabla.iterrows()):
                 lookup = {
@@ -398,6 +447,8 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                     "producto": _to_str(row["producto"]),
                     "descripcion": _to_str(row["descripcion"]),
                 }
+                claves_vigentes.add(tuple(lookup[c] for c in _CAMPOS_CLAVE_PRODUCTO))
+                anhos_vigentes.add(lookup["anho"])
                 defaults = dict(
                     monto=_to_int_monto(row["monto"]),
                     cantidad=_to_int(row["cantidad"]),
@@ -407,14 +458,18 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                 resumen["carro"]["nuevos" if creado else "actualizados"] += 1
                 if (i + 1) % 500 == 0:
                     _avisar(log=f"Carro: {i + 1}/{len(tabla)} procesados...")
-        _avisar(log=f"Carro → {resumen['carro']['nuevos']} nuevos, {resumen['carro']['actualizados']} actualizados.")
+            resumen["carro"]["eliminados"] = _sincronizar_borrado(
+                FormularioFSCProducto, _CAMPOS_CLAVE_PRODUCTO, anhos_vigentes, claves_vigentes, _avisar, "Carro"
+            )
+        _avisar(log=f"Carro → {resumen['carro']['nuevos']} nuevos, {resumen['carro']['actualizados']} actualizados, {resumen['carro']['eliminados']} eliminados.")
 
     total_nuevos = sum(r["nuevos"] for r in resumen.values())
     total_actualizados = sum(r["actualizados"] for r in resumen.values())
+    total_eliminados = sum(r["eliminados"] for r in resumen.values())
     total = total_nuevos + total_actualizados
     _avisar(
-        log=f"✅ Sincronización completa: {total_nuevos} nuevos, {total_actualizados} actualizados "
-            f"({total} procesados). El historial existente no se eliminó.",
+        log=f"✅ Sincronización completa: {total_nuevos} nuevos, {total_actualizados} actualizados, "
+            f"{total_eliminados} eliminados por no estar en la nueva actualización ({total} procesados).",
         progreso_pct=100,
     )
     return {
@@ -423,6 +478,7 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         "carro": resumen["carro"],
         "nuevos": total_nuevos,
         "actualizados": total_actualizados,
+        "eliminados": total_eliminados,
         "total": total,
     }
 

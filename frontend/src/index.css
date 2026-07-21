@@ -1481,6 +1481,24 @@ canvas {
   max-height: 210px;
 }
 
+/* Contenedores de gráficos cuyo alto real (220-280px) es mayor a los 210px que la
+   regla global de arriba fuerza en todo <canvas> del sitio — sin este override, Chart.js
+   calcula el canvas contra el alto real del contenedor pero el navegador lo recorta a
+   210px, y ese desajuste es lo que hace que los gráficos se vean rotos/desaparezcan al
+   hacer zoom o redimensionar (el ResizeObserver de Chart.js y el CSS terminan en desacuerdo).
+   Además fija min-width/min-height:0 en el contenedor — los items de grid/flex no
+   encogen por debajo del tamaño de su contenido por defecto, lo que también puede hacer
+   que el canvas se desborde en vez de ajustarse. Usar esta clase en el div que envuelve
+   directamente a <Bar>/<Line>/<Doughnut> cuando el contenedor mida más de 210px. */
+.chart-box {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+.chart-box canvas {
+  max-height: none !important;
+}
+
 /* ── SECTION LABEL ── */
 .section-lbl {
   font-size: 10.5px;

@@ -1,6 +1,7 @@
 import ctypes
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -8,11 +9,12 @@ import threading
 import uuid
 from pathlib import Path
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Count, Q, Sum
 from django.db.models import DecimalField
 from django.db.models.functions import Cast
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters, viewsets
@@ -1357,11 +1359,17 @@ _SCRIPT_DESCARGA = (
 
 
 def _carpeta_descargas() -> Path:
-    home = Path.home()
-    for candidato in [home / "Downloads", home / "Descargas"]:
-        if candidato.exists():
-            return candidato
-    return home / "Downloads"
+    """
+    Carpeta de trabajo del SERVIDOR donde Chrome/Selenium descarga los
+    archivos. Nunca es la carpeta "Descargas" del usuario que hizo clic
+    (el scraper corre en el servidor, no en su navegador) — el ZIP se
+    entrega al usuario vía `descargar_archivo_ofertas`, que lo transmite
+    por HTTP para que sea el navegador quien lo guarde en su propia
+    carpeta de Descargas local.
+    """
+    carpeta = Path(settings.MEDIA_ROOT) / "descarga_ofertas"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    return carpeta
 
 
 def _ejecutar_descarga(task_id: str, codigo: str):
@@ -1434,6 +1442,30 @@ def estado_descarga_ofertas(request, task_id):
         "ruta_carpeta": tarea.get("ruta_carpeta"),
         "error": tarea.get("error"),
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def descargar_archivo_ofertas(request, task_id):
+    """
+    Transmite el ZIP de la tarea como descarga HTTP (Content-Disposition:
+    attachment). Es el navegador de quien hace la petición el que decide
+    dónde guardarlo — su propia carpeta de Descargas — sin importar en qué
+    computador esté corriendo el servidor Django/Selenium.
+    """
+    tarea = _tareas_descarga.get(task_id)
+    if not tarea or tarea.get("status") != "completado":
+        return Response({"error": "El archivo aún no está disponible."}, status=404)
+
+    zip_path = tarea.get("ruta_zip")
+    if not zip_path or not os.path.isfile(zip_path):
+        return Response({"error": "El archivo ZIP no existe en el servidor."}, status=404)
+
+    return FileResponse(
+        open(zip_path, "rb"),
+        as_attachment=True,
+        filename=os.path.basename(zip_path),
+    )
 
 
 # ─── Actualización Compra Ágil desde el dashboard ─────────────────────────────
@@ -3005,8 +3037,8 @@ def _ejecutar_actualizacion_formularios(task_id: str, rut: str, dv: str, clave: 
         _tareas_actualizacion_formularios[task_id].update(
             status="completado", paso=4,
             paso_desc=(
-                f"Completado: {resumen['nuevos']} nuevos, {resumen['actualizados']} actualizados "
-                f"({resumen['total']} procesados). Historial preservado."
+                f"Completado: {resumen['nuevos']} nuevos, {resumen['actualizados']} actualizados, "
+                f"{resumen.get('eliminados', 0)} eliminados ({resumen['total']} procesados)."
             ),
             total_cargados=resumen["total"],
             logs_recientes=logs[-30:],
@@ -3219,17 +3251,51 @@ class FormularioFSCViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = FormularioFSCDerivado.objects.all()
+    queryset = FormularioFSCDerivado.objects.select_related('sso_departamento')
     serializer_class = FormularioFSCDerivadoSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
-    filterset_fields = ["estado_compra", "anho", "unidad_requirente", "comprador"]
+    filterset_fields = ["estado_compra", "anho", "unidad_requirente", "comprador", "dentro_fuera_pac"]
     search_fields = [
         "folio", "anho", "formulario", "objetivo_compra", "usuario_requirente",
         "unidad_requirente", "comprador", "estado_compra", "encargado", "jefe", "correo",
         "requerimiento", "especificaciones_tecnicas",
     ]
     ordering_fields = ["folio", "anho", "monto_estimado", "fecha_derivado", "unidad_requirente", "estado_compra"]
+
+    def get_queryset(self):
+        """`?establecimiento=<id>` es opcional y solo lo usa el módulo PAC Cumplimiento
+        (Abastecimiento › Derivados sigue viendo todos los establecimientos sin pasarlo).
+        Misma semántica que `_qs_fsc_derivado_pac_cumplimiento()` en services.py: incluye
+        también los formularios "Sin Clasificar" (`sso_departamento` NULL) porque no hay
+        forma de descartar que pertenezcan al establecimiento pedido.
+
+        `?sso_departamento_in=id1,id2,...` — usado por el tab Jerarquía para filtrar la
+        tabla de formularios al hacer clic en una subdirección/departamento/sub-departamento
+        (el frontend ya resuelve qué ids caen bajo el nodo clickeado, incluyendo el rollup
+        de sub-departamentos que hace `calcular_pac_jerarquia`).
+        `?sin_clasificar=1` — filtra a los formularios con `sso_departamento` NULL (el nodo
+        "Sin Clasificar" de la jerarquía). Se combina con `sso_departamento_in` si ambos
+        vienen (ej. seleccionar una subdirección completa que incluye su rama Sin Clasificar
+        no aplica hoy, pero deja la puerta abierta sin romper nada)."""
+        qs = super().get_queryset()
+        establecimiento = self.request.query_params.get('establecimiento', '').strip()
+        if establecimiento.isdigit():
+            qs = qs.filter(
+                Q(sso_departamento__establecimiento_id=int(establecimiento)) | Q(sso_departamento__isnull=True)
+            )
+
+        depto_ids_raw = self.request.query_params.get('sso_departamento_in', '').strip()
+        sin_clasificar = self.request.query_params.get('sin_clasificar', '').strip() in ('1', 'true', 'True')
+        if depto_ids_raw or sin_clasificar:
+            depto_ids = [int(v) for v in depto_ids_raw.split(',') if v.strip().isdigit()]
+            filtro = Q()
+            if depto_ids:
+                filtro |= Q(sso_departamento_id__in=depto_ids)
+            if sin_clasificar:
+                filtro |= Q(sso_departamento__isnull=True)
+            qs = qs.filter(filtro)
+        return qs
 
 
 class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):
@@ -3333,7 +3399,7 @@ def pac_cumplimiento_dentro_fuera_view(request):
     subdireccion_int = int(subdireccion) if subdireccion.isdigit() else None
     depto = request.GET.get('depto', '').strip()
     depto_int = int(depto) if depto.isdigit() else None
-    cache_key = f'pac_dentro_fuera_v1_{anho_int}_{subdireccion_int}_{depto_int}'
+    cache_key = f'pac_dentro_fuera_v2_{anho_int}_{subdireccion_int}_{depto_int}'
     if data := cache.get(cache_key):
         return Response(data)
     data = calcular_pac_dentro_fuera_stats(anho=anho_int, subdireccion=subdireccion_int, depto=depto_int)
@@ -3351,7 +3417,7 @@ def pac_cumplimiento_temporal_view(request):
     subdireccion_int = int(subdireccion) if subdireccion.isdigit() else None
     depto = request.GET.get('depto', '').strip()
     depto_int = int(depto) if depto.isdigit() else None
-    cache_key = f'pac_temporal_v1_{anho_int}_{subdireccion_int}_{depto_int}'
+    cache_key = f'pac_temporal_v2_{anho_int}_{subdireccion_int}_{depto_int}'
     if data := cache.get(cache_key):
         return Response(data)
     data = calcular_pac_cumplimiento_temporal(anho=anho_int, subdireccion=subdireccion_int, depto=depto_int)
@@ -3365,7 +3431,7 @@ def pac_cumplimiento_jerarquia_view(request):
     from .services import calcular_pac_jerarquia
     anho = request.GET.get('anho', '').strip()
     anho_int = int(anho) if anho.isdigit() else None
-    cache_key = f'pac_jerarquia_v1_{anho_int}'
+    cache_key = f'pac_jerarquia_v2_{anho_int}'
     if data := cache.get(cache_key):
         return Response(data)
     data = calcular_pac_jerarquia(anho=anho_int)
@@ -3382,10 +3448,123 @@ def pac_cumplimiento_rankings_view(request):
     tipo = request.GET.get('tipo', 'depto').strip()
     if tipo not in ('depto', 'formulario'):
         tipo = 'depto'
-    cache_key = f'pac_rankings_v1_{anho_int}_{tipo}'
+    cache_key = f'pac_rankings_v2_{anho_int}_{tipo}'
     if data := cache.get(cache_key):
         return Response(data)
     data = calcular_pac_rankings(anho=anho_int, tipo=tipo)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_temporalidad_mensual_view(request):
+    from datetime import date
+    from .services import calcular_pac_temporalidad_mensual
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else date.today().year
+    cache_key = f'pac_temporalidad_mensual_v1_{anho_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_temporalidad_mensual(anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_resumen_subdireccion_view(request):
+    from datetime import date
+    from .services import calcular_pac_resumen_subdireccion
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else date.today().year
+    cache_key = f'pac_resumen_subdireccion_v1_{anho_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_resumen_subdireccion(anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_cumplimiento_serie_mensual_view(request):
+    from .services import calcular_pac_serie_mensual_historica
+    cache_key = 'pac_serie_mensual_v1'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_serie_mensual_historica()
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+# =============================================================================
+# Módulo PAC — Ejecución del Plan de Compras (Ficha PAC ↔ Formulario ↔ OC)
+# =============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_ficha_lista_view(request):
+    from .services import calcular_pac_fichas
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    depto = request.GET.get('depto', '').strip()
+    depto_int = int(depto) if depto.isdigit() else None
+    depto_in_raw = request.GET.get('depto_in', '').strip()
+    depto_ids = [int(v) for v in depto_in_raw.split(',') if v.strip().isdigit()] if depto_in_raw else None
+    depto_param = depto_ids if depto_ids else depto_int
+    subdireccion = request.GET.get('subdireccion', '').strip()
+    subdireccion_int = int(subdireccion) if subdireccion.isdigit() else None
+    estado = request.GET.get('estado', '').strip() or None
+    search = request.GET.get('search', '').strip() or None
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except ValueError:
+        page = 1
+    # Sin cache: depende de varios filtros combinables y la agregación es barata (835 filas).
+    data = calcular_pac_fichas(
+        anho=anho_int, depto=depto_param, subdireccion=subdireccion_int,
+        estado=estado, search=search, page=page, page_size=50,
+    )
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_ficha_detalle_view(request, id_proyecto):
+    from .services import calcular_pac_ficha_detalle
+    data = calcular_pac_ficha_detalle(id_proyecto)
+    if data is None:
+        return Response({'detail': 'Ficha PAC no encontrada.'}, status=404)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_temporal_mensual_planer_view(request):
+    from datetime import date
+    from .services import calcular_pac_temporal_mensual_planer
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else date.today().year
+    cache_key = f'pac_temporal_mensual_planer_v1_{anho_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_temporal_mensual_planer(anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_jerarquia_planer_view(request):
+    from datetime import date
+    from .services import calcular_pac_jerarquia_planer
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else date.today().year
+    cache_key = f'pac_jerarquia_planer_v1_{anho_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_jerarquia_planer(anho_int)
     cache.set(cache_key, data, timeout=300)
     return Response(data)
 

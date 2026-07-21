@@ -16,8 +16,8 @@ if hasattr(sys.stdout, "reconfigure"):
 #  CONFIGURACIÓN
 # ─────────────────────────────────────────────
 MAX_PATH_RAIZ    = 120
-MAX_NOMBRE_FICHA = 40
 CARPETAS_TIPO    = ["Anexos Administrativos", "Anexos Tecnicos", "Anexos Economicos"]
+CARPETA_DOC_ANEXOS = "Documentos Anexos"   # adjuntos propios de la licitación (Ver Adjuntos)
 CHARS_INVALIDOS  = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
 
 
@@ -54,29 +54,26 @@ def _escritorio() -> Path:
 
 
 # ─────────────────────────────────────────────
-#  FUNCIÓN PRINCIPAL
+#  CARPETA PRINCIPAL (nivel licitación)
 # ─────────────────────────────────────────────
-def crear_estructura(codigo: str, nombre_licitacion: str, proveedores: list, carpeta_base: Path = None) -> dict:
+def crear_carpeta_principal(codigo: str, nombre_licitacion: str, carpeta_base: Path = None) -> dict:
     """
-    Crea la estructura de carpetas para la licitación.
+    Crea la carpeta raíz de la licitación junto con "Documentos Anexos"
+    (adjuntos propios de la ficha — botón "Ver Adjuntos", descargados por
+    etapa3_adjuntos.py ANTES de abrir el Cuadro de Ofertas).
 
-    Parámetros
-    ----------
-    codigo           : código de licitación (ej. '3447-243-L125')
-    nombre_licitacion: nombre legible de la licitación
-    proveedores      : lista de dicts con keys letra, rut, nombre
-    carpeta_base     : Path base donde crear la carpeta. Si es None, usa el Escritorio.
+    Se llama primero, antes de conocer los proveedores, para poder descargar
+    los adjuntos de la licitación tan pronto se entra a la ficha.
 
     Retorna
     -------
     dict con claves:
-        carpeta_principal : str  – path absoluto de la carpeta raíz
-        resumen_txt       : str  – path absoluto de resumen.txt
-        proveedores       : dict – rutas por letra de proveedor
+        carpeta_principal  : str – path absoluto de la carpeta raíz
+        resumen_txt        : str – path absoluto de resumen.txt
+        documentos_anexos  : str – path absoluto de "Documentos Anexos"
     """
-    print("\n[INFO] Creando estructura de carpetas...")
+    print("\n[INFO] Creando carpeta principal de la licitación...")
 
-    # ── Carpeta raíz ──────────────────────────────────────────────
     nombre_raiz = _sanitizar(f"Ofertas-{codigo}-{nombre_licitacion}", MAX_PATH_RAIZ)
     base = carpeta_base if carpeta_base is not None else _escritorio()
     carpeta_principal = base / nombre_raiz
@@ -88,26 +85,53 @@ def crear_estructura(codigo: str, nombre_licitacion: str, proveedores: list, car
         print("[ERROR SIMPLE]  Verifica que tienes permisos de escritura en el Escritorio.")
         sys.exit(1)
 
-    # ── resumen.txt vacío (placeholder) ───────────────────────────
     resumen_path = carpeta_principal / "resumen.txt"
     if not resumen_path.exists():
         resumen_path.touch()
 
-    # ── Carpetas por proveedor ─────────────────────────────────────
+    carpeta_doc_anexos = carpeta_principal / CARPETA_DOC_ANEXOS
+    try:
+        carpeta_doc_anexos.mkdir(exist_ok=True)
+    except OSError as e:
+        print(f"[WARN] No se pudo crear '{CARPETA_DOC_ANEXOS}': {e}")
+
+    print(f"[OK]   Carpeta principal lista en: {carpeta_principal}")
+
+    return {
+        "carpeta_principal": str(carpeta_principal),
+        "resumen_txt":       str(resumen_path),
+        "documentos_anexos": str(carpeta_doc_anexos),
+        "proveedores":       {},
+    }
+
+
+# ─────────────────────────────────────────────
+#  CARPETAS POR PROVEEDOR
+# ─────────────────────────────────────────────
+def crear_carpetas_proveedores(carpeta_principal: "str | Path", proveedores: list) -> dict:
+    """
+    Crea las subcarpetas de anexos (Administrativos/Técnicos/Económicos) para
+    cada proveedor, dentro de la carpeta raíz ya creada por crear_carpeta_principal().
+
+    Ya no crea "Ficha del Proveedor": ese paso fue eliminado (el portal de
+    fichas de proveedor presentaba errores de carga frecuentes) y reemplazado
+    por la descarga de "Documentos Anexos" a nivel de licitación.
+
+    Retorna dict {letra: {raiz, admin, tec, econ}}.
+    """
+    print("\n[INFO] Creando carpetas por proveedor...")
+    carpeta_principal = Path(carpeta_principal)
     rutas_proveedores = {}
 
     for p in proveedores:
         letra  = p["letra"]
         rut    = _sanitizar(p["rut"],    30)
         nombre = _sanitizar(p["nombre"], 80)
-        nombre_ficha = _sanitizar(p["nombre"], MAX_NOMBRE_FICHA)
 
-        carpeta_prov  = carpeta_principal / f"{letra}) {rut} - {nombre}"
-        carpeta_ficha = carpeta_prov / f"Ficha del Proveedor-{nombre_ficha}"
+        carpeta_prov = carpeta_principal / f"{letra}) {rut} - {nombre}"
 
         try:
             carpeta_prov.mkdir(exist_ok=True)
-            carpeta_ficha.mkdir(exist_ok=True)
             for tipo in CARPETAS_TIPO:
                 (carpeta_prov / tipo).mkdir(exist_ok=True)
         except OSError as e:
@@ -116,20 +140,29 @@ def crear_estructura(codigo: str, nombre_licitacion: str, proveedores: list, car
 
         rutas_proveedores[letra] = {
             "raiz":  str(carpeta_prov),
-            "ficha": str(carpeta_ficha),
             "admin": str(carpeta_prov / "Anexos Administrativos"),
             "tec":   str(carpeta_prov / "Anexos Tecnicos"),
             "econ":  str(carpeta_prov / "Anexos Economicos"),
         }
         print(f"[OK]   [{letra.upper()}] Carpeta creada: {carpeta_prov.name}")
 
-    print(f"[OK]   Estructura lista en: {carpeta_principal}")
+    print(f"[OK]   {len(rutas_proveedores)} carpeta(s) de proveedor listas.")
+    return rutas_proveedores
 
-    return {
-        "carpeta_principal": str(carpeta_principal),
-        "resumen_txt":       str(resumen_path),
-        "proveedores":       rutas_proveedores,
-    }
+
+# ─────────────────────────────────────────────
+#  FUNCIÓN COMBINADA (compatibilidad / uso standalone)
+# ─────────────────────────────────────────────
+def crear_estructura(codigo: str, nombre_licitacion: str, proveedores: list, carpeta_base: Path = None) -> dict:
+    """
+    Crea la estructura completa (carpeta principal + Documentos Anexos +
+    carpetas por proveedor) en una sola llamada. Combina crear_carpeta_principal()
+    y crear_carpetas_proveedores() — útil para pruebas standalone o cuando ya
+    se conocen los proveedores de antemano.
+    """
+    rutas = crear_carpeta_principal(codigo, nombre_licitacion, carpeta_base)
+    rutas["proveedores"] = crear_carpetas_proveedores(rutas["carpeta_principal"], proveedores)
+    return rutas
 
 
 # ─────────────────────────────────────────────
@@ -145,7 +178,8 @@ if __name__ == "__main__":
     resultado = crear_estructura("3447-243-L125", "Suministro de Flexibles Hidráulicos",
                                   proveedores_prueba)
     print("\n--- Rutas generadas ---")
-    print(f"Principal : {resultado['carpeta_principal']}")
-    print(f"Resumen   : {resultado['resumen_txt']}")
+    print(f"Principal        : {resultado['carpeta_principal']}")
+    print(f"Resumen          : {resultado['resumen_txt']}")
+    print(f"Documentos Anexos: {resultado['documentos_anexos']}")
     for letra, rutas in resultado["proveedores"].items():
-        print(f"[{letra.upper()}] ficha={rutas['ficha']}")
+        print(f"[{letra.upper()}] admin={rutas['admin']}")

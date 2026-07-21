@@ -142,7 +142,7 @@ export default function Sidebar() {
                                     onClick={() => goTo('/pac-cumplimiento?tab=resumen', 'abast', 'pac')}
                                 >
                                     <span>✅</span>
-                                    <span className="nav-item-text">Cumplimiento PAC</span>
+                                    <span className="nav-item-text">Cumplimiento Interno PAC</span>
                                 </div>
                             </div>
                         </div>

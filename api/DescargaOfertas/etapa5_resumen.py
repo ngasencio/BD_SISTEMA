@@ -25,22 +25,6 @@ def _contar_archivos(carpeta: str) -> int:
         return 0
 
 
-def _hay_archivo_pdf(carpeta: str) -> bool:
-    """Verifica si hay al menos un PDF en la carpeta."""
-    try:
-        return any(f.lower().endswith('.pdf') for f in os.listdir(carpeta))
-    except OSError:
-        return False
-
-
-def _estado_ficha(carpeta_ficha: str, ficha_ok_log: bool) -> str:
-    if _hay_archivo_pdf(carpeta_ficha):
-        return "Descargada"
-    if ficha_ok_log:
-        return "Descargada"
-    return "No disponible"
-
-
 def _estado_anexos(carpeta: str, count_log: int) -> str:
     count_disco = _contar_archivos(carpeta)
     total = max(count_disco, count_log)
@@ -61,6 +45,7 @@ def generar_resumen(
     rutas:             dict,
     log:               dict,
     log_detalle:       list = None,
+    total_adjuntos_licitacion: int = 0,
 ) -> str:
     """
     Genera resumen.txt con el detalle de todo lo descargado.
@@ -76,9 +61,11 @@ def generar_resumen(
     nombre            : nombre de la licitación
     proveedores       : lista de dicts (de etapa1)
     rutas             : dict de rutas (de etapa2)
-    log               : {'a': {'ficha_ok': bool, 'admin': int, 'tec': int, 'econ': int}, ...}
+    log               : {'a': {'admin': int, 'tec': int, 'econ': int}, ...}
     log_detalle       : lista de dicts por archivo:
                         {proveedor, rut, tipo_anexo, archivo, estado, detalle}
+    total_adjuntos_licitacion : cantidad de documentos descargados en
+                        "Documentos Anexos" (etapa3, adjuntos de la licitación)
     """
     if log_detalle is None:
         log_detalle = []
@@ -95,10 +82,11 @@ def generar_resumen(
         sep,
         "  RESUMEN DESCARGA OFERTAS",
         sep,
-        f"  Licitacion   : {codigo}",
-        f"  Nombre       : {nombre}",
-        f"  Fecha        : {fecha}",
-        f"  Total ofertas: {len(proveedores)}",
+        f"  Licitacion         : {codigo}",
+        f"  Nombre             : {nombre}",
+        f"  Fecha              : {fecha}",
+        f"  Total ofertas      : {len(proveedores)}",
+        f"  Documentos Anexos  : {total_adjuntos_licitacion} archivo(s) (nivel licitación)",
         sep,
     ]
 
@@ -111,10 +99,9 @@ def generar_resumen(
     # ── Detalle por proveedor ────────────────────────────────────
     for p in proveedores:
         letra = p["letra"]
-        log_p = log.get(letra, {"ficha_ok": False, "admin": 0, "tec": 0, "econ": 0})
+        log_p = log.get(letra, {"admin": 0, "tec": 0, "econ": 0})
         rutas_p = rutas.get("proveedores", {}).get(letra, {})
 
-        ficha_estado = _estado_ficha(rutas_p.get("ficha", ""), log_p.get("ficha_ok", False))
         admin_estado = _estado_anexos(rutas_p.get("admin", ""), log_p.get("admin", 0))
         tec_estado   = _estado_anexos(rutas_p.get("tec",   ""), log_p.get("tec",   0))
         econ_estado  = _estado_anexos(rutas_p.get("econ",  ""), log_p.get("econ",  0))
@@ -125,7 +112,6 @@ def generar_resumen(
             f"    Oferta  : {p.get('oferta', '-')}",
             f"    Total   : {p.get('total', '-')}",
             f"    Estado  : {p.get('estado', '-')}",
-            f"    Ficha del Proveedor      : {ficha_estado}",
             f"    Anexos Administrativos   : {admin_estado}",
             f"    Anexos Tecnicos          : {tec_estado}",
             f"    Anexos Economicos        : {econ_estado}",
@@ -144,13 +130,6 @@ def generar_resumen(
                 )
 
     # ── Totales ──────────────────────────────────────────────────
-    total_fichas = sum(
-        1 for p in proveedores
-        if _estado_ficha(
-            rutas.get("proveedores", {}).get(p["letra"], {}).get("ficha", ""),
-            log.get(p["letra"], {}).get("ficha_ok", False)
-        ) == "Descargada"
-    )
     total_archivos = sum(
         _contar_archivos(rutas.get("proveedores", {}).get(p["letra"], {}).get("admin", "")) +
         _contar_archivos(rutas.get("proveedores", {}).get(p["letra"], {}).get("tec",   "")) +
@@ -164,8 +143,8 @@ def generar_resumen(
         sep,
         "  TOTALES",
         sep_m,
-        f"  Fichas descargadas  : {total_fichas} / {len(proveedores)}",
-        f"  Total anexos        : {total_archivos} archivo(s)",
+        f"  Documentos Anexos (licitación) : {total_adjuntos_licitacion} archivo(s)",
+        f"  Total anexos por proveedor     : {total_archivos} archivo(s)",
     ]
     if total_errores:
         lineas.append(f"  Archivos con error  : {total_errores} (ver detalle arriba)")
@@ -199,8 +178,8 @@ if __name__ == "__main__":
 
     with tempfile.TemporaryDirectory() as tmp:
         # Crear subcarpetas simuladas
-        for sub in ["ficha_a", "admin_a", "tec_a", "econ_a",
-                    "ficha_b", "admin_b", "tec_b", "econ_b"]:
+        for sub in ["Documentos Anexos", "admin_a", "tec_a", "econ_a",
+                    "admin_b", "tec_b", "econ_b"]:
             os.makedirs(os.path.join(tmp, sub), exist_ok=True)
         # Simular archivo descargado
         open(os.path.join(tmp, "admin_a", "ANEXO1.pdf"), "w").close()
@@ -216,25 +195,26 @@ if __name__ == "__main__":
         rutas = {
             "carpeta_principal": tmp,
             "resumen_txt": os.path.join(tmp, "resumen.txt"),
+            "documentos_anexos": os.path.join(tmp, "Documentos Anexos"),
             "proveedores": {
-                "a": {"raiz": tmp, "ficha": os.path.join(tmp, "ficha_a"),
+                "a": {"raiz": tmp,
                       "admin": os.path.join(tmp, "admin_a"),
                       "tec": os.path.join(tmp, "tec_a"),
                       "econ": os.path.join(tmp, "econ_a")},
-                "b": {"raiz": tmp, "ficha": os.path.join(tmp, "ficha_b"),
+                "b": {"raiz": tmp,
                       "admin": os.path.join(tmp, "admin_b"),
                       "tec": os.path.join(tmp, "tec_b"),
                       "econ": os.path.join(tmp, "econ_b")},
             }
         }
         log = {
-            "a": {"ficha_ok": True,  "admin": 1, "tec": 0, "econ": 0},
-            "b": {"ficha_ok": False, "admin": 0, "tec": 0, "econ": 0},
+            "a": {"admin": 1, "tec": 0, "econ": 0},
+            "b": {"admin": 0, "tec": 0, "econ": 0},
         }
 
         ruta = generar_resumen(tmp, os.path.join(tmp, "resumen.txt"),
                                "3447-243-L125", "Suministro de Flexibles",
-                               prov, rutas, log)
+                               prov, rutas, log, total_adjuntos_licitacion=3)
         print("\n--- CONTENIDO GENERADO ---")
         with open(ruta, encoding="utf-8") as f:
             print(f.read())

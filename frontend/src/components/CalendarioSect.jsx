@@ -145,6 +145,35 @@ export default function CalendarioSect() {
         }
     }, []);
 
+    // Descarga el ZIP ya generado en el servidor: se trae como blob y se
+    // guarda con un <a download> para que caiga en la carpeta de Descargas
+    // del navegador de quien hace clic, sin importar en qué máquina corre
+    // el servidor Django/Selenium.
+    const descargarZip = useCallback(async (codigo) => {
+        const descarga = descargas[codigo];
+        if (!descarga?.taskId) return;
+        try {
+            const { data } = await apiClient.get(
+                `licitaciones/descarga-archivo/${descarga.taskId}/`,
+                { responseType: 'blob' }
+            );
+            const nombreZip = (descarga.rutaZip || `${codigo}.zip`).split(/[\\/]/).pop();
+            const url = window.URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = nombreZip;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch {
+            setDescargas(prev => ({
+                ...prev,
+                [codigo]: { ...prev[codigo], error: 'No se pudo descargar el archivo ZIP.' },
+            }));
+        }
+    }, [descargas]);
+
     // Limpiar intervalos al desmontar
     useEffect(() => {
         return () => {
@@ -530,17 +559,28 @@ export default function CalendarioSect() {
                                                             </div>
                                                         ) : descarga.status === 'completado' ? (
                                                             <div style={{ fontSize: '10px', color: '#27ae60' }}>
-                                                                <div style={{ fontWeight: 700 }}>✓ Descarga completa</div>
-                                                                <div style={{
-                                                                    fontFamily: 'monospace', color: '#555',
-                                                                    wordBreak: 'break-all', marginTop: '2px',
-                                                                }}>
-                                                                    {descarga.rutaZip || descarga.rutaCarpeta}
-                                                                </div>
+                                                                <div style={{ fontWeight: 700 }}>✓ Listo en el servidor</div>
+                                                                {descarga.rutaZip ? (
+                                                                    <button
+                                                                        onClick={() => descargarZip(codigo)}
+                                                                        style={{
+                                                                            marginTop: '4px', fontSize: '10px', padding: '4px 12px',
+                                                                            background: '#27ae60', color: '#fff',
+                                                                            border: 'none', borderRadius: '4px',
+                                                                            cursor: 'pointer', fontWeight: 600,
+                                                                        }}
+                                                                    >
+                                                                        ⭳ Descargar ZIP
+                                                                    </button>
+                                                                ) : (
+                                                                    <div style={{ color: '#e67e22', marginTop: '2px' }}>
+                                                                        No se generó ZIP (revisa la carpeta en el servidor).
+                                                                    </div>
+                                                                )}
                                                                 <button
                                                                     onClick={() => iniciarDescarga(codigo)}
                                                                     style={{
-                                                                        marginTop: '4px', fontSize: '9px', padding: '2px 8px',
+                                                                        marginTop: '4px', marginLeft: '6px', fontSize: '9px', padding: '2px 8px',
                                                                         background: 'none', color: '#1a3d71',
                                                                         border: '1px solid #1a3d71', borderRadius: '3px',
                                                                         cursor: 'pointer',

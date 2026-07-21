@@ -3,6 +3,10 @@ import { Doughnut, Bar } from 'react-chartjs-2';
 import {
     Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend,
 } from 'chart.js';
+import TemporalidadMensual from './resumen/TemporalidadMensual';
+import PorSubdireccion from './resumen/PorSubdireccion';
+import ComparativaAnualMejorada from './resumen/ComparativaAnualMejorada';
+import TablaFormulariosPac from '../shared/TablaFormulariosPac';
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -31,7 +35,7 @@ function KpiCard({ label, value, sub, color }) {
     );
 }
 
-export default function ResumenTab({ dentroFuera }) {
+export default function ResumenTab({ dentroFuera, temporalidadMensual, resumenSubdireccion, serieMensual, anho }) {
     const kpis = dentroFuera?.kpis;
     const comparativa = dentroFuera?.comparativa_anual ?? [];
 
@@ -98,7 +102,7 @@ export default function ResumenTab({ dentroFuera }) {
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
                         📊 Distribución Dentro/Fuera PAC
                     </div>
-                    <div style={{ height: 240 }}>
+                    <div className="chart-box" style={{ height: 240 }}>
                         {donutData ? <Doughnut data={donutData} options={donutOptions} /> : (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: 12 }}>Sin datos.</div>
                         )}
@@ -109,7 +113,7 @@ export default function ResumenTab({ dentroFuera }) {
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
                         📅 Comparativa histórica — Dentro vs Fuera por año de derivación
                     </div>
-                    <div style={{ height: 240 }}>
+                    <div className="chart-box" style={{ height: 240 }}>
                         {barData ? <Bar data={barData} options={barOptions} /> : (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: 12 }}>Sin datos suficientes para graficar.</div>
                         )}
@@ -141,6 +145,11 @@ export default function ResumenTab({ dentroFuera }) {
                     </table>
                 </div>
             )}
+
+            <TemporalidadMensual data={temporalidadMensual} anho={anho} />
+            <PorSubdireccion data={resumenSubdireccion} />
+            <ComparativaAnualMejorada serie={serieMensual} />
+            <TablaFormulariosPac anho={anho} />
         </div>
     );
 }

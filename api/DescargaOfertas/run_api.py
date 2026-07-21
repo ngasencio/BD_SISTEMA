@@ -27,11 +27,11 @@ from etapa1_navegacion import (
     abrir_cuadro_ofertas,
     extraer_proveedores,
 )
-from etapa2_carpetas import crear_estructura
-from etapa3_ficha    import descargar_ficha
-from etapa4_anexos   import descargar_anexos_proveedor
-from etapa5_resumen  import generar_resumen
-from etapa6_fusion   import fusionar_anexos
+from etapa2_carpetas  import crear_carpeta_principal, crear_carpetas_proveedores
+from etapa3_adjuntos  import descargar_adjuntos_licitacion
+from etapa4_anexos    import descargar_anexos_proveedor
+from etapa5_resumen   import generar_resumen
+from etapa6_fusion    import fusionar_anexos
 
 
 def _crear_zip(carpeta: Path, zip_destino: Path) -> Path:
@@ -55,6 +55,18 @@ def run(codigo: str, carpeta_base: Path):
 
         nombre = obtener_nombre_licitacion(driver)
 
+        # Carpeta principal + Documentos Anexos, creada ANTES del cuadro de
+        # ofertas para poder descargar los adjuntos de la licitación.
+        rutas = crear_carpeta_principal(codigo, nombre, carpeta_base=carpeta_base)
+
+        # Documentos Anexos de la licitación ("Ver Adjuntos") — reemplaza la
+        # antigua descarga de "Ficha del Proveedor" (portal externo con
+        # errores de carga frecuentes).
+        total_adjuntos_lic = descargar_adjuntos_licitacion(
+            driver, rutas["documentos_anexos"]
+        )
+        print(f"[INFO] Documentos Anexos de la licitación: {total_adjuntos_lic}")
+
         if not abrir_cuadro_ofertas(driver):
             print("[ERROR] Esta licitación no tiene cuadro de ofertas público.", file=sys.stderr)
             sys.exit(1)
@@ -67,7 +79,9 @@ def run(codigo: str, carpeta_base: Path):
         print(f"[INFO] Licitación: {nombre}")
         print(f"[INFO] Proveedores encontrados: {len(proveedores)}")
 
-        rutas = crear_estructura(codigo, nombre, proveedores, carpeta_base=carpeta_base)
+        rutas["proveedores"] = crear_carpetas_proveedores(
+            rutas["carpeta_principal"], proveedores
+        )
 
         driver.switch_to.default_content()
         cuadro_handle = driver.current_window_handle
@@ -77,7 +91,7 @@ def run(codigo: str, carpeta_base: Path):
         for p in proveedores:
             letra   = p["letra"]
             rutas_p = rutas["proveedores"].get(letra, {})
-            log_dict[letra] = {"ficha_ok": False, "admin": 0, "tec": 0, "econ": 0}
+            log_dict[letra] = {"admin": 0, "tec": 0, "econ": 0}
 
             print(f"[INFO] Procesando proveedor [{letra.upper()}] {p['nombre']}")
 
@@ -94,28 +108,13 @@ def run(codigo: str, carpeta_base: Path):
                 except Exception:
                     pass
 
-            try:
-                driver.switch_to.window(cuadro_handle)
-                ok = descargar_ficha(
-                    driver,
-                    p["rut"],
-                    p["nombre"],
-                    rutas_p.get("ficha", "")
-                )
-                log_dict[letra]["ficha_ok"] = ok
-            except Exception as e:
-                print(f"[WARN] Error en ficha de [{letra.upper()}]: {e}")
-                try:
-                    driver.switch_to.window(cuadro_handle)
-                except Exception:
-                    pass
-
         generar_resumen(
             rutas["carpeta_principal"],
             rutas["resumen_txt"],
             codigo, nombre,
             proveedores, rutas, log_dict,
             log_detalle=log_lista,
+            total_adjuntos_licitacion=total_adjuntos_lic,
         )
 
         # Etapa 6: fusión de anexos — antes de crear el ZIP para que quede incluido

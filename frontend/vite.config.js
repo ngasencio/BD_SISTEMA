@@ -6,6 +6,6 @@ export default defineConfig({
   plugins: [react()],
   base: '/gestion-sso/',
   server: {
-    host: true
+    host: '10.8.153.227'
   }
 })

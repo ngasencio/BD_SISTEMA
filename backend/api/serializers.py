@@ -366,6 +366,7 @@ class FormularioFSCSerializer(serializers.ModelSerializer):
 
 class FormularioFSCDerivadoSerializer(serializers.ModelSerializer):
     id_formulario = serializers.SerializerMethodField()
+    sso_departamento_nombre = serializers.SerializerMethodField()
 
     class Meta:
         model = FormularioFSCDerivado
@@ -373,6 +374,12 @@ class FormularioFSCDerivadoSerializer(serializers.ModelSerializer):
 
     def get_id_formulario(self, obj):
         return generar_id_formulario(obj.folio, obj.anho, formulario_texto=obj.formulario)
+
+    def get_sso_departamento_nombre(self, obj):
+        # None → "Sin Clasificar" en el frontend (unidad_requirente sin match en Departamento,
+        # ver _clasificar_dentro_fuera_pac en page_data_panel.py) — expuesto para que el
+        # módulo PAC Cumplimiento pueda identificar y corregir la relación en la BD.
+        return obj.sso_departamento.descripcion if obj.sso_departamento_id else None
 
 
 class FormularioFSCProductoSerializer(serializers.ModelSerializer):

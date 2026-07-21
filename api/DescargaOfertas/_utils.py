@@ -1,7 +1,7 @@
 """
 =============================================================
   SCRAPER MERCADO PÚBLICO - UTILIDADES COMPARTIDAS
-  Funciones reutilizadas por etapa3_ficha.py y etapa4_anexos.py
+  Funciones reutilizadas por etapa3_adjuntos.py y etapa4_anexos.py
 =============================================================
 """
 

@@ -1,7 +1,7 @@
 """
 =============================================================
   SCRAPER MERCADO PÚBLICO - SCRIPT PRINCIPAL
-  Integra las 5 etapas del proceso de descarga de ofertas
+  Integra las 6 etapas del proceso de descarga de ofertas
 =============================================================
   Uso: python scraper_mp.py
   Ingresa el código de licitación cuando se solicite.
@@ -24,11 +24,11 @@ from etapa1_navegacion import (
     extraer_proveedores,
     mostrar_resumen_proveedores,
 )
-from etapa2_carpetas import crear_estructura
-from etapa3_ficha    import descargar_ficha
-from etapa4_anexos   import descargar_anexos_proveedor
-from etapa5_resumen  import generar_resumen
-from etapa6_fusion   import fusionar_anexos
+from etapa2_carpetas  import crear_carpeta_principal, crear_carpetas_proveedores
+from etapa3_adjuntos  import descargar_adjuntos_licitacion
+from etapa4_anexos    import descargar_anexos_proveedor
+from etapa5_resumen   import generar_resumen
+from etapa6_fusion    import fusionar_anexos
 
 
 # ─────────────────────────────────────────────
@@ -68,6 +68,20 @@ def main():
 
         nombre = obtener_nombre_licitacion(driver)
 
+        # ── ETAPA 2: Carpeta principal + Documentos Anexos ─────
+        # Se crea ANTES de abrir el Cuadro de Ofertas para poder descargar
+        # los adjuntos propios de la licitación (botón "Ver Adjuntos").
+        _banner("ETAPA 2 - Creando carpeta principal de la licitación")
+        rutas = crear_carpeta_principal(codigo, nombre)
+
+        # ── ETAPA 3: Documentos Anexos de la licitación ("Ver Adjuntos") ─
+        # Reemplaza la antigua descarga de "Ficha del Proveedor" (portal
+        # externo con errores de carga frecuentes).
+        _banner("ETAPA 3 - Descargando Documentos Anexos de la licitación")
+        total_adjuntos_lic = descargar_adjuntos_licitacion(
+            driver, rutas["documentos_anexos"]
+        )
+
         if not abrir_cuadro_ofertas(driver):
             print("[ERROR SIMPLE]  Esta licitación no tiene cuadro de ofertas público.")
             sys.exit(1)
@@ -79,31 +93,31 @@ def main():
 
         mostrar_resumen_proveedores(proveedores, codigo, nombre)
 
-        # ── ETAPA 2: Estructura de carpetas ────────────────────
-        _banner("ETAPA 2 - Creando estructura de carpetas")
-        rutas = crear_estructura(codigo, nombre, proveedores)
+        # ── Carpetas por proveedor (dentro de la carpeta ya creada) ─
+        rutas["proveedores"] = crear_carpetas_proveedores(
+            rutas["carpeta_principal"], proveedores
+        )
 
         # Guardar el handle de la ventana del cuadro de ofertas
         # IMPORTANTE: el cuadro vive en un frameset con frame 'Cuerpo'
         # Siempre volver a default_content antes de entrar a ese frame
         driver.switch_to.default_content()
         cuadro_handle = driver.current_window_handle
-        log_dict  = {}   # {letra: {ficha_ok, admin, tec, econ}}  → para resumen
-        log_lista = []   # lista de eventos detallados              → para etapa 4
+        log_dict  = {}   # {letra: {admin, tec, econ}}  → para resumen
+        log_lista = []   # lista de eventos detallados   → para etapa 4
 
-        # ── ETAPAS 3 y 4: Descargas por proveedor ─────────────
-        _banner("ETAPAS 3 y 4 - Descargando archivos por proveedor")
+        # ── ETAPA 4: Descargas de anexos por proveedor ─────────
+        _banner("ETAPA 4 - Descargando anexos por proveedor")
 
         for p in proveedores:
             letra   = p["letra"]
             rutas_p = rutas["proveedores"].get(letra, {})
-            log_dict[letra] = {"ficha_ok": False, "admin": 0, "tec": 0, "econ": 0}
+            log_dict[letra] = {"admin": 0, "tec": 0, "econ": 0}
 
             print(f"\n{'─' * 60}")
             print(f"  PROVEEDOR [{letra.upper()}] {p['rut']} - {p['nombre']}")
             print(f"{'─' * 60}")
 
-            # ─ Etapa 4: Anexos (desde la ventana del cuadro) ──
             try:
                 driver.switch_to.window(cuadro_handle)
                 conteo = descargar_anexos_proveedor(
@@ -119,23 +133,6 @@ def main():
                 except Exception:
                     pass
 
-            # ─ Etapa 3: Ficha del proveedor (nueva tab) ────────
-            try:
-                driver.switch_to.window(cuadro_handle)
-                ok = descargar_ficha(
-                    driver,
-                    p["rut"],
-                    p["nombre"],
-                    rutas_p.get("ficha", "")
-                )
-                log_dict[letra]["ficha_ok"] = ok
-            except Exception as e:
-                print(f"[WARN] Error en ficha de [{letra.upper()}]: {e}")
-                try:
-                    driver.switch_to.window(cuadro_handle)
-                except Exception:
-                    pass
-
         # ── ETAPA 5: Resumen ───────────────────────────────────
         _banner("ETAPA 5 - Generando resumen")
         generar_resumen(
@@ -144,6 +141,7 @@ def main():
             codigo, nombre,
             proveedores, rutas, log_dict,
             log_detalle=log_lista,
+            total_adjuntos_licitacion=total_adjuntos_lic,
         )
 
         # ── ETAPA 6: Fusión de anexos ──────────────────────────

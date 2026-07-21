@@ -10,7 +10,7 @@ import ReportesPanel from './tabs/ReportesPanel';
 const ANIOS = [2026, 2025, 2024, 2023];
 
 const TAB_TITLES = {
-    resumen:   { title: 'Cumplimiento PAC', subtitle: 'Dentro/Fuera del Plan Anual de Compras y comparativa histórica' },
+    resumen:   { title: 'Cumplimiento Interno PAC', subtitle: 'Dentro/Fuera del Plan Anual de Compras y comparativa histórica' },
     jerarquia: { title: 'Análisis Jerárquico', subtitle: 'Desglose por subdirección y departamento' },
     rankings:  { title: 'Rankings', subtitle: 'Mejores y peores departamentos / formularios' },
     temporal:  { title: 'Cumplimiento Temporal', subtitle: 'En fecha, atrasado y pendiente respecto a lo planificado' },
@@ -31,8 +31,11 @@ export default function PacCumplimientoPage() {
     const [anho, setAnho] = useState(2026);
     const [rankingTipo, setRankingTipo] = useState('depto');
 
-    const { dentroFuera, temporal, jerarquia, rankings, loading, error, refresh } =
-        usePacCumplimiento(anho, rankingTipo);
+    const {
+        dentroFuera, temporal, jerarquia, rankings,
+        temporalidadMensual, resumenSubdireccion, serieMensual,
+        loading, error, refresh,
+    } = usePacCumplimiento(anho, rankingTipo);
 
     const { title, subtitle } = TAB_TITLES[tab] ?? TAB_TITLES.resumen;
 
@@ -86,12 +89,20 @@ export default function PacCumplimientoPage() {
 
             {!loading && (
                 <>
-                    {tab === 'resumen' && <ResumenTab dentroFuera={dentroFuera} />}
-                    {tab === 'jerarquia' && <JerarquiaTab jerarquia={jerarquia} />}
-                    {tab === 'rankings' && (
-                        <RankingsTab rankings={rankings} rankingTipo={rankingTipo} onChangeTipo={setRankingTipo} />
+                    {tab === 'resumen' && (
+                        <ResumenTab
+                            dentroFuera={dentroFuera}
+                            temporalidadMensual={temporalidadMensual}
+                            resumenSubdireccion={resumenSubdireccion}
+                            serieMensual={serieMensual}
+                            anho={anho}
+                        />
                     )}
-                    {tab === 'temporal' && <CumplimientoTemporalTab temporal={temporal} />}
+                    {tab === 'jerarquia' && <JerarquiaTab jerarquia={jerarquia} anho={anho} />}
+                    {tab === 'rankings' && (
+                        <RankingsTab rankings={rankings} rankingTipo={rankingTipo} onChangeTipo={setRankingTipo} anho={anho} />
+                    )}
+                    {tab === 'temporal' && <CumplimientoTemporalTab temporal={temporal} anho={anho} />}
                     {tab === 'reportes' && <ReportesPanel />}
                 </>
             )}
