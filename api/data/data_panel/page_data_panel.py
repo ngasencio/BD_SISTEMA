@@ -25,6 +25,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 RUTA_PANEL = Path(__file__).parent.absolute()
 DOWNLOAD_DIR = RUTA_PANEL
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+DEBUG_DIR = RUTA_PANEL / "debug"
 
 URL_PANEL = "https://panel.ssosorno.cl/panel_documental/app/solicitudes_compras/abastecimiento/exportar.php"
 
@@ -78,6 +79,22 @@ def _esperar_descarga(directorio, archivos_antes, timeout=60):
     return nuevo
 
 
+def _guardar_debug(driver, etiqueta, _avisar=lambda **kw: None):
+    """Guarda screenshot + HTML de la página actual (sobrescribe por etiqueta) para
+    poder inspeccionar en qué pantalla quedó el navegador cuando algo falla — el
+    stacktrace crudo de chromedriver no dice si fue login, sesión caída, o un
+    cambio de estructura del panel."""
+    try:
+        DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+        png = DEBUG_DIR / f"{etiqueta}.png"
+        html = DEBUG_DIR / f"{etiqueta}.html"
+        driver.save_screenshot(str(png))
+        html.write_text(driver.page_source, encoding="utf-8")
+        _avisar(log=f"🩺 Debug guardado: {png.name} / {html.name} (URL actual: {driver.current_url})")
+    except Exception as exc:
+        _avisar(log=f"⚠️ No se pudo guardar debug de '{etiqueta}': {exc}")
+
+
 def descargar_reportes_panel(rut, dv, clave, progress_callback=None):
     """
     Inicia sesión en el Panel SS Osorno y descarga los 3 reportes FSC.
@@ -104,6 +121,16 @@ def descargar_reportes_panel(rut, dv, clave, progress_callback=None):
         driver.find_element(By.ID, "clave").send_keys(clave)
         driver.find_element(By.XPATH, "//button[contains(text(), 'Acceder')]").click()
         time.sleep(5)
+
+        # El panel no redirige a una URL distinta tras un login fallido — solo
+        # vuelve a renderizar el mismo formulario. Si el campo "rut" sigue presente,
+        # el login no avanzó (credenciales inválidas, clave vencida, etc.).
+        if driver.find_elements(By.ID, "rut"):
+            _guardar_debug(driver, "login_fallido", _avisar)
+            raise RuntimeError(
+                "El login al Panel SS Osorno no tuvo éxito — el formulario sigue visible tras "
+                "el intento de acceso. Verifique RUT/DV/clave (ver debug/login_fallido.png)."
+            )
 
         # 2. NAVEGAR A REPORTES
         _avisar(paso_desc="Accediendo al módulo de Reportes...", log="Navegando al menú de Reportes...")
@@ -139,7 +166,8 @@ def descargar_reportes_panel(rut, dv, clave, progress_callback=None):
                 else:
                     _avisar(log=f"⚠️ No se detectó la descarga de '{boton_id}'.")
             except Exception as exc:
-                _avisar(log=f"⚠️ Error con el botón '{boton_id}': {exc}")
+                _guardar_debug(driver, f"boton_{boton_id}_error", _avisar)
+                _avisar(log=f"⚠️ Error con el botón '{boton_id}' (URL: {driver.current_url}): {exc}")
 
         return archivos
     finally:
@@ -495,8 +523,13 @@ def _normalizar_texto(s):
 
 
 def _clasificar_dentro_fuera_pac(_avisar=lambda **kw: None):
-    """Módulo PAC — recalcula, para TODOS los FormularioFSCDerivado con id_plan:
-    (a) dentro_fuera_pac: existe id_plan en PacProyectoMaestro (id_proyecto) → DENTRO, si no → FUERA.
+    """Módulo PAC — recalcula, para TODOS los FormularioFSCDerivado:
+    (a) dentro_fuera_pac: existe id_plan en PacProyectoMaestro (id_proyecto) → DENTRO;
+        si tiene id_plan pero no está en el maestro, o si NO tiene id_plan (p.ej.
+        Compra Ágil sin proyecto PAC asociado) → FUERA. Un FSC sin id_plan nunca
+        referenció un proyecto PAC, así que por definición queda Fuera (decisión
+        confirmada con el usuario 2026-07-22 — antes quedaba NULL y se excluía en
+        silencio de todo el módulo, ~309 registros / 25% de la tabla).
     (b) sso_departamento: match normalizado de unidad_requirente contra descripcion/nombre_corto
         de Departamento (data_departamento, módulo Usuarios). Sin match → None
         ("Sin Clasificar" en el análisis, nunca se descarta).
@@ -520,17 +553,22 @@ def _clasificar_dentro_fuera_pac(_avisar=lambda **kw: None):
         if depto.nombre_corto:
             mapa_deptos.setdefault(_normalizar_texto(depto.nombre_corto), depto)
 
-    qs = FormularioFSCDerivado.objects.exclude(id_plan__isnull=True).exclude(id_plan="")
+    qs = FormularioFSCDerivado.objects.all()
     total = qs.count()
     if total == 0:
-        _avisar(log="Clasificación PAC: no hay formularios derivados con id_plan, nada que clasificar.")
+        _avisar(log="Clasificación PAC: no hay formularios derivados, nada que clasificar.")
         return
 
     actualizados = 0
     sin_clasificar = 0
     dentro = 0
+    sin_plan = 0
     for i, fsc in enumerate(qs.iterator(chunk_size=200)):
-        nuevo_estado = FormularioFSCDerivado.DENTRO if fsc.id_plan in ids_pac else FormularioFSCDerivado.FUERA
+        if fsc.id_plan:
+            nuevo_estado = FormularioFSCDerivado.DENTRO if fsc.id_plan in ids_pac else FormularioFSCDerivado.FUERA
+        else:
+            nuevo_estado = FormularioFSCDerivado.FUERA
+            sin_plan += 1
         depto = mapa_deptos.get(_normalizar_texto(fsc.unidad_requirente))
         if depto is None:
             sin_clasificar += 1
@@ -544,7 +582,8 @@ def _clasificar_dentro_fuera_pac(_avisar=lambda **kw: None):
             actualizados += 1
 
     _avisar(log=(
-        f"Clasificación PAC: {total} formularios evaluados, {dentro} Dentro / {total - dentro} Fuera, "
+        f"Clasificación PAC: {total} formularios evaluados, {dentro} Dentro / {total - dentro} Fuera "
+        f"({sin_plan} sin id_plan, clasificados Fuera por definición), "
         f"{sin_clasificar} sin depto reconocido ('Sin Clasificar'), {actualizados} filas actualizadas."
     ))
 

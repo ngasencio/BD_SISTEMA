@@ -2510,6 +2510,10 @@ _RUTA_CONTRATOS_EXCEL = (
     / "api" / "data" / "data_gestioncontratos" / "data_gestioncontratos"
 )
 
+_RUTA_DATA_GESTIONCONTRATOS = (
+    Path(__file__).parent.parent.parent / "api" / "data" / "data_gestioncontratos"
+)
+
 _COLUMNAS_CONTRATOS = [
     "numero_contrato", "nombre_contrato", "id_licitacion_oc",
     "rut_organismo", "nombre_organismo", "ejecucion_contrato",
@@ -2523,31 +2527,48 @@ _COLUMNAS_CONTRATOS = [
 
 
 def _ejecutar_actualizacion_contratos(task_id: str):
-    """Lee el Excel de contratos SSO y carga los datos en GestionContrato."""
+    """Descarga (Selenium) el Excel de contratos SSO desde Mercado Público y lo carga en GestionContrato."""
     import math
     import pandas as pd
     from django.db import transaction, close_old_connections
 
+    _tareas_actualizacion_contratos[task_id]["thread_id"] = threading.current_thread().ident
+
+    modulo_path = str(_RUTA_DATA_GESTIONCONTRATOS)
+    if modulo_path not in sys.path:
+        sys.path.insert(0, modulo_path)
+
+    logs = ["Iniciando actualización de contratos SSO..."]
+
+    def _cb(paso=None, paso_desc=None, progreso_pct=None, log=None):
+        upd = {}
+        if paso is not None:
+            upd["paso"] = paso
+        if paso_desc is not None:
+            upd["paso_desc"] = paso_desc
+        if progreso_pct is not None:
+            upd["progreso_pct"] = progreso_pct
+        if log:
+            logs.append(log)
+            upd["logs_recientes"] = logs[-30:]
+        if upd:
+            _tareas_actualizacion_contratos[task_id].update(**upd)
+
     try:
         _tareas_actualizacion_contratos[task_id].update(
-            status="en_proceso", paso=1,
-            paso_desc="Buscando archivo Excel de contratos...",
-            logs_recientes=["Iniciando carga de contratos SSO..."],
+            status="en_proceso", paso=1, progreso_pct=0,
+            paso_desc="Descargando contratos desde Mercado Público...",
+            logs_recientes=logs,
         )
 
-        archivos = list(_RUTA_CONTRATOS_EXCEL.glob("*.xls*"))
-        if not archivos:
-            raise FileNotFoundError(
-                f"No se encontró ningún archivo Excel en:\n{_RUTA_CONTRATOS_EXCEL}\n"
-                "Descarga primero el archivo desde Mercado Público."
-            )
+        import descargar_contratos_sso_selenium as contratos_etl
 
-        archivo = max(archivos, key=lambda f: f.stat().st_mtime)
-        logs = [f"Archivo encontrado: {archivo.name}"]
+        archivo = contratos_etl.descargar_archivo(progress_callback=_cb)
+
+        logs.append(f"Archivo descargado: {archivo.name}")
         _tareas_actualizacion_contratos[task_id].update(
-            paso_desc=f"Leyendo {archivo.name}...",
-            logs_recientes=logs,
-            archivo_nombre=archivo.name,
+            paso=2, paso_desc=f"Leyendo {archivo.name}...",
+            progreso_pct=75, logs_recientes=logs, archivo_nombre=archivo.name,
         )
 
         tablas = pd.read_html(str(archivo), encoding="utf-8")
@@ -2571,8 +2592,8 @@ def _ejecutar_actualizacion_contratos(task_id: str):
         total = len(df)
         logs.append(f"{total} contratos leídos con {len(df.columns)} columnas.")
         _tareas_actualizacion_contratos[task_id].update(
-            paso=2, paso_desc=f"Procesando {total} contratos...",
-            total_registros=total, logs_recientes=logs,
+            paso=3, paso_desc=f"Procesando {total} contratos...",
+            total_registros=total, logs_recientes=logs, progreso_pct=85,
         )
 
         cols_int = [
@@ -2634,8 +2655,8 @@ def _ejecutar_actualizacion_contratos(task_id: str):
 
         logs.append("Cargando en base de datos (eliminar + insertar)...")
         _tareas_actualizacion_contratos[task_id].update(
-            paso=3, paso_desc="Cargando en base de datos...",
-            logs_recientes=logs,
+            paso=4, paso_desc="Cargando en base de datos...",
+            logs_recientes=logs, progreso_pct=95,
         )
 
         close_old_connections()
@@ -2643,9 +2664,9 @@ def _ejecutar_actualizacion_contratos(task_id: str):
             GestionContrato.objects.all().delete()
             GestionContrato.objects.bulk_create(registros, batch_size=500)
 
-        logs.append(f"✅ {len(registros)} contratos cargados exitosamente.")
+        logs.append(f"{len(registros)} contratos cargados exitosamente.")
         _tareas_actualizacion_contratos[task_id].update(
-            status="completado", paso=4,
+            status="completado", paso=5,
             paso_desc=f"Completado: {len(registros)} contratos cargados.",
             total_cargados=len(registros),
             logs_recientes=logs,
@@ -2654,14 +2675,14 @@ def _ejecutar_actualizacion_contratos(task_id: str):
 
     except Exception as exc:
         _tareas_actualizacion_contratos[task_id].update(
-            status="error", error=str(exc)
+            status="error", error=str(exc), logs_recientes=logs[-30:],
         )
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def iniciar_actualizacion_contratos(request):
-    """Inicia la carga de contratos SSO desde el Excel descargado."""
+    """Inicia la descarga (Selenium) y carga de contratos SSO desde Mercado Público."""
     for tarea in _tareas_actualizacion_contratos.values():
         if tarea.get("status") in ("iniciado", "en_proceso"):
             return Response({"error": "Ya hay una actualización en curso."}, status=409)

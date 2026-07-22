@@ -28,7 +28,7 @@ URL_BASE       = "https://www.mercadopublico.cl/Contratos/Ciudadania"
 INSTITUCION    = "SERVICIO DE SALUD OSORNO"
 DATA_CODE      = "7296"
 CARPETA_SALIDA = Path(__file__).parent / "data_gestioncontratos"
-HEADLESS       = False
+HEADLESS       = True
 WAIT_TIMEOUT   = 30
 WAIT_DESCARGA  = 60
 
@@ -95,8 +95,15 @@ def crear_driver(carpeta_descarga: Path) -> webdriver.Chrome:
     return driver
 
 
-def esperar_descarga(carpeta: Path, timeout: int = WAIT_DESCARGA) -> Path:
-    print("[→] Esperando que el archivo se descargue …")
+def _log_consola(paso=None, paso_desc=None, progreso_pct=None, log=None):
+    """Callback por defecto quando se ejecuta el script standalone (CLI)."""
+    if log:
+        print(log)
+
+
+def esperar_descarga(carpeta: Path, timeout: int = WAIT_DESCARGA, progress_callback=None) -> Path:
+    _avisar = progress_callback or _log_consola
+    _avisar(log="Esperando que el archivo se descargue …")
     inicio = time.time()
     while time.time() - inicio < timeout:
         xlsx_files = [f for f in carpeta.glob("*.xls*") if f.suffix != ".crdownload"]
@@ -107,52 +114,65 @@ def esperar_descarga(carpeta: Path, timeout: int = WAIT_DESCARGA) -> Path:
     raise TimeoutError(f"El archivo no se descargó en {timeout} segundos.")
 
 
-def descargar_archivo() -> None:
+def descargar_archivo(progress_callback=None) -> Path:
+    """Descarga el Excel de contratos SSO desde Mercado Público.
+
+    Retorna la ruta del archivo descargado (renombrado con la fecha del día).
+    Si se pasa `progress_callback(paso=None, paso_desc=None, progreso_pct=None, log=None)`,
+    se usa para reportar avance en vez de `print()` — evita errores de encoding cp1252
+    cuando se ejecuta headless desde un hilo del servidor Django en Windows.
+    """
+    _avisar = progress_callback or _log_consola
+
     CARPETA_SALIDA.mkdir(parents=True, exist_ok=True)
-    print(f"[✓] Carpeta de destino: {CARPETA_SALIDA.resolve()}")
+    _avisar(log=f"Carpeta de destino: {CARPETA_SALIDA.resolve()}")
 
     driver = crear_driver(CARPETA_SALIDA)
     wait   = WebDriverWait(driver, WAIT_TIMEOUT)
 
     try:
-        print(f"[→] Abriendo {URL_BASE} …")
+        _avisar(paso_desc="Abriendo Mercado Público...", progreso_pct=10, log=f"Abriendo {URL_BASE} …")
         driver.get(URL_BASE)
-        print("[✓] Página cargada.")
+        _avisar(log="Página cargada.")
 
-        print("[→] Haciendo clic en 'Revisar contrato por institución pública' …")
+        _avisar(paso_desc="Buscando institución...", progreso_pct=20,
+                log="Haciendo clic en 'Revisar contrato por institución pública' …")
         bloque = wait.until(EC.element_to_be_clickable((By.ID, "byins")))
         bloque.click()
 
-        print(f"[→] Ingresando '{INSTITUCION}' …")
+        _avisar(log=f"Ingresando '{INSTITUCION}' …")
         input_nombre = wait.until(EC.visibility_of_element_located((By.ID, "txtNombreIns")))
         input_nombre.clear()
         input_nombre.send_keys(INSTITUCION)
 
-        print("[→] Buscando …")
+        _avisar(progreso_pct=30, log="Buscando …")
         btn_buscar = wait.until(EC.element_to_be_clickable((By.ID, "btnBuscarNombreInstitucion")))
         btn_buscar.click()
 
-        print("[→] Esperando resultados …")
+        _avisar(paso_desc="Seleccionando institución en resultados...", progreso_pct=40,
+                log="Esperando resultados …")
         selector_css = f'span.lnkBusqueda[data-code="{DATA_CODE}"]'
         resultado = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector_css)))
-        print(f"[✓] Seleccionando: {resultado.text}")
+        _avisar(log=f"Seleccionando: {resultado.text}")
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", resultado)
         time.sleep(0.5)
         driver.execute_script("arguments[0].click();", resultado)
 
-        print("[→] Esperando vista de contratos …")
+        _avisar(paso_desc="Cargando vista de contratos...", progreso_pct=50,
+                log="Esperando vista de contratos …")
         btn_excel = wait.until(EC.element_to_be_clickable((By.ID, "excel-contrato")))
-        print("[✓] Botón 'Exportar como archivo Excel' visible.")
+        _avisar(log="Botón 'Exportar como archivo Excel' visible.")
 
         # Eliminar archivo anterior antes de descargar
         for viejo in CARPETA_SALIDA.glob("*.xls*"):
             viejo.unlink()
-            print(f"[✓] Archivo anterior eliminado: {viejo.name}")
+            _avisar(log=f"Archivo anterior eliminado: {viejo.name}")
 
-        print("[→] Iniciando descarga del Excel …")
+        _avisar(paso_desc="Descargando Excel de contratos...", progreso_pct=60,
+                log="Iniciando descarga del Excel …")
         btn_excel.click()
 
-        archivo = esperar_descarga(CARPETA_SALIDA)
+        archivo = esperar_descarga(CARPETA_SALIDA, progress_callback=progress_callback)
 
         # Renombrar con fecha (sin hora) para nombre limpio
         fecha_hoy  = time.strftime("%Y%m%d")
@@ -165,17 +185,17 @@ def descargar_archivo() -> None:
 
         archivo.rename(nombre_final)
 
-        print()
-        print("=" * 55)
-        print("  ✅  DESCARGA EXITOSA")
-        print("=" * 55)
-        print(f"  Archivo : {nombre_final.name}")
-        print(f"  Ruta    : {nombre_final.resolve()}")
-        print(f"  Tamaño  : {nombre_final.stat().st_size:,} bytes")
-        print("=" * 55)
+        _avisar(
+            paso_desc="Descarga completada.", progreso_pct=70,
+            log=(
+                f"Descarga exitosa: {nombre_final.name} "
+                f"({nombre_final.stat().st_size:,} bytes)"
+            ),
+        )
+        return nombre_final
 
     except Exception as exc:
-        print(f"\n[✗] ERROR: {exc}")
+        _avisar(log=f"ERROR en la descarga: {exc}")
         raise
 
     finally:

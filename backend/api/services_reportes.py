@@ -380,10 +380,18 @@ def _datos_informe_completo(periodo):
 
     dentro_fuera = calcular_pac_dentro_fuera_stats(fecha_desde=desde_iso, fecha_hasta=hasta_iso)
     comparativa_periodos = calcular_pac_comparativa_periodos(periodo)
-    temporal = calcular_pac_cumplimiento_temporal(fecha_desde=desde_iso, fecha_hasta=hasta_iso)
-    jerarquia_fsc = calcular_pac_jerarquia(fecha_desde=desde_iso, fecha_hasta=hasta_iso)
-    rankings_depto = calcular_pac_rankings(fecha_desde=desde_iso, fecha_hasta=hasta_iso, tipo='depto')
-    rankings_formulario = calcular_pac_rankings(fecha_desde=desde_iso, fecha_hasta=hasta_iso, tipo='formulario')
+    # `anho=anho` es obligatorio acá aunque fecha_desde/fecha_hasta ya acoten el período: las
+    # 3 funciones de abajo usan `anho` para escoger los eventos planificados de PlanerPAC
+    # contra los que se compara "% en fecha" (`_eventos_planificados_por_proyecto`). Sin
+    # `anho`, ese universo de eventos queda SIN filtrar por año (todo el histórico PC20-PC26+
+    # en vez de solo el año del período), dando un "% en fecha"/score de ranking distinto al
+    # que muestra el dashboard interactivo para el mismo filtro — bug real encontrado en
+    # revisión de código 2026-07-22, coherente con cómo la vista del dashboard SÍ pasa `anho`
+    # (ver `pac_cumplimiento_temporal_view` en views.py).
+    temporal = calcular_pac_cumplimiento_temporal(anho=anho, fecha_desde=desde_iso, fecha_hasta=hasta_iso)
+    jerarquia_fsc = calcular_pac_jerarquia(anho=anho, fecha_desde=desde_iso, fecha_hasta=hasta_iso)
+    rankings_depto = calcular_pac_rankings(anho=anho, fecha_desde=desde_iso, fecha_hasta=hasta_iso, tipo='depto')
+    rankings_formulario = calcular_pac_rankings(anho=anho, fecha_desde=desde_iso, fecha_hasta=hasta_iso, tipo='formulario')
     resumen_subdireccion = calcular_pac_resumen_subdireccion(anho)
     temporalidad_mensual = calcular_pac_temporalidad_mensual(anho)
 
@@ -404,6 +412,7 @@ def _datos_informe_completo(periodo):
     monto_total_fichas = sum(f['monto_total'] or 0 for f in fichas)
 
     subdirecciones = _combinar_subdirecciones(jerarquia_fsc, jerarquia_planer, fichas)
+    avance_trimestral = _avance_trimestral(periodo, temporalidad_mensual, temporal_mensual_planer)
 
     return {
         'periodo': periodo, 'label': label, 'anho': anho, 'anho_anterior': anho - 1, 'hoy': hoy,
@@ -418,6 +427,41 @@ def _datos_informe_completo(periodo):
         'pct_ejecutado_fichas': round(ejecutados_fichas / total_fichas * 100, 1) if total_fichas else 0,
         'monto_total_fichas': monto_total_fichas,
         'subdirecciones': subdirecciones,
+        'avance_trimestral': avance_trimestral,
+    }
+
+
+def _avance_trimestral(periodo, temporalidad_mensual, temporal_mensual_planer):
+    """Si `periodo` es un trimestre ('YYYY-QN'), arma el avance MES A MES de los 3
+    meses que lo componen (Dentro/Fuera PAC + Ejecución del Plan de Compras) — pedido
+    explícito del usuario 2026-07-22 ("cuando seleccione trimestral, mostrar avance
+    trimestral, para ver su mejora y cómo vamos cumpliendo"). Reutiliza las series de
+    12 meses que YA calcula `_datos_informe_completo` (`calcular_pac_temporalidad_mensual`/
+    `calcular_pac_temporal_mensual_planer`), solo filtrando a los 3 meses del trimestre
+    — no agrega ninguna consulta nueva a la BD. Se aplica a cualquier trimestre (Q1-Q4),
+    no solo a Q2/Q3 (los ejemplos que dio el usuario) — no hay razón para mostrar la
+    evolución interna solo en algunos trimestres y no en otros. Retorna `None` si
+    `periodo` es mensual (un solo mes no tiene "avance interno" que mostrar)."""
+    periodo = periodo.upper()
+    if 'Q' not in periodo:
+        return None
+    _, q_str = periodo.split('-Q')
+    trimestre = int(q_str)
+    mes_ini = (trimestre - 1) * 3 + 1
+    meses_trimestre = {mes_ini, mes_ini + 1, mes_ini + 2}
+
+    meses_fsc = [m for m in temporalidad_mensual['meses'] if m['mes'] in meses_trimestre]
+    meses_planer = [m for m in temporal_mensual_planer['meses'] if m['mes'] in meses_trimestre]
+
+    pct_dentro_validos = [m['pct_dentro'] for m in meses_fsc if m['pct_dentro'] is not None and m['total']]
+    variacion_pct_dentro = round(pct_dentro_validos[-1] - pct_dentro_validos[0], 1) if len(pct_dentro_validos) >= 2 else None
+
+    pct_ejecutado_validos = [m['pct_ejecutado'] for m in meses_planer if m['total']]
+    variacion_pct_ejecutado = round(pct_ejecutado_validos[-1] - pct_ejecutado_validos[0], 1) if len(pct_ejecutado_validos) >= 2 else None
+
+    return {
+        'trimestre': trimestre, 'meses_fsc': meses_fsc, 'meses_planer': meses_planer,
+        'variacion_pct_dentro': variacion_pct_dentro, 'variacion_pct_ejecutado': variacion_pct_ejecutado,
     }
 
 
@@ -699,6 +743,27 @@ _PARRAFOS_METODOLOGIA = [
 ]
 
 
+def _tabla_avance_trimestral_docx(doc, avance):
+    """Tabla mes a mes del trimestre — % Dentro PAC y % Ejecutado del Plan de Compras,
+    para visualizar la mejora dentro del propio trimestre (pedido 2026-07-22)."""
+    meses_fsc_por_mes = {m['mes']: m for m in avance['meses_fsc']}
+    meses_planer_por_mes = {m['mes']: m for m in avance['meses_planer']}
+    meses_ids = sorted(set(meses_fsc_por_mes) | set(meses_planer_por_mes))
+
+    tabla = doc.add_table(rows=1, cols=5)
+    tabla.style = 'Light Grid Accent 1'
+    for i, h in enumerate(['Mes', 'Formularios', '% Dentro PAC', 'Fichas Plan Compras', '% Ejecutado']):
+        tabla.rows[0].cells[i].text = h
+    for mes_id in meses_ids:
+        mf, mp = meses_fsc_por_mes.get(mes_id), meses_planer_por_mes.get(mes_id)
+        fila = tabla.add_row().cells
+        fila[0].text = (mf or mp)['nombre_mes']
+        fila[1].text = str(mf['total']) if mf else '—'
+        fila[2].text = f"{mf['pct_dentro']}%" if mf and mf['total'] else '—'
+        fila[3].text = str(mp['total']) if mp else '—'
+        fila[4].text = f"{mp['pct_ejecutado']}%" if mp and mp['total'] else '—'
+
+
 def _mejor_peor_de_ranking(rankings_depto, nombre_sub):
     mejor = next((f for f in rankings_depto['mejores'] if f['subdireccion'] == nombre_sub), None)
     peor = next((f for f in rankings_depto['peores'] if f['subdireccion'] == nombre_sub), None)
@@ -758,6 +823,38 @@ def generar_informe_word(periodo):
         )
         run.italic = True
         run.font.size = Pt(9)
+
+    if d['avance_trimestral']:
+        av = d['avance_trimestral']
+        _titulo_seccion_docx(doc, f'Avance Trimestral — {label}')
+        doc.add_paragraph(
+            f'Detalle mes a mes de los 3 meses que componen el {label}, para visualizar la mejora o '
+            'retroceso dentro del propio trimestre — complementario a la comparación anual del Gráfico 3.'
+        )
+        img = grafico_evolucion_mensual_dentro_fuera(av['meses_fsc'], anho, anho_ant, titulo=f'Avance mensual — {label}')
+        if img:
+            doc.add_picture(img, width=Inches(5.6))
+            cap = doc.add_paragraph()
+            texto_var = (
+                f'variación de {av["variacion_pct_dentro"]:+.1f} p.p. entre el primer y el último mes del trimestre'
+                if av['variacion_pct_dentro'] is not None else 'sin datos suficientes para calcular variación interna'
+            )
+            run = cap.add_run(f'Gráfico 3b — % Dentro PAC mes a mes dentro del {label} ({texto_var}).')
+            run.italic = True
+            run.font.size = Pt(9)
+        img = grafico_barras_ejecucion_mensual_planer(av['meses_planer'], titulo=f'Ejecución Plan de Compras — {label}')
+        if img:
+            doc.add_picture(img, width=Inches(5.6))
+            cap = doc.add_paragraph()
+            texto_var = (
+                f'variación de {av["variacion_pct_ejecutado"]:+.1f} p.p. entre el primer y el último mes'
+                if av['variacion_pct_ejecutado'] is not None else 'sin datos suficientes para calcular variación interna'
+            )
+            run = cap.add_run(f'Gráfico 3c — % Ejecutado del Plan de Compras mes a mes dentro del {label} ({texto_var}).')
+            run.italic = True
+            run.font.size = Pt(9)
+        _tabla_avance_trimestral_docx(doc, av)
+
     doc.add_page_break()
 
     _titulo_seccion_docx(doc, 'Cumplimiento Dentro/Fuera del PAC por Subdirección')
@@ -1071,6 +1168,28 @@ def _pdf_tabla_fichas_pac(filas, limite=25):
     return tabla
 
 
+def _pdf_tabla_avance_trimestral(avance):
+    """Tabla mes a mes del trimestre — misma lógica que `_tabla_avance_trimestral_docx`
+    (Word), en formato reportlab con celdas `Paragraph` (sin desborde de texto)."""
+    meses_fsc_por_mes = {m['mes']: m for m in avance['meses_fsc']}
+    meses_planer_por_mes = {m['mes']: m for m in avance['meses_planer']}
+    meses_ids = sorted(set(meses_fsc_por_mes) | set(meses_planer_por_mes))
+
+    tabla_filas = [_fila_encabezado(['Mes', 'Formularios', '% Dentro PAC', 'Fichas Plan Compras', '% Ejecutado'])]
+    for mes_id in meses_ids:
+        mf, mp = meses_fsc_por_mes.get(mes_id), meses_planer_por_mes.get(mes_id)
+        tabla_filas.append([
+            (mf or mp)['nombre_mes'],
+            str(mf['total']) if mf else '—',
+            f"{mf['pct_dentro']}%" if mf and mf['total'] else '—',
+            str(mp['total']) if mp else '—',
+            f"{mp['pct_ejecutado']}%" if mp and mp['total'] else '—',
+        ])
+    tabla = Table(tabla_filas, colWidths=[1 * inch, 1.1 * inch, 1.1 * inch, 1.3 * inch, 1.1 * inch], repeatRows=1)
+    tabla.setStyle(_PDF_TABLA_ESTILO)
+    return tabla
+
+
 def _pdf_tabla_proyectos_sin_iniciar(proyectos, limite=30):
     tabla_filas = [_fila_encabezado(['ID Proyecto', 'Fecha Planificada', 'Estado'])]
     for p in proyectos[:limite]:
@@ -1188,6 +1307,32 @@ def generar_reporte_pdf(periodo):
             f'Gráfico 3 — Evolución mensual {anho} (barras) comparada contra el % Dentro del PAC de {anho_ant} '
             '(línea punteada).', est['Leyenda'],
         ))
+
+    if d['avance_trimestral']:
+        av = d['avance_trimestral']
+        story.append(Paragraph(f'Avance Trimestral — {label}', est['TituloSeccion']))
+        story.append(Paragraph(
+            f'Detalle mes a mes de los 3 meses que componen el {label}, para visualizar la mejora o retroceso '
+            'dentro del propio trimestre — complementario a la comparación anual del Gráfico 3.', est['Cuerpo'],
+        ))
+        img = _pdf_imagen(grafico_evolucion_mensual_dentro_fuera(av['meses_fsc'], anho, anho_ant, titulo=f'Avance mensual — {label}'), 5.6, 2.6)
+        if img:
+            story.append(img)
+            texto_var = (
+                f'variación de {av["variacion_pct_dentro"]:+.1f} p.p. entre el primer y el último mes del trimestre'
+                if av['variacion_pct_dentro'] is not None else 'sin datos suficientes para calcular variación interna'
+            )
+            story.append(Paragraph(f'Gráfico 3b — % Dentro PAC mes a mes dentro del {label} ({texto_var}).', est['Leyenda']))
+        img = _pdf_imagen(grafico_barras_ejecucion_mensual_planer(av['meses_planer'], titulo=f'Ejecución Plan de Compras — {label}'), 5.6, 2.6)
+        if img:
+            story.append(img)
+            texto_var = (
+                f'variación de {av["variacion_pct_ejecutado"]:+.1f} p.p. entre el primer y el último mes'
+                if av['variacion_pct_ejecutado'] is not None else 'sin datos suficientes para calcular variación interna'
+            )
+            story.append(Paragraph(f'Gráfico 3c — % Ejecutado del Plan de Compras mes a mes dentro del {label} ({texto_var}).', est['Leyenda']))
+        story.append(_pdf_tabla_avance_trimestral(av))
+
     story.append(PageBreak())
 
     story.append(Paragraph('Cumplimiento Dentro/Fuera del PAC por Subdirección', est['TituloSeccion']))
@@ -1643,6 +1788,7 @@ def generar_presentacion_ppt(periodo):
     agenda = [
         'Resumen Ejecutivo Institucional',
         'Comparativa Histórica y Evolución Mensual',
+        *([f'Avance Trimestral — {label}'] if d['avance_trimestral'] else []),
         'Ejecución del Plan Anual de Compras',
         'Resumen General por Subdirección',
         *[f'Detalle — {_nombre_subdireccion_display(s["nombre"])}' for s in subdirecciones_institucionales],
@@ -1690,6 +1836,28 @@ def generar_presentacion_ppt(periodo):
         slide = _ppt_slide_en_blanco(prs)
         _ppt_titulo(slide, f'Evolución Mensual {anho} vs {anho_ant}')
         _ppt_imagen(slide, img_evol, PptxInches(0.8), PptxInches(1.2), PptxInches(8.4))
+
+    # --- Avance Trimestral (solo si el período es un trimestre) --------------
+    if d['avance_trimestral']:
+        av = d['avance_trimestral']
+        slide = _ppt_slide_en_blanco(prs)
+        _ppt_titulo(slide, f'Avance Trimestral — {label}')
+        texto_var_dentro = (
+            f'{av["variacion_pct_dentro"]:+.1f} p.p.' if av['variacion_pct_dentro'] is not None else 'sin datos suficientes'
+        )
+        texto_var_ejec = (
+            f'{av["variacion_pct_ejecutado"]:+.1f} p.p.' if av['variacion_pct_ejecutado'] is not None else 'sin datos suficientes'
+        )
+        _ppt_parrafo(
+            slide,
+            f'Variación % Dentro PAC dentro del trimestre: {texto_var_dentro}   ·   '
+            f'Variación % Ejecutado del Plan de Compras: {texto_var_ejec}',
+            top=PptxInches(1.05), tamano=13, height=PptxInches(0.6),
+        )
+        img_av_fsc = grafico_evolucion_mensual_dentro_fuera(av['meses_fsc'], anho, anho_ant, titulo=f'% Dentro PAC — {label}')
+        _ppt_imagen(slide, img_av_fsc, PptxInches(0.3), PptxInches(1.8), PptxInches(4.7))
+        img_av_planer = grafico_barras_ejecucion_mensual_planer(av['meses_planer'], titulo=f'Ejecución — {label}')
+        _ppt_imagen(slide, img_av_planer, PptxInches(5.1), PptxInches(1.8), PptxInches(4.7))
 
     # --- Ejecución del Plan de Compras ---------------------------------------
     slide = _ppt_slide_en_blanco(prs)

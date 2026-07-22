@@ -32,6 +32,9 @@ api/data/data_devengo/descargas_sigfe/
 api/data/data_devengo/debug_html/
 api/data/data_devengo/backup_tabla_devengo/
 
+# Debug de fallos del ETL Panel SSO (screenshots + HTML, se sobrescriben en cada corrida)
+api/data/data_panel/debug/
+
 # Logs y archivos temporales de desarrollo
 *.log
 backend/run_err.txt

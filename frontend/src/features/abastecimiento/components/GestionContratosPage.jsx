@@ -159,7 +159,7 @@ export function GestionContratosPage() {
                         }}
                     >
                         {enProceso ? '⚙️' : '🔄'}
-                        {enProceso ? 'Cargando...' : 'Actualizar desde Excel'}
+                        {enProceso ? 'Cargando...' : 'Actualizar desde Mercado Público'}
                     </button>
                 </div>
             </div>
