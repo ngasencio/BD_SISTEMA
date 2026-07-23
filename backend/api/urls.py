@@ -47,6 +47,7 @@ from .views import (
     pac_temporal_mensual_planer_view, pac_jerarquia_planer_view,
     pac_cumplimiento_actualizar_maestro, pac_cumplimiento_actualizar_jerarquia,
     pac_cumplimiento_reporte_word, pac_cumplimiento_reporte_ppt, pac_cumplimiento_reporte_pdf,
+    pac_indicadores_reporte_word, pac_indicadores_reporte_ppt, pac_indicadores_reporte_pdf,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -197,6 +198,9 @@ urlpatterns = [
     path('pac-cumplimiento/reporte/word/', pac_cumplimiento_reporte_word, name='pac_cumplimiento_reporte_word'),
     path('pac-cumplimiento/reporte/ppt/', pac_cumplimiento_reporte_ppt, name='pac_cumplimiento_reporte_ppt'),
     path('pac-cumplimiento/reporte/pdf/', pac_cumplimiento_reporte_pdf, name='pac_cumplimiento_reporte_pdf'),
+    path('pac/reporte/word/', pac_indicadores_reporte_word, name='pac_indicadores_reporte_word'),
+    path('pac/reporte/ppt/', pac_indicadores_reporte_ppt, name='pac_indicadores_reporte_ppt'),
+    path('pac/reporte/pdf/', pac_indicadores_reporte_pdf, name='pac_indicadores_reporte_pdf'),
 
     # Router ViewSets
     path('', include(router.urls)),

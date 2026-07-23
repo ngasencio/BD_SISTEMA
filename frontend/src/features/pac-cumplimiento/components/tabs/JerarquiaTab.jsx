@@ -1,4 +1,5 @@
-import { useState, useMemo, Fragment } from 'react';
+import { useState, useRef, useMemo, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import TablaFormulariosPac from '../shared/TablaFormulariosPac';
 
 const TABLA_FORMULARIOS_ID = 'jerarquia-tabla-formularios';
@@ -41,22 +42,47 @@ const colorPct = (pct) => (pct == null ? '#94a3b8' : pct >= 70 ? '#15803d' : pct
 // (services.py: "if d['total'] < 3: continue") para no destacar un 100%/0% con 1 solo formulario.
 const MUESTRA_MINIMA = 3;
 
+const TOOLTIP_ANCHO = 300;
+
+// Portal a document.body: las filas de la tabla viven dentro de un contenedor
+// con overflowX:'auto' (que por spec CSS también clippea el eje Y) y celdas con
+// overflow:'hidden' para el truncado del nombre — una nube position:absolute ahí
+// adentro queda cortada o tapada por filas vecinas. Calculando la posición real
+// del ícono con getBoundingClientRect() y pintando con position:fixed fuera del
+// árbol de la tabla, la nube nunca se recorta ni se superpone con otras filas.
 function InfoTooltip({ text }) {
-    const [show, setShow] = useState(false);
+    const [coords, setCoords] = useState(null);
+    const ref = useRef(null);
+
+    const mostrar = () => {
+        const r = ref.current?.getBoundingClientRect();
+        if (!r) return;
+        const margen = TOOLTIP_ANCHO / 2 + 8;
+        const left = Math.min(Math.max(r.left + r.width / 2, margen), window.innerWidth - margen);
+        const arriba = r.top > 90; // si está muy pegado al borde superior, la mostramos debajo
+        setCoords({ left, top: arriba ? r.top - 8 : r.bottom + 8, arriba });
+    };
+    const ocultar = () => setCoords(null);
+
     return (
-        <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
-              onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
-            <span style={{ cursor: 'help', color: '#94a3b8', fontSize: 12, marginLeft: 4 }}>ⓘ</span>
-            {show && (
+        <span
+            ref={ref}
+            style={{ cursor: 'help', color: '#94a3b8', fontSize: 12, marginLeft: 4, display: 'inline-block' }}
+            onMouseEnter={mostrar} onMouseLeave={ocultar}
+        >
+            ⓘ
+            {coords && createPortal(
                 <span style={{
-                    position: 'absolute', bottom: '130%', left: '50%', transform: 'translateX(-50%)',
+                    position: 'fixed', top: coords.top, left: coords.left,
+                    transform: coords.arriba ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
                     background: '#1e293b', color: '#f8fafc', fontSize: 11, padding: '8px 12px',
-                    borderRadius: 7, whiteSpace: 'pre-wrap', minWidth: 210, maxWidth: 300,
-                    width: 'max-content', textAlign: 'left', zIndex: 200, lineHeight: 1.7,
+                    borderRadius: 7, whiteSpace: 'pre-wrap', minWidth: 210, maxWidth: TOOLTIP_ANCHO,
+                    width: 'max-content', textAlign: 'left', zIndex: 9999, lineHeight: 1.7,
                     boxShadow: '0 6px 20px rgba(0,0,0,.28)', pointerEvents: 'none',
                 }}>
                     {text}
-                </span>
+                </span>,
+                document.body,
             )}
         </span>
     );

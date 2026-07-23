@@ -1,37 +1,40 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { usePacDashboard } from '../hooks/usePacDashboard';
-import IndicadoresRes188Tab from './tabs/IndicadoresRes188Tab';
-import InformePDFTab from './tabs/InformePDFTab';
+import ResumenIndicadoresTab from './tabs/ResumenIndicadoresTab';
+import OrdenesCompraTab from './tabs/OrdenesCompraTab';
+import ReportesTab from './tabs/ReportesTab';
 
 const ANIOS = [2024, 2025, 2026];
 
-const TAB_TITLES = {
-    indicadores: { title: 'Indicadores Res.188', subtitle: 'Cumplimiento regulatorio · Resolución Exenta N°188/2026' },
-    informe:     { title: 'Informe PDF', subtitle: 'Reporte consolidado para impresión' },
-};
+const TABS = [
+    { key: 'resumen', label: '📊 Resumen' },
+    { key: 'oc', label: '🧾 Órdenes de Compra' },
+    { key: 'reportes', label: '📥 Reportes' },
+];
 
 export default function PacDashboardPage() {
     const [searchParams, setSearchParams] = useSearchParams();
-    const tab = searchParams.get('tab') || 'indicadores';
+    const tab = searchParams.get('tab') || 'resumen';
     const [anio, setAnio] = useState(2026);
 
-    const { indicadores, ocStats, caResumen, loading, error, refresh } = usePacDashboard(anio);
+    const { indicadores, ocStats, loading, error, refresh } = usePacDashboard(anio);
 
-    const { title, subtitle } = TAB_TITLES[tab] ?? TAB_TITLES.indicadores;
+    const irATab = (key) => setSearchParams({ tab: key });
 
     return (
         <div className="feature-page">
-            <div className="page-header no-print">
+            <div className="pac-page-hero">
+                <div className="pac-page-hero-icon">📅</div>
                 <div>
-                    <div className="page-title">{title} {anio}</div>
-                    <div className="page-subtitle">{subtitle}</div>
+                    <div className="pac-page-hero-title">Gestión PAC {anio} · Indicadores Res.188</div>
+                    <div className="pac-page-hero-sub">Organismo 7296 · Servicio de Salud Osorno</div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="pac-page-hero-actions no-print">
                     <select
                         value={anio}
                         onChange={(e) => setAnio(Number(e.target.value))}
-                        style={{ border: '1.5px solid #c8d3de', borderRadius: 7, padding: '5px 10px', fontSize: 13, fontFamily: 'Inter, sans-serif' }}
+                        className="pac-page-hero-select"
                     >
                         {ANIOS.map((a) => <option key={a} value={a}>{a}</option>)}
                     </select>
@@ -41,8 +44,20 @@ export default function PacDashboardPage() {
                 </div>
             </div>
 
+            <div style={{ display: 'flex', gap: 8, marginBottom: 18, borderBottom: '1px solid #e2e8f0' }}>
+                {TABS.map((t) => (
+                    <button
+                        key={t.key}
+                        className={`tab-btn ${tab === t.key ? 'active' : ''}`}
+                        onClick={() => irATab(t.key)}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+
             {error && (
-                <div className="alert alert-error no-print" style={{ marginBottom: 16 }}>
+                <div className="alert alert-warning" style={{ marginBottom: 16 }}>
                     ⚠️ {error}
                 </div>
             )}
@@ -56,12 +71,9 @@ export default function PacDashboardPage() {
 
             {!loading && (
                 <>
-                    {tab === 'indicadores' && (
-                        <IndicadoresRes188Tab indicadores={indicadores} caResumen={caResumen} />
-                    )}
-                    {tab === 'informe' && (
-                        <InformePDFTab indicadores={indicadores} ocStats={ocStats} anio={anio} />
-                    )}
+                    {tab === 'resumen' && <ResumenIndicadoresTab indicadores={indicadores} anio={anio} />}
+                    {tab === 'oc' && <OrdenesCompraTab indicadores={indicadores} ocStats={ocStats} anio={anio} />}
+                    {tab === 'reportes' && <ReportesTab />}
                 </>
             )}
         </div>

@@ -17,6 +17,7 @@ rojo=Fuera/Atrasado, ámbar=Pendiente, gris=Sin dato).
 """
 import io
 import os
+from collections import defaultdict
 from datetime import date
 
 import matplotlib
@@ -91,6 +92,41 @@ def _nombre_subdireccion_display(nombre):
     if not nombre:
         return nombre
     return _NOMBRES_DISPLAY_SUBDIRECCION.get(nombre.upper(), nombre.title())
+
+
+_ORDEN_SUBDIRECCIONES_INSTITUCIONALES = [
+    'DIRECTOR', 'SUBDIRECCION DE GESTION ASISTENCIAL',
+    'SUBDIRECCION ADMINISTRATIVA', 'SUBDIRECCION DE GESTION Y DESARROLLO DE LAS PERSONAS',
+]
+
+
+def _agrupar_por_subdireccion(items, campo='subdireccion_nombre'):
+    """Agrupa una lista plana de fichas/proyectos por nombre de subdirección — usado
+    por 'Alertas y Seguimiento' para que 'Fichas a ejecutar el próximo mes', 'Fichas
+    atrasadas' y 'Proyectos sin iniciar' se lean por subdirección en vez de una sola
+    tabla mezclada (pedido del usuario 2026-07-23, para mayor claridad). Orden: las 4
+    subdirecciones institucionales primero (orden fijo), luego otras ramas de la red
+    en alfabético, 'Sin Clasificar' siempre al final."""
+    por_nombre = defaultdict(list)
+    for item in items:
+        por_nombre[item.get(campo) or 'Sin Clasificar'].append(item)
+
+    def _orden(nombre):
+        if nombre == 'Sin Clasificar':
+            return (2, nombre)
+        if nombre in _ORDEN_SUBDIRECCIONES_INSTITUCIONALES:
+            return (0, _ORDEN_SUBDIRECCIONES_INSTITUCIONALES.index(nombre))
+        return (1, nombre)
+
+    return [
+        {'nombre': nombre, 'nombre_display': _nombre_subdireccion_display(nombre), 'items': por_nombre[nombre]}
+        for nombre in sorted(por_nombre, key=_orden)
+    ]
+
+
+def _total_items_grupos(grupos):
+    return sum(len(g['items']) for g in grupos)
+
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _LOGO_PATH = os.path.join(_BASE_DIR, 'frontend', 'public', 'logo.jpg')
@@ -370,6 +406,7 @@ def _datos_informe_completo(periodo):
         calcular_pac_cumplimiento_temporal, calcular_pac_jerarquia, calcular_pac_rankings,
         calcular_pac_resumen_subdireccion, calcular_pac_temporalidad_mensual,
         calcular_pac_jerarquia_planer, calcular_pac_temporal_mensual_planer,
+        calcular_pac_detalle_fsc_por_subdireccion,
         _calcular_fichas_pac_completo, _rango_fechas_periodo,
     )
 
@@ -398,6 +435,12 @@ def _datos_informe_completo(periodo):
     fichas = _calcular_fichas_pac_completo(anho=anho)
     jerarquia_planer = calcular_pac_jerarquia_planer(anho)
     temporal_mensual_planer = calcular_pac_temporal_mensual_planer(anho)
+    # Detalle FSC individual por subdirección (folio, unidad, monto, fecha) — complementa
+    # `jerarquia_fsc` (que solo agrega por departamento) para poder listar, dentro del
+    # capítulo de cada subdirección, CON QUÉ formularios concretos se compone su cifra.
+    detalle_fsc_subdireccion = calcular_pac_detalle_fsc_por_subdireccion(
+        anho=anho, fecha_desde=desde_iso, fecha_hasta=hasta_iso,
+    )
 
     hoy = date.today()
     anho_prox, mes_prox = (hoy.year, hoy.month + 1) if hoy.month < 12 else (hoy.year + 1, 1)
@@ -411,7 +454,17 @@ def _datos_informe_completo(periodo):
     ejecutados_fichas = sum(1 for f in fichas if f['estado_ejecucion'] == 'EJECUTADO')
     monto_total_fichas = sum(f['monto_total'] or 0 for f in fichas)
 
-    subdirecciones = _combinar_subdirecciones(jerarquia_fsc, jerarquia_planer, fichas)
+    # `proyectos_sin_iniciar` (calcular_pac_cumplimiento_temporal) solo trae id_proyecto/fecha —
+    # se enriquece acá con nombre y subdirección (ya calculados en `fichas`) para que Alertas y
+    # Seguimiento pueda mostrar el nombre del proyecto y agruparlo por subdirección, sin tocar
+    # el contrato de esa función (también la consume el dashboard interactivo).
+    fichas_por_id_proyecto = {f['id_proyecto']: f for f in fichas}
+    for p in temporal['proyectos_sin_iniciar']:
+        ficha_ref = fichas_por_id_proyecto.get(p['id_proyecto'])
+        p['nombre_proyecto'] = ficha_ref['nombre_proyecto'] if ficha_ref else None
+        p['subdireccion_nombre'] = ficha_ref['subdireccion_nombre'] if ficha_ref else None
+
+    subdirecciones = _combinar_subdirecciones(jerarquia_fsc, jerarquia_planer, fichas, detalle_fsc_subdireccion)
     avance_trimestral = _avance_trimestral(periodo, temporalidad_mensual, temporal_mensual_planer)
 
     return {
@@ -422,7 +475,9 @@ def _datos_informe_completo(periodo):
         'resumen_subdireccion': resumen_subdireccion, 'temporalidad_mensual': temporalidad_mensual,
         'fichas': fichas, 'jerarquia_planer': jerarquia_planer,
         'temporal_mensual_planer': temporal_mensual_planer,
-        'proximo_mes': proximo_mes, 'atrasadas': atrasadas,
+        'proximo_mes': _agrupar_por_subdireccion(proximo_mes),
+        'atrasadas': _agrupar_por_subdireccion(atrasadas),
+        'proyectos_sin_iniciar': _agrupar_por_subdireccion(temporal['proyectos_sin_iniciar']),
         'total_fichas': total_fichas, 'ejecutados_fichas': ejecutados_fichas,
         'pct_ejecutado_fichas': round(ejecutados_fichas / total_fichas * 100, 1) if total_fichas else 0,
         'monto_total_fichas': monto_total_fichas,
@@ -465,22 +520,30 @@ def _avance_trimestral(periodo, temporalidad_mensual, temporal_mensual_planer):
     }
 
 
-def _combinar_subdirecciones(jerarquia_fsc, jerarquia_planer, fichas):
+def _combinar_subdirecciones(jerarquia_fsc, jerarquia_planer, fichas, detalle_fsc_subdireccion=None):
     """Combina el árbol de Jerarquía FSC (Dentro/Fuera + cumplimiento temporal) con
     el árbol de Ejecución PAC (Fichas) por NOMBRE de subdirección, para que el
     informe tenga UN capítulo por subdirección con ambas vistas — decisión del
     usuario 2026-07-21 ('un solo reporte unificado, capítulos por subdirección').
     Las 2 fuentes son deliberadamente independientes en el resto del sistema (ver
     docstrings de `calcular_pac_jerarquia`/`calcular_pac_jerarquia_planer`) — acá
-    solo se juntan para efectos de presentación del informe, no se cruzan datos."""
+    solo se juntan para efectos de presentación del informe, no se cruzan datos.
+
+    `formularios_detalle`/`fichas_detalle`: listas planas (no agregadas por depto)
+    para el detalle a nivel de FSC/proyecto individual dentro de cada capítulo —
+    pedido 2026-07-23 para que el informe diga con claridad CON QUÉ formularios
+    concretos se compone cada cifra, no solo el rollup por departamento."""
+    detalle_fsc_subdireccion = detalle_fsc_subdireccion or {}
     fsc_por_nombre = {s['nombre']: s for s in jerarquia_fsc['subdirecciones']}
     planer_por_nombre = {s['nombre']: s for s in jerarquia_planer['subdirecciones']}
     nombres = list(dict.fromkeys(list(fsc_por_nombre.keys()) + list(planer_por_nombre.keys())))
 
     responsables_por_sub = {}
+    fichas_por_sub = defaultdict(list)
     for f in fichas:
         if f['nombre_responsable'] and f['subdireccion_nombre']:
             responsables_por_sub.setdefault(f['subdireccion_nombre'], set()).add(f['nombre_responsable'])
+        fichas_por_sub[f['subdireccion_nombre'] or 'Sin Clasificar'].append(f)
 
     combinado = [{
         'nombre': nombre,
@@ -488,6 +551,8 @@ def _combinar_subdirecciones(jerarquia_fsc, jerarquia_planer, fichas):
         'planer': planer_por_nombre.get(nombre),
         'responsables': sorted(responsables_por_sub.get(nombre, [])),
         'institucional': nombre in NOMBRES_SUBDIRECCIONES_INSTITUCIONALES,
+        'formularios_detalle': detalle_fsc_subdireccion.get(nombre, []),
+        'fichas_detalle': fichas_por_sub.get(nombre, []),
     } for nombre in nombres]
 
     combinado.sort(key=lambda s: (s['nombre'] == 'Sin Clasificar', not s['institucional'], s['nombre']))
@@ -624,6 +689,23 @@ def _titulo_seccion_docx(doc, texto):
     return h
 
 
+def _agregar_grafico_docx(doc, img, width, texto_caption):
+    """Inserta un gráfico centrado con su leyenda (también centrada) debajo.
+    `Document.add_picture()` crea un párrafo nuevo pero NO lo centra — a diferencia
+    del patrón ya usado en la portada (`_agregar_portada_docx`), dejando los ~10
+    gráficos del informe pegados al margen izquierdo en vez de centrados. Se
+    centraliza acá para que todos los gráficos del documento luzcan parejos."""
+    p_img = doc.add_paragraph()
+    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_img.add_run().add_picture(img, width=width)
+    cap = doc.add_paragraph()
+    cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = cap.add_run(texto_caption)
+    run.italic = True
+    run.font.size = Pt(9)
+    run.font.color.rgb = RGBColor(0x94, 0xa3, 0xb8)
+
+
 # =============================================================================
 # Word — tablas
 # =============================================================================
@@ -701,23 +783,108 @@ def _tabla_resumen_subdireccion(doc, filas, anho, anho_anterior):
 
 
 def _tabla_fichas_pac_docx(doc, filas, limite=40):
-    tabla = doc.add_table(rows=1, cols=5)
+    tabla = doc.add_table(rows=1, cols=6)
     tabla.style = 'Light Grid Accent 1'
-    for i, h in enumerate(['ID Proyecto', 'Departamento', 'Responsable', 'Fecha Compra', 'Estado']):
+    for i, h in enumerate(['ID Proyecto', 'Proyecto', 'Departamento', 'Responsable', 'Fecha Compra', 'Estado']):
         tabla.rows[0].cells[i].text = h
     for f in filas[:limite]:
         fila = tabla.add_row().cells
         fila[0].text = f['id_proyecto']
-        fila[1].text = _truncar(f['depto_nombre'] or f['depto_texto'], 45)
-        fila[2].text = _truncar(f['nombre_responsable'], 30)
-        fila[3].text = f['fecha_mas_proxima'] or '—'
-        fila[4].text = f['estado_ejecucion']
+        fila[1].text = _truncar(f.get('nombre_proyecto') or '—', 45)
+        fila[2].text = _truncar(f['depto_nombre'] or f['depto_texto'], 38)
+        fila[3].text = _truncar(f['nombre_responsable'], 26)
+        fila[4].text = f['fecha_mas_proxima'] or '—'
+        fila[5].text = f['estado_ejecucion']
     if len(filas) > limite:
         p = doc.add_paragraph()
         run = p.add_run(f'… y {len(filas) - limite} ficha(s) adicional(es) — ver detalle completo en el dashboard interactivo.')
         run.italic = True
         run.font.size = Pt(9)
         run.font.color.rgb = RGBColor(0x94, 0xa3, 0xb8)
+
+
+def _tabla_proyectos_sin_iniciar_docx(doc, proyectos, limite=30):
+    tabla = doc.add_table(rows=1, cols=4)
+    tabla.style = 'Light Grid Accent 1'
+    for i, h in enumerate(['ID Proyecto', 'Proyecto', 'Fecha Planificada', 'Estado']):
+        tabla.rows[0].cells[i].text = h
+    for p in proyectos[:limite]:
+        fila = tabla.add_row().cells
+        fila[0].text = p['id_proyecto']
+        fila[1].text = _truncar(p.get('nombre_proyecto') or '—', 50)
+        fila[2].text = p['fecha_inicio_compra']
+        fila[3].text = 'Pendiente' if p['estado'] == 'PENDIENTE' else 'Atrasado'
+    if len(proyectos) > limite:
+        p_nota = doc.add_paragraph()
+        run = p_nota.add_run(f'… y {len(proyectos) - limite} proyecto(s) adicional(es).')
+        run.italic = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = RGBColor(0x94, 0xa3, 0xb8)
+
+
+def _tabla_formularios_detalle_docx(doc, formularios, limite=30):
+    """Detalle a nivel de CADA FSC individual (folio, unidad, monto) dentro del
+    capítulo de una subdirección — complementa la tabla agregada por departamento
+    para que el informe muestre con qué formularios concretos se compone la cifra."""
+    tabla = doc.add_table(rows=1, cols=5)
+    tabla.style = 'Light Grid Accent 1'
+    for i, h in enumerate(['Formulario', 'Unidad Requirente', 'Dentro/Fuera', 'Monto', 'Fecha Derivado']):
+        tabla.rows[0].cells[i].text = h
+    for f in formularios[:limite]:
+        fila = tabla.add_row().cells
+        fila[0].text = f['id_formulario'] or f"{f['folio']}/{f['anho']}"
+        fila[1].text = _truncar(f['unidad_requirente'], 45)
+        fila[2].text = 'Dentro' if f['dentro_fuera_pac'] == 'DENTRO' else 'Fuera'
+        fila[3].text = _money(f['monto_estimado'])
+        fila[4].text = f['fecha_derivado'] or '—'
+    if len(formularios) > limite:
+        p = doc.add_paragraph()
+        run = p.add_run(f'… y {len(formularios) - limite} formulario(s) adicional(es) — ver detalle completo en el dashboard interactivo.')
+        run.italic = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = RGBColor(0x94, 0xa3, 0xb8)
+
+
+def _tabla_fichas_ejecucion_detalle_docx(doc, fichas, limite=30):
+    """Detalle a nivel de CADA proyecto/ficha del Plan de Compras dentro del capítulo
+    de una subdirección, incluyendo CON QUÉ formulario(s) concreto(s) se ejecutó —
+    pedido explícito 2026-07-23 ('hablar con claridad con qué FSC se ejecutaron
+    los proyectos')."""
+    tabla = doc.add_table(rows=1, cols=5)
+    tabla.style = 'Light Grid Accent 1'
+    for i, h in enumerate(['ID Proyecto', 'Proyecto', 'Departamento', 'Estado', 'Ejecutado con (Formulario)']):
+        tabla.rows[0].cells[i].text = h
+    for f in fichas[:limite]:
+        fila = tabla.add_row().cells
+        fila[0].text = f['id_proyecto']
+        fila[1].text = _truncar(f['nombre_proyecto'] or '—', 42)
+        fila[2].text = _truncar(f['depto_nombre'] or f['depto_texto'], 34)
+        fila[3].text = f['estado_ejecucion']
+        ejecutores = f.get('formularios_ejecutores') or []
+        fila[4].text = ', '.join(fx['id_formulario'] or f"{fx['folio']}/{fx['anho']}" for fx in ejecutores) if ejecutores else '—'
+    if len(fichas) > limite:
+        p = doc.add_paragraph()
+        run = p.add_run(f'… y {len(fichas) - limite} proyecto(s) adicional(es) — ver detalle completo en el dashboard interactivo.')
+        run.italic = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = RGBColor(0x94, 0xa3, 0xb8)
+
+
+def _render_grupos_subdireccion_docx(doc, grupos, tabla_fn, mensaje_vacio):
+    """Renderiza una lista de grupos `{'nombre_display', 'items'}` (ver
+    `_agrupar_por_subdireccion`) con un sub-encabezado por subdirección y su propia
+    tabla — usado por Alertas y Seguimiento (2026-07-23) para que cada lista se lea
+    por subdirección en vez de una sola tabla institucional mezclada."""
+    if not grupos:
+        doc.add_paragraph(mensaje_vacio)
+        return
+    for grupo in grupos:
+        p = doc.add_paragraph()
+        run = p.add_run(f'{grupo["nombre_display"]} ({_n(len(grupo["items"]))})')
+        run.bold = True
+        run.font.size = Pt(10.5)
+        run.font.color.rgb = RGBColor(0x38, 0x6f, 0xc9)
+        tabla_fn(doc, grupo['items'])
 
 
 _PARRAFOS_METODOLOGIA = [
@@ -799,30 +966,19 @@ def generar_informe_word(periodo):
 
     img = grafico_donut_dentro_fuera(d['dentro_fuera']['kpis']['pct_dentro'])
     if img:
-        doc.add_picture(img, width=Inches(2.8))
-        cap = doc.add_paragraph()
-        run = cap.add_run('Gráfico 1 — Distribución de formularios Dentro/Fuera del PAC en el período.')
-        run.italic = True
-        run.font.size = Pt(9)
+        _agregar_grafico_docx(doc, img, Inches(2.8), 'Gráfico 1 — Distribución de formularios Dentro/Fuera del PAC en el período.')
 
     img = grafico_barras_comparativa_anual(d['dentro_fuera']['comparativa_anual'])
     if img:
-        doc.add_picture(img, width=Inches(5.6))
-        cap = doc.add_paragraph()
-        run = cap.add_run('Gráfico 2 — Comparativa histórica anual de formularios Dentro/Fuera del PAC.')
-        run.italic = True
-        run.font.size = Pt(9)
+        _agregar_grafico_docx(doc, img, Inches(5.6), 'Gráfico 2 — Comparativa histórica anual de formularios Dentro/Fuera del PAC.')
 
     img = grafico_evolucion_mensual_dentro_fuera(d['temporalidad_mensual']['meses'], anho, anho_ant)
     if img:
-        doc.add_picture(img, width=Inches(5.8))
-        cap = doc.add_paragraph()
-        run = cap.add_run(
+        _agregar_grafico_docx(
+            doc, img, Inches(5.8),
             f'Gráfico 3 — Evolución mensual {anho} (barras) comparada contra el % Dentro del PAC de {anho_ant} '
-            '(línea punteada), para visualizar la tendencia mes a mes respecto al año anterior.'
+            '(línea punteada), para visualizar la tendencia mes a mes respecto al año anterior.',
         )
-        run.italic = True
-        run.font.size = Pt(9)
 
     if d['avance_trimestral']:
         av = d['avance_trimestral']
@@ -833,26 +989,18 @@ def generar_informe_word(periodo):
         )
         img = grafico_evolucion_mensual_dentro_fuera(av['meses_fsc'], anho, anho_ant, titulo=f'Avance mensual — {label}')
         if img:
-            doc.add_picture(img, width=Inches(5.6))
-            cap = doc.add_paragraph()
             texto_var = (
                 f'variación de {av["variacion_pct_dentro"]:+.1f} p.p. entre el primer y el último mes del trimestre'
                 if av['variacion_pct_dentro'] is not None else 'sin datos suficientes para calcular variación interna'
             )
-            run = cap.add_run(f'Gráfico 3b — % Dentro PAC mes a mes dentro del {label} ({texto_var}).')
-            run.italic = True
-            run.font.size = Pt(9)
+            _agregar_grafico_docx(doc, img, Inches(5.6), f'Gráfico 3b — % Dentro PAC mes a mes dentro del {label} ({texto_var}).')
         img = grafico_barras_ejecucion_mensual_planer(av['meses_planer'], titulo=f'Ejecución Plan de Compras — {label}')
         if img:
-            doc.add_picture(img, width=Inches(5.6))
-            cap = doc.add_paragraph()
             texto_var = (
                 f'variación de {av["variacion_pct_ejecutado"]:+.1f} p.p. entre el primer y el último mes'
                 if av['variacion_pct_ejecutado'] is not None else 'sin datos suficientes para calcular variación interna'
             )
-            run = cap.add_run(f'Gráfico 3c — % Ejecutado del Plan de Compras mes a mes dentro del {label} ({texto_var}).')
-            run.italic = True
-            run.font.size = Pt(9)
+            _agregar_grafico_docx(doc, img, Inches(5.6), f'Gráfico 3c — % Ejecutado del Plan de Compras mes a mes dentro del {label} ({texto_var}).')
         _tabla_avance_trimestral_docx(doc, av)
 
     doc.add_page_break()
@@ -867,19 +1015,11 @@ def generar_informe_word(periodo):
         _tabla_resumen_subdireccion(doc, d['resumen_subdireccion']['subdirecciones'], anho, anho_ant)
     img = grafico_donut_cumplimiento_temporal(d['temporal']['kpis'])
     if img:
-        doc.add_picture(img, width=Inches(3.4))
-        cap = doc.add_paragraph()
-        run = cap.add_run('Gráfico 4 — Cumplimiento temporal: formularios Dentro del PAC evaluados contra su fecha planificada.')
-        run.italic = True
-        run.font.size = Pt(9)
+        _agregar_grafico_docx(doc, img, Inches(3.4), 'Gráfico 4 — Cumplimiento temporal: formularios Dentro del PAC evaluados contra su fecha planificada.')
 
     img = grafico_barras_ejecucion_mensual_planer(d['temporal_mensual_planer']['meses'])
     if img:
-        doc.add_picture(img, width=Inches(5.8))
-        cap = doc.add_paragraph()
-        run = cap.add_run(f'Gráfico 5 — Ejecución mensual del Plan de Compras {anho} (fichas Ejecutadas/Pendientes/Atrasadas).')
-        run.italic = True
-        run.font.size = Pt(9)
+        _agregar_grafico_docx(doc, img, Inches(5.8), f'Gráfico 5 — Ejecución mensual del Plan de Compras {anho} (fichas Ejecutadas/Pendientes/Atrasadas).')
     doc.add_page_break()
 
     # --- Metodología ----------------------------------------------------------
@@ -893,7 +1033,8 @@ def generar_informe_word(periodo):
     otras_ramas = [s for s in d['subdirecciones'] if not s['institucional']]
 
     for sub in subs_institucionales:
-        _titulo_capitulo_docx(doc, _nombre_subdireccion_display(sub['nombre']))
+        nombre_display = _nombre_subdireccion_display(sub['nombre'])
+        _titulo_capitulo_docx(doc, nombre_display)
 
         _titulo_seccion_docx(doc, f'Formularios de Solicitud de Compra — Período {label}')
         if sub['fsc'] and sub['fsc']['total']:
@@ -901,6 +1042,23 @@ def generar_informe_word(periodo):
             doc.add_paragraph(parrafo_capitulo_subdireccion(sub['nombre'], sub['fsc'], mejor_rk, peor_rk))
             if sub['fsc']['departamentos']:
                 _tabla_departamentos(doc, sub['fsc']['departamentos'])
+
+            img = grafico_donut_dentro_fuera(sub['fsc']['pct_dentro'], titulo=f'{nombre_display} — Dentro/Fuera PAC')
+            if img:
+                _agregar_grafico_docx(
+                    doc, img, Inches(2.6),
+                    f'Distribución de los {_n(sub["fsc"]["total"])} formularios de {nombre_display} entre Dentro '
+                    'y Fuera del PAC durante el período.',
+                )
+
+            if sub['formularios_detalle']:
+                p_intro = doc.add_paragraph()
+                run = p_intro.add_run(
+                    f'Detalle de los {_n(len(sub["formularios_detalle"]))} formularios individuales de '
+                    f'{nombre_display} en el período:'
+                )
+                run.font.size = Pt(9.5)
+                _tabla_formularios_detalle_docx(doc, sub['formularios_detalle'])
         else:
             doc.add_paragraph('Sin formularios registrados en el período para esta subdirección.')
 
@@ -919,6 +1077,24 @@ def generar_informe_word(periodo):
                 run = p_resp.add_run('Responsables: ' + ', '.join(sub['responsables']))
                 run.font.size = Pt(9.5)
                 run.font.color.rgb = RGBColor(0x47, 0x55, 0x69)
+
+            img = grafico_donut_ejecucion_planer(
+                p['ejecutados'], p['pendientes'], p['atrasados'], titulo=f'{nombre_display} — Ejecución del Plan de Compras',
+            )
+            if img:
+                _agregar_grafico_docx(
+                    doc, img, Inches(3.0),
+                    f'Estado de ejecución de los {_n(p["total"])} proyectos del Plan de Compras {anho} de {nombre_display}.',
+                )
+
+            if sub['fichas_detalle']:
+                p_intro = doc.add_paragraph()
+                run = p_intro.add_run(
+                    f'Detalle de los {_n(len(sub["fichas_detalle"]))} proyectos del Plan de Compras {anho} de '
+                    f'{nombre_display}, indicando con qué formulario(s) se ejecutó cada uno:'
+                )
+                run.font.size = Pt(9.5)
+                _tabla_fichas_ejecucion_detalle_docx(doc, sub['fichas_detalle'])
         else:
             doc.add_paragraph('Sin fichas del Plan de Compras registradas para esta subdirección.')
         doc.add_page_break()
@@ -955,33 +1131,27 @@ def generar_informe_word(periodo):
 
     # --- Alertas y Seguimiento ----------------------------------------------
     _titulo_capitulo_docx(doc, 'Alertas y Seguimiento')
+    doc.add_paragraph(
+        'Las secciones siguientes se agrupan por subdirección institucional para facilitar el '
+        'seguimiento y la coordinación con cada responsable.'
+    )
     _titulo_seccion_docx(doc, 'Proyectos planificados sin ningún formulario Dentro PAC derivado todavía')
-    if d['temporal']['proyectos_sin_iniciar']:
-        tabla = doc.add_table(rows=1, cols=3)
-        tabla.style = 'Light Grid Accent 1'
-        for i, h in enumerate(['ID Proyecto', 'Fecha Planificada', 'Estado']):
-            tabla.rows[0].cells[i].text = h
-        for p in d['temporal']['proyectos_sin_iniciar'][:30]:
-            fila = tabla.add_row().cells
-            fila[0].text = p['id_proyecto']
-            fila[1].text = p['fecha_inicio_compra']
-            fila[2].text = 'Pendiente' if p['estado'] == 'PENDIENTE' else 'Atrasado'
-    else:
-        doc.add_paragraph('No hay proyectos planificados sin iniciar en el período.')
+    _render_grupos_subdireccion_docx(
+        doc, d['proyectos_sin_iniciar'], _tabla_proyectos_sin_iniciar_docx,
+        'No hay proyectos planificados sin iniciar en el período.',
+    )
 
     _titulo_seccion_docx(doc, f'Fichas a ejecutar el próximo mes (Año PAC {anho})')
-    if d['proximo_mes']:
-        doc.add_paragraph(f'{_n(len(d["proximo_mes"]))} ficha(s) planificada(s) para el próximo mes, aún sin ejecutar.')
-        _tabla_fichas_pac_docx(doc, d['proximo_mes'])
-    else:
-        doc.add_paragraph('No hay fichas planificadas para el próximo mes.')
+    _render_grupos_subdireccion_docx(
+        doc, d['proximo_mes'], _tabla_fichas_pac_docx,
+        'No hay fichas planificadas para el próximo mes.',
+    )
 
     _titulo_seccion_docx(doc, f'Fichas atrasadas (Año PAC {anho})')
-    if d['atrasadas']:
-        doc.add_paragraph(f'{_n(len(d["atrasadas"]))} ficha(s) con fecha de compra vencida y sin formulario ni OC enlazada.')
-        _tabla_fichas_pac_docx(doc, d['atrasadas'])
-    else:
-        doc.add_paragraph('No hay fichas atrasadas en el período.')
+    _render_grupos_subdireccion_docx(
+        doc, d['atrasadas'], _tabla_fichas_pac_docx,
+        'No hay fichas atrasadas en el período.',
+    )
     doc.add_page_break()
 
     # --- Conclusiones y Recomendaciones ---------------------------------------
@@ -1051,10 +1221,18 @@ _PDF_ESTILOS.add(ParagraphStyle(
     textColor=colors.HexColor('#386fc9'), fontName='Helvetica-Bold',
 ))
 _PDF_ESTILOS.add(ParagraphStyle(
+    name='SubGrupo', fontSize=10, leading=13, spaceBefore=6, spaceAfter=3,
+    textColor=colors.HexColor(COLOR_INSTITUCIONAL), fontName='Helvetica-Bold',
+))
+_PDF_ESTILOS.add(ParagraphStyle(
     name='Cuerpo', fontSize=10, leading=14.5, spaceAfter=9, textColor=colors.HexColor('#374151'),
 ))
 _PDF_ESTILOS.add(ParagraphStyle(
-    name='Leyenda', fontSize=8, leading=11, spaceAfter=10, textColor=colors.HexColor('#94a3b8'), fontName='Helvetica-Oblique',
+    name='Leyenda', fontSize=8, leading=11, alignment=1, spaceAfter=10,
+    textColor=colors.HexColor('#94a3b8'), fontName='Helvetica-Oblique',
+))
+_PDF_ESTILOS.add(ParagraphStyle(
+    name='Metadato', fontSize=8, leading=11, spaceAfter=10, textColor=colors.HexColor('#475569'),
 ))
 _PDF_ESTILOS.add(ParagraphStyle(
     name='Celda', fontSize=8, leading=10, textColor=colors.HexColor('#334155'),
@@ -1156,14 +1334,47 @@ def _pdf_tabla_resumen_subdireccion(filas, anho, anho_anterior, limite=15):
 
 
 def _pdf_tabla_fichas_pac(filas, limite=25):
-    encabezado = ['ID Proyecto', 'Departamento', 'Responsable', 'Fecha Compra', 'Estado']
+    encabezado = ['ID Proyecto', 'Proyecto', 'Departamento', 'Responsable', 'Fecha Compra', 'Estado']
     tabla_filas = [_fila_encabezado(encabezado)]
     for f in filas[:limite]:
         tabla_filas.append([
-            f['id_proyecto'], _celda(f['depto_nombre'] or f['depto_texto']),
+            f['id_proyecto'], _celda(f.get('nombre_proyecto') or '—'), _celda(f['depto_nombre'] or f['depto_texto']),
             _celda(f['nombre_responsable']), f['fecha_mas_proxima'] or '—', f['estado_ejecucion'],
         ])
-    tabla = Table(tabla_filas, colWidths=[1 * inch, 1.9 * inch, 1.4 * inch, 0.85 * inch, 0.75 * inch], repeatRows=1)
+    tabla = Table(tabla_filas, colWidths=[0.75 * inch, 1.55 * inch, 1.5 * inch, 1.15 * inch, 0.8 * inch, 0.7 * inch], repeatRows=1)
+    tabla.setStyle(_PDF_TABLA_ESTILO)
+    return tabla
+
+
+def _pdf_tabla_formularios_detalle(formularios, limite=30):
+    """Detalle a nivel de CADA FSC individual — complemento reportlab de
+    `_tabla_formularios_detalle_docx` para el capítulo de subdirección del PDF."""
+    encabezado = ['Formulario', 'Unidad Requirente', 'Dentro/Fuera', 'Monto', 'Fecha Derivado']
+    tabla_filas = [_fila_encabezado(encabezado)]
+    for f in formularios[:limite]:
+        tabla_filas.append([
+            f['id_formulario'] or f"{f['folio']}/{f['anho']}", _celda(f['unidad_requirente']),
+            'Dentro' if f['dentro_fuera_pac'] == 'DENTRO' else 'Fuera', _money(f['monto_estimado']),
+            f['fecha_derivado'] or '—',
+        ])
+    tabla = Table(tabla_filas, colWidths=[0.95 * inch, 2.5 * inch, 0.85 * inch, 1.1 * inch, 1.05 * inch], repeatRows=1)
+    tabla.setStyle(_PDF_TABLA_ESTILO)
+    return tabla
+
+
+def _pdf_tabla_fichas_ejecucion_detalle(fichas, limite=30):
+    """Detalle de proyectos del Plan de Compras con CON QUÉ formulario(s) se
+    ejecutó cada uno — complemento reportlab de `_tabla_fichas_ejecucion_detalle_docx`."""
+    encabezado = ['ID Proyecto', 'Proyecto', 'Departamento', 'Estado', 'Ejecutado con (Formulario)']
+    tabla_filas = [_fila_encabezado(encabezado)]
+    for f in fichas[:limite]:
+        ejecutores = f.get('formularios_ejecutores') or []
+        texto_ejecutores = ', '.join(fx['id_formulario'] or f"{fx['folio']}/{fx['anho']}" for fx in ejecutores) if ejecutores else '—'
+        tabla_filas.append([
+            f['id_proyecto'], _celda(f['nombre_proyecto'] or '—'), _celda(f['depto_nombre'] or f['depto_texto']),
+            f['estado_ejecucion'], _celda(texto_ejecutores),
+        ])
+    tabla = Table(tabla_filas, colWidths=[0.75 * inch, 1.5 * inch, 1.35 * inch, 0.75 * inch, 2.15 * inch], repeatRows=1)
     tabla.setStyle(_PDF_TABLA_ESTILO)
     return tabla
 
@@ -1191,12 +1402,28 @@ def _pdf_tabla_avance_trimestral(avance):
 
 
 def _pdf_tabla_proyectos_sin_iniciar(proyectos, limite=30):
-    tabla_filas = [_fila_encabezado(['ID Proyecto', 'Fecha Planificada', 'Estado'])]
+    tabla_filas = [_fila_encabezado(['ID Proyecto', 'Proyecto', 'Fecha Planificada', 'Estado'])]
     for p in proyectos[:limite]:
-        tabla_filas.append([p['id_proyecto'], p['fecha_inicio_compra'], 'Pendiente' if p['estado'] == 'PENDIENTE' else 'Atrasado'])
-    tabla = Table(tabla_filas, colWidths=[2.2 * inch, 1.5 * inch, 1.2 * inch], repeatRows=1)
+        tabla_filas.append([
+            p['id_proyecto'], _celda(p.get('nombre_proyecto') or '—'),
+            p['fecha_inicio_compra'], 'Pendiente' if p['estado'] == 'PENDIENTE' else 'Atrasado',
+        ])
+    tabla = Table(tabla_filas, colWidths=[1 * inch, 2.7 * inch, 1.3 * inch, 0.9 * inch], repeatRows=1)
     tabla.setStyle(_PDF_TABLA_ESTILO)
     return tabla
+
+
+def _render_grupos_subdireccion_pdf(story, grupos, tabla_fn, est, mensaje_vacio):
+    """Análogo reportlab de `_render_grupos_subdireccion_docx`: agrega un
+    sub-encabezado por subdirección y su tabla al `story` — Alertas y Seguimiento
+    (2026-07-23) agrupado por subdirección en vez de una sola tabla mezclada."""
+    if not grupos:
+        story.append(Paragraph(mensaje_vacio, est['Cuerpo']))
+        return
+    for grupo in grupos:
+        story.append(Paragraph(f'{grupo["nombre_display"]} ({_n(len(grupo["items"]))})', est['SubGrupo']))
+        story.append(tabla_fn(grupo['items']))
+        story.append(Spacer(1, 0.12 * inch))
 
 
 class _InformeDocTemplate(BaseDocTemplate):
@@ -1364,7 +1591,8 @@ def generar_reporte_pdf(periodo):
     otras_ramas = [s for s in d['subdirecciones'] if not s['institucional']]
 
     for sub in subs_institucionales:
-        story.append(Paragraph(_nombre_subdireccion_display(sub['nombre']), est['TituloCapitulo']))
+        nombre_display = _nombre_subdireccion_display(sub['nombre'])
+        story.append(Paragraph(nombre_display, est['TituloCapitulo']))
 
         story.append(Paragraph(f'Formularios de Solicitud de Compra — Período {label}', est['TituloSeccion']))
         if sub['fsc'] and sub['fsc']['total']:
@@ -1372,6 +1600,22 @@ def generar_reporte_pdf(periodo):
             story.append(Paragraph(parrafo_capitulo_subdireccion(sub['nombre'], sub['fsc'], mejor_rk, peor_rk), est['Cuerpo']))
             if sub['fsc']['departamentos']:
                 story.append(_pdf_tabla_departamentos(sub['fsc']['departamentos']))
+
+            img = _pdf_imagen(grafico_donut_dentro_fuera(sub['fsc']['pct_dentro'], titulo=f'{nombre_display} — Dentro/Fuera PAC'), 2.4, 2.4)
+            if img:
+                story.append(Spacer(1, 0.1 * inch))
+                story.append(img)
+                story.append(Paragraph(
+                    f'Distribución de los {_n(sub["fsc"]["total"])} formularios de {nombre_display} entre Dentro y '
+                    'Fuera del PAC durante el período.', est['Leyenda'],
+                ))
+
+            if sub['formularios_detalle']:
+                story.append(Paragraph(
+                    f'Detalle de los {_n(len(sub["formularios_detalle"]))} formularios individuales de {nombre_display} '
+                    'en el período:', est['Cuerpo'],
+                ))
+                story.append(_pdf_tabla_formularios_detalle(sub['formularios_detalle']))
         else:
             story.append(Paragraph('Sin formularios registrados en el período para esta subdirección.', est['Cuerpo']))
 
@@ -1388,7 +1632,26 @@ def generar_reporte_pdf(periodo):
             if p['departamentos']:
                 story.append(_pdf_tabla_deptos_ejecucion(p['departamentos']))
             if sub['responsables']:
-                story.append(Paragraph('Responsables: ' + ', '.join(sub['responsables']), est['Leyenda']))
+                story.append(Paragraph('Responsables: ' + ', '.join(sub['responsables']), est['Metadato']))
+
+            img = _pdf_imagen(
+                grafico_donut_ejecucion_planer(p['ejecutados'], p['pendientes'], p['atrasados'], titulo=f'{nombre_display} — Ejecución del Plan de Compras'),
+                2.7, 2.5,
+            )
+            if img:
+                story.append(Spacer(1, 0.1 * inch))
+                story.append(img)
+                story.append(Paragraph(
+                    f'Estado de ejecución de los {_n(p["total"])} proyectos del Plan de Compras {anho} de {nombre_display}.',
+                    est['Leyenda'],
+                ))
+
+            if sub['fichas_detalle']:
+                story.append(Paragraph(
+                    f'Detalle de los {_n(len(sub["fichas_detalle"]))} proyectos del Plan de Compras {anho} de '
+                    f'{nombre_display}, indicando con qué formulario(s) se ejecutó cada uno:', est['Cuerpo'],
+                ))
+                story.append(_pdf_tabla_fichas_ejecucion_detalle(sub['fichas_detalle']))
         else:
             story.append(Paragraph('Sin fichas del Plan de Compras registradas para esta subdirección.', est['Cuerpo']))
         story.append(PageBreak())
@@ -1427,27 +1690,27 @@ def generar_reporte_pdf(periodo):
 
     # --- Alertas y Seguimiento ------------------------------------------------
     story.append(Paragraph('Alertas y Seguimiento', est['TituloCapitulo']))
+    story.append(Paragraph(
+        'Las secciones siguientes se agrupan por subdirección institucional para facilitar el seguimiento y '
+        'la coordinación con cada responsable.', est['Cuerpo'],
+    ))
     story.append(Paragraph('Proyectos planificados sin ningún formulario Dentro PAC derivado todavía', est['TituloSeccion']))
-    if d['temporal']['proyectos_sin_iniciar']:
-        story.append(_pdf_tabla_proyectos_sin_iniciar(d['temporal']['proyectos_sin_iniciar']))
-    else:
-        story.append(Paragraph('No hay proyectos planificados sin iniciar en el período.', est['Cuerpo']))
-    story.append(Spacer(1, 0.15 * inch))
+    _render_grupos_subdireccion_pdf(
+        story, d['proyectos_sin_iniciar'], _pdf_tabla_proyectos_sin_iniciar, est,
+        'No hay proyectos planificados sin iniciar en el período.',
+    )
 
     story.append(Paragraph(f'Fichas a ejecutar el próximo mes (Año PAC {anho})', est['TituloSeccion']))
-    if d['proximo_mes']:
-        story.append(Paragraph(f'{_n(len(d["proximo_mes"]))} ficha(s) planificada(s) para el próximo mes, aún sin ejecutar.', est['Cuerpo']))
-        story.append(_pdf_tabla_fichas_pac(d['proximo_mes']))
-    else:
-        story.append(Paragraph('No hay fichas planificadas para el próximo mes.', est['Cuerpo']))
-    story.append(Spacer(1, 0.15 * inch))
+    _render_grupos_subdireccion_pdf(
+        story, d['proximo_mes'], _pdf_tabla_fichas_pac, est,
+        'No hay fichas planificadas para el próximo mes.',
+    )
 
     story.append(Paragraph(f'Fichas atrasadas (Año PAC {anho})', est['TituloSeccion']))
-    if d['atrasadas']:
-        story.append(Paragraph(f'{_n(len(d["atrasadas"]))} ficha(s) con fecha de compra vencida y sin formulario ni OC enlazada.', est['Cuerpo']))
-        story.append(_pdf_tabla_fichas_pac(d['atrasadas']))
-    else:
-        story.append(Paragraph('No hay fichas atrasadas en el período.', est['Cuerpo']))
+    _render_grupos_subdireccion_pdf(
+        story, d['atrasadas'], _pdf_tabla_fichas_pac, est,
+        'No hay fichas atrasadas en el período.',
+    )
     story.append(PageBreak())
 
     # --- Conclusiones y Recomendaciones ---------------------------------------
@@ -1601,6 +1864,18 @@ def _ppt_tabla_ranking(slide, filas, top, limite=5):
                     run.font.size = PptxPt(12)
 
 
+def _ppt_fijar_anchos_columnas(tabla, anchos_pulgadas):
+    """Fija el ancho de TODAS las columnas explícitamente. python-pptx no reajusta
+    las demás columnas cuando se cambia el ancho de solo una — el ancho total de la
+    tabla pasa a ser la suma de columnas, pudiendo salirse del borde de la diapositiva
+    si solo se agranda una y las otras quedan en su ancho parejo original (bug real
+    detectado 2026-07-23: una tabla de 9.2" declaradas terminaba en 10.76" — 0.76"
+    fuera de una diapositiva de 10"). Siempre fijar todas para que la suma coincida
+    con el ancho total declarado en `add_table`."""
+    for col, ancho in zip(tabla.columns, anchos_pulgadas):
+        col.width = PptxInches(ancho)
+
+
 def _ppt_tabla_depto_dentro_fuera(slide, departamentos, top, limite=12):
     """Tabla Dentro/Fuera PAC por departamento — capítulo por subdirección del PPT.
     Mismos campos que `_tabla_departamentos` (Word), formato compacto de slide."""
@@ -1608,7 +1883,7 @@ def _ppt_tabla_depto_dentro_fuera(slide, departamentos, top, limite=12):
     n_filas = len(filas_datos) + 1
     tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
     tabla = tabla_shape.table
-    tabla.columns[0].width = PptxInches(3.4)
+    _ppt_fijar_anchos_columnas(tabla, [3.4, 1.45, 1.45, 1.45, 1.45])
     for i, h in enumerate(['Departamento', 'Total', 'Dentro', 'Fuera', '% Dentro']):
         tabla.cell(0, i).text = h
     for r, d in enumerate(filas_datos, start=1):
@@ -1636,7 +1911,7 @@ def _ppt_tabla_depto_ejecucion(slide, departamentos, top, limite=12):
     n_filas = len(filas_datos) + 1
     tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
     tabla = tabla_shape.table
-    tabla.columns[0].width = PptxInches(3.4)
+    _ppt_fijar_anchos_columnas(tabla, [3.4, 1.45, 1.45, 1.45, 1.45])
     for i, h in enumerate(['Departamento', 'Total', 'Ejecutadas', 'Atrasadas', '% Ejecutado']):
         tabla.cell(0, i).text = h
     for r, d in enumerate(filas_datos, start=1):
@@ -1657,14 +1932,126 @@ def _ppt_tabla_depto_ejecucion(slide, departamentos, top, limite=12):
         )
 
 
-def _ppt_capitulo_subdireccion(prs, nombre_display, fsc, planer, responsables, anho):
+def _ppt_tabla_formularios_detalle(slide, formularios, top, limite=12):
+    """Detalle a nivel de CADA FSC individual — versión slide de
+    `_tabla_formularios_detalle_docx`, para el capítulo de subdirección del PPT."""
+    filas_datos = formularios[:limite]
+    n_filas = len(filas_datos) + 1
+    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla = tabla_shape.table
+    _ppt_fijar_anchos_columnas(tabla, [1.1, 3.4, 1.1, 1.7, 1.9])
+    for i, h in enumerate(['Formulario', 'Unidad Requirente', 'Dentro/Fuera', 'Monto', 'Fecha Derivado']):
+        tabla.cell(0, i).text = h
+    for r, f in enumerate(filas_datos, start=1):
+        tabla.cell(r, 0).text = f['id_formulario'] or f"{f['folio']}/{f['anho']}"
+        tabla.cell(r, 1).text = _truncar(f['unidad_requirente'], 45)
+        tabla.cell(r, 2).text = 'Dentro' if f['dentro_fuera_pac'] == 'DENTRO' else 'Fuera'
+        tabla.cell(r, 3).text = _money(f['monto_estimado'])
+        tabla.cell(r, 4).text = f['fecha_derivado'] or '—'
+    for row in tabla.rows:
+        for cell in row.cells:
+            for p in cell.text_frame.paragraphs:
+                for run in p.runs:
+                    run.font.size = PptxPt(11)
+    if len(formularios) > limite:
+        _ppt_parrafo(
+            slide, f'… y {len(formularios) - limite} formulario(s) adicional(es) — ver detalle en el informe Word/PDF.',
+            top=top + PptxInches(0.4 * n_filas) + PptxInches(0.1), tamano=10, height=PptxInches(0.4),
+        )
+
+
+def _ppt_tabla_fichas_ejecucion(slide, fichas, top, limite=10):
+    """Detalle de proyectos del Plan de Compras con CON QUÉ formulario(s) se
+    ejecutó cada uno — versión slide de `_tabla_fichas_ejecucion_detalle_docx`."""
+    filas_datos = fichas[:limite]
+    n_filas = len(filas_datos) + 1
+    tabla_shape = slide.shapes.add_table(n_filas, 4, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla = tabla_shape.table
+    _ppt_fijar_anchos_columnas(tabla, [2.3, 1.9, 1.1, 3.9])
+    for i, h in enumerate(['Proyecto', 'Departamento', 'Estado', 'Ejecutado con (Formulario)']):
+        tabla.cell(0, i).text = h
+    for r, f in enumerate(filas_datos, start=1):
+        ejecutores = f.get('formularios_ejecutores') or []
+        texto_ejecutores = ', '.join(fx['id_formulario'] or f"{fx['folio']}/{fx['anho']}" for fx in ejecutores) if ejecutores else '—'
+        tabla.cell(r, 0).text = _truncar(f['nombre_proyecto'] or f['id_proyecto'], 38)
+        tabla.cell(r, 1).text = _truncar(f['depto_nombre'] or f['depto_texto'], 30)
+        tabla.cell(r, 2).text = f['estado_ejecucion']
+        tabla.cell(r, 3).text = _truncar(texto_ejecutores, 45)
+    for row in tabla.rows:
+        for cell in row.cells:
+            for p in cell.text_frame.paragraphs:
+                for run in p.runs:
+                    run.font.size = PptxPt(11)
+    if len(fichas) > limite:
+        _ppt_parrafo(
+            slide, f'… y {len(fichas) - limite} proyecto(s) adicional(es) — ver detalle en el informe Word/PDF.',
+            top=top + PptxInches(0.4 * n_filas) + PptxInches(0.1), tamano=10, height=PptxInches(0.4),
+        )
+
+
+def _ppt_tabla_fichas_pac(slide, fichas, top, limite=10):
+    """Fichas del Plan de Compras (próximo mes/atrasadas) — versión slide de
+    `_tabla_fichas_pac_docx`, usada por Alertas y Seguimiento agrupado por subdirección."""
+    filas_datos = fichas[:limite]
+    n_filas = len(filas_datos) + 1
+    tabla_shape = slide.shapes.add_table(n_filas, 4, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla = tabla_shape.table
+    _ppt_fijar_anchos_columnas(tabla, [3.4, 2.4, 1.7, 1.7])
+    for i, h in enumerate(['Proyecto', 'Departamento', 'Fecha Compra', 'Estado']):
+        tabla.cell(0, i).text = h
+    for r, f in enumerate(filas_datos, start=1):
+        tabla.cell(r, 0).text = _truncar(f.get('nombre_proyecto') or f['id_proyecto'], 42)
+        tabla.cell(r, 1).text = _truncar(f['depto_nombre'] or f['depto_texto'], 32)
+        tabla.cell(r, 2).text = f['fecha_mas_proxima'] or '—'
+        tabla.cell(r, 3).text = f['estado_ejecucion']
+    for row in tabla.rows:
+        for cell in row.cells:
+            for p in cell.text_frame.paragraphs:
+                for run in p.runs:
+                    run.font.size = PptxPt(11)
+    if len(fichas) > limite:
+        _ppt_parrafo(
+            slide, f'… y {len(fichas) - limite} ficha(s) adicional(es) — ver detalle en el informe Word/PDF.',
+            top=top + PptxInches(0.4 * n_filas) + PptxInches(0.1), tamano=10, height=PptxInches(0.4),
+        )
+
+
+def _ppt_tabla_proyectos_sin_iniciar(slide, proyectos, top, limite=10):
+    filas_datos = proyectos[:limite]
+    n_filas = len(filas_datos) + 1
+    tabla_shape = slide.shapes.add_table(n_filas, 3, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla = tabla_shape.table
+    _ppt_fijar_anchos_columnas(tabla, [5.0, 2.2, 2.0])
+    for i, h in enumerate(['Proyecto', 'Fecha Planificada', 'Estado']):
+        tabla.cell(0, i).text = h
+    for r, p in enumerate(filas_datos, start=1):
+        tabla.cell(r, 0).text = _truncar(p.get('nombre_proyecto') or p['id_proyecto'], 55)
+        tabla.cell(r, 1).text = p['fecha_inicio_compra']
+        tabla.cell(r, 2).text = 'Pendiente' if p['estado'] == 'PENDIENTE' else 'Atrasado'
+    for row in tabla.rows:
+        for cell in row.cells:
+            for p_ in cell.text_frame.paragraphs:
+                for run in p_.runs:
+                    run.font.size = PptxPt(11)
+    if len(proyectos) > limite:
+        _ppt_parrafo(
+            slide, f'… y {len(proyectos) - limite} proyecto(s) adicional(es) — ver detalle en el informe Word/PDF.',
+            top=top + PptxInches(0.4 * n_filas) + PptxInches(0.1), tamano=10, height=PptxInches(0.4),
+        )
+
+
+def _ppt_capitulo_subdireccion(prs, nombre_display, fsc, planer, responsables, anho, formularios_detalle=None, fichas_detalle=None):
     """Mini-capítulo de la subdirección `nombre_display` en el PPT — decisión del
     usuario 2026-07-21 (2ª ronda): expandir el PPT de 'ejecutivo resumido' a una
     presentación completa organizable por subdirección, para exponer a cada una
     individualmente. Espejo del capítulo de Word/PDF pero en formato slide: KPIs +
     donut, tabla+gráfico Dentro/Fuera por departamento, tabla+gráfico de Ejecución
-    del Plan de Compras por departamento. `fsc`/`planer` pueden ser `None` si esa
-    subdirección no tiene datos en el dominio correspondiente (períodos cortos)."""
+    del Plan de Compras por departamento, y (2026-07-23) detalle a nivel de cada FSC
+    individual y de cada proyecto/ficha con sus formularios ejecutores. `fsc`/`planer`
+    pueden ser `None` si esa subdirección no tiene datos en el dominio correspondiente
+    (períodos cortos)."""
+    formularios_detalle = formularios_detalle or []
+    fichas_detalle = fichas_detalle or []
     # --- Portada de capítulo + KPIs -----------------------------------------
     slide = _ppt_slide_en_blanco(prs)
     franja = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(0), PptxInches(0), PptxInches(10), PptxInches(1.15))
@@ -1726,6 +2113,17 @@ def _ppt_capitulo_subdireccion(prs, nombre_display, fsc, planer, responsables, a
             _ppt_titulo(slide, f'{nombre_display} — Ranking % Dentro PAC')
             _ppt_imagen(slide, img_ranking, PptxInches(1.4), PptxInches(1.1), PptxInches(7.2))
 
+    # --- Detalle de formularios individuales (2026-07-23) --------------------
+    if formularios_detalle:
+        slide = _ppt_slide_en_blanco(prs)
+        _ppt_titulo(slide, f'{nombre_display} — Detalle de Formularios')
+        _ppt_parrafo(
+            slide,
+            f'Detalle de los {_n(len(formularios_detalle))} formularios individuales de {nombre_display} en el período.',
+            top=PptxInches(1.0), tamano=11, height=PptxInches(0.4),
+        )
+        _ppt_tabla_formularios_detalle(slide, formularios_detalle, top=PptxInches(1.45))
+
     # --- Ejecución PAC por departamento: tabla + gráfico ---------------------
     if planer and planer['departamentos']:
         slide = _ppt_slide_en_blanco(prs)
@@ -1739,6 +2137,18 @@ def _ppt_capitulo_subdireccion(prs, nombre_display, fsc, planer, responsables, a
             slide = _ppt_slide_en_blanco(prs)
             _ppt_titulo(slide, f'{nombre_display} — Ejecución por Departamento')
             _ppt_imagen(slide, img_ejec_depto, PptxInches(1.4), PptxInches(1.1), PptxInches(7.2))
+
+    # --- Detalle de proyectos y con qué formulario se ejecutaron (2026-07-23) ----
+    if fichas_detalle:
+        slide = _ppt_slide_en_blanco(prs)
+        _ppt_titulo(slide, f'{nombre_display} — Proyectos del Plan de Compras')
+        _ppt_parrafo(
+            slide,
+            f'Detalle de los {_n(len(fichas_detalle))} proyectos del Plan de Compras {anho} de {nombre_display}, '
+            'indicando con qué formulario(s) se ejecutó cada uno.',
+            top=PptxInches(1.0), tamano=11, height=PptxInches(0.5),
+        )
+        _ppt_tabla_fichas_ejecucion(slide, fichas_detalle, top=PptxInches(1.55))
 
 
 def generar_presentacion_ppt(periodo):
@@ -1889,6 +2299,7 @@ def generar_presentacion_ppt(periodo):
     for s in subdirecciones_institucionales:
         _ppt_capitulo_subdireccion(
             prs, _nombre_subdireccion_display(s['nombre']), s['fsc'], s['planer'], s['responsables'], anho,
+            formularios_detalle=s['formularios_detalle'], fichas_detalle=s['fichas_detalle'],
         )
 
     # --- Rankings ----------------------------------------------------------
@@ -1906,16 +2317,35 @@ def generar_presentacion_ppt(periodo):
     else:
         _ppt_parrafo(slide, 'Sin datos suficientes para generar el ranking en este período.', top=PptxInches(1.2))
 
-    # --- Alertas y Seguimiento (solo conteos, versión ejecutiva) ---------------
+    # --- Alertas y Seguimiento: resumen institucional + detalle por subdirección
+    # (2026-07-23, para mayor claridad) --------------------------------------
+    n_sin_iniciar = _total_items_grupos(d['proyectos_sin_iniciar'])
+    n_proximo_mes = _total_items_grupos(d['proximo_mes'])
+    n_atrasadas = _total_items_grupos(d['atrasadas'])
     slide = _ppt_slide_en_blanco(prs)
     _ppt_titulo(slide, 'Alertas y Seguimiento')
-    n_sin_iniciar = len(d['temporal']['proyectos_sin_iniciar'])
     alertas_texto = (
         f'⚠  Proyectos planificados sin formulario Dentro PAC derivado: {_n(n_sin_iniciar)}\n\n'
-        f'📅  Fichas a ejecutar el próximo mes (Año PAC {anho}): {_n(len(d["proximo_mes"]))}\n\n'
-        f'⏰  Fichas atrasadas (Año PAC {anho}): {_n(len(d["atrasadas"]))}'
+        f'📅  Fichas a ejecutar el próximo mes (Año PAC {anho}): {_n(n_proximo_mes)}\n\n'
+        f'⏰  Fichas atrasadas (Año PAC {anho}): {_n(n_atrasadas)}\n\n'
+        'Detalle por subdirección en las diapositivas siguientes.'
     )
-    _ppt_parrafo(slide, alertas_texto, top=PptxInches(1.3), tamano=17, height=PptxInches(3))
+    _ppt_parrafo(slide, alertas_texto, top=PptxInches(1.3), tamano=17, height=PptxInches(3.4))
+
+    for grupo in d['proyectos_sin_iniciar']:
+        slide = _ppt_slide_en_blanco(prs)
+        _ppt_titulo(slide, f'Proyectos sin iniciar — {grupo["nombre_display"]}')
+        _ppt_tabla_proyectos_sin_iniciar(slide, grupo['items'], top=PptxInches(1.1))
+
+    for grupo in d['proximo_mes']:
+        slide = _ppt_slide_en_blanco(prs)
+        _ppt_titulo(slide, f'Fichas a ejecutar próximo mes — {grupo["nombre_display"]}')
+        _ppt_tabla_fichas_pac(slide, grupo['items'], top=PptxInches(1.1))
+
+    for grupo in d['atrasadas']:
+        slide = _ppt_slide_en_blanco(prs)
+        _ppt_titulo(slide, f'Fichas atrasadas — {grupo["nombre_display"]}')
+        _ppt_tabla_fichas_pac(slide, grupo['items'], top=PptxInches(1.1))
 
     # --- Conclusiones ----------------------------------------------------------
     slide = _ppt_slide_en_blanco(prs)

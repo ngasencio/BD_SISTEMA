@@ -524,25 +524,35 @@ def _normalizar_texto(s):
 
 def _clasificar_dentro_fuera_pac(_avisar=lambda **kw: None):
     """Módulo PAC — recalcula, para TODOS los FormularioFSCDerivado:
-    (a) dentro_fuera_pac: existe id_plan en PacProyectoMaestro (id_proyecto) → DENTRO;
-        si tiene id_plan pero no está en el maestro, o si NO tiene id_plan (p.ej.
-        Compra Ágil sin proyecto PAC asociado) → FUERA. Un FSC sin id_plan nunca
-        referenció un proyecto PAC, así que por definición queda Fuera (decisión
-        confirmada con el usuario 2026-07-22 — antes quedaba NULL y se excluía en
-        silencio de todo el módulo, ~309 registros / 25% de la tabla).
+    (a) dentro_fuera_pac: existe id_plan en PacProyectoMaestro (histórico multi-año,
+        CSV de actualización manual) O en PlanerPAC (plan vigente, cargado desde el
+        Excel oficial del año) → DENTRO; si tiene id_plan pero no aparece en NINGUNA
+        de las dos, o si NO tiene id_plan (p.ej. Compra Ágil sin proyecto PAC
+        asociado) → FUERA. Un FSC sin id_plan nunca referenció un proyecto PAC, así
+        que por definición queda Fuera (decisión confirmada con el usuario
+        2026-07-22 — antes quedaba NULL y se excluía en silencio de todo el módulo,
+        ~309 registros / 25% de la tabla).
+        Se agregó PlanerPAC como segunda fuente el 2026-07-23: el CSV maestro
+        (actualización manual, `cargar_pac_maestro`) queda atrasado respecto al plan
+        del año vigente — se detectaron 103 FSC (11% de los que tienen id_plan)
+        marcados Fuera solo porque el maestro todavía no tenía el proyecto, pese a
+        que ya estaba en el `PlanificacionPACxxxx.xlsx` cargado en PlanerPAC.
     (b) sso_departamento: match normalizado de unidad_requirente contra descripcion/nombre_corto
         de Departamento (data_departamento, módulo Usuarios). Sin match → None
         ("Sin Clasificar" en el análisis, nunca se descarta).
 
-    No cruza con OC todavía (decisión explícita, ver plan del módulo PAC) — solo
-    verifica existencia del proyecto en el maestro histórico.
+    No cruza con OC todavía (decisión explícita, ver plan del módulo PAC).
     """
     from django.db import close_old_connections
-    from api.models import FormularioFSCDerivado, PacProyectoMaestro, Departamento
+    from api.models import FormularioFSCDerivado, PacProyectoMaestro, PlanerPAC, Departamento
 
     close_old_connections()
 
     ids_pac = set(PacProyectoMaestro.objects.values_list("id_proyecto", flat=True).distinct())
+    ids_pac |= set(
+        PlanerPAC.objects.exclude(id_proyecto__isnull=True).exclude(id_proyecto="")
+        .values_list("id_proyecto", flat=True).distinct()
+    )
 
     # Departamento (data_departamento) ya existe en el sistema (módulo Usuarios,
     # importado del Panel SSO) y cubre los 7 establecimientos de la red — mejor

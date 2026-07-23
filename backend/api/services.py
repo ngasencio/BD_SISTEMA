@@ -8,7 +8,7 @@ from django.db.models.functions import Cast
 
 from .models import (
     DetalleOrdenCompra, GestionContrato, Licitacion, DetalleLicitacion,
-    OrdenCompra, PlanerPAC,
+    OrdenCompra, PlanerPAC, RevisionOCCorregible,
     CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog,
     SigfeAnexo1,
@@ -96,9 +96,8 @@ def obtener_kpis_devengo(devengo_qs, codigo_ue=None, solo_deuda=True):
 
 def calcular_indicadores_res188(anio=2026):
     """
-    Calcula los indicadores cuantificables desde la BD (Ind 1, 2, 5).
+    Calcula los indicadores cuantificables desde la BD (Ind 1, 2, 4, 5).
     Ind 3 y 6 requieren entrada manual.
-    Ind 4 requiere tabla de contratos (no disponible en BD).
     """
     # OC válidas del año (excluye canceladas)
     oc_qs = OrdenCompra.objects.filter(
@@ -160,12 +159,26 @@ def calcular_indicadores_res188(anio=2026):
 
     i5 = (ahorrado / adjudicado * 100) if adjudicado > 0 else 0.0
 
+    # ── Indicador 4: Satisfacción Servicio/Producto ──
+    # Nota promedio (escala 1-7 Mercado Público) de TODOS los contratos terminados
+    # y evaluados de GestionContrato, a nivel institucional (no filtrado por año):
+    # la evaluación de un contrato no ocurre necesariamente el mismo año en que se
+    # inició (sufijo CLxx del número de contrato), y con datos tan escasos
+    # (verificado: 7 de 868 contratos tienen nota) filtrar por año del selector PAC
+    # deja el indicador vacío casi siempre. Score = (nota_promedio / 7) * 100.
+    ev_kpis = calcular_contratos_evaluaciones()['kpis']
+    i4_nota = ev_kpis['nota_promedio']
+    i4_evaluados = ev_kpis['evaluados']
+    i4_terminados = ev_kpis['total_terminados']
+    i4_pendientes = ev_kpis['pendientes']
+    i4_score = round(min(100, (i4_nota / 7) * 100), 1) if i4_nota is not None else None
+
     # ── Score parcial (ind 3 y 6 en 0 cuando no hay entrada manual) ──
     sc = {
         'i1': min(100, i1 or 0),
         'i2': min(100, i2 or 0),
         'i3': 0,
-        'i4': 0,
+        'i4': i4_score or 0,
         'i5': min(100, i5),
         'i6': 0,
     }
@@ -177,6 +190,11 @@ def calcular_indicadores_res188(anio=2026):
         'total_oc': total,
         'i1': round(i1, 2) if i1 is not None else None,
         'i2': round(i2, 2) if i2 is not None else None,
+        'i4_nota': i4_nota,
+        'i4_score': i4_score,
+        'i4_evaluados': i4_evaluados,
+        'i4_terminados': i4_terminados,
+        'i4_pendientes': i4_pendientes,
         'i5': round(i5, 2),
         'score_parcial': round(score_parcial, 1),
         'monto_enlazado_pac': monto_enlazado,
@@ -254,19 +272,22 @@ def calcular_oc_stats(anio=2026):
         oc_nc
         .extra(select={'mes': "MONTH(FechaEnvio)"})
         .values('mes', 'EnlacePAC')
-        .annotate(monto=Sum('TotalNeto'))
+        .annotate(monto=Sum('TotalNeto'), cantidad=Count('codigo_oc'))
         .order_by('mes')
     )
     evol_map = {}
     for r in evol_enlace_raw:
         m = r['mes']
         if m not in evol_map:
-            evol_map[m] = {'mes': m, 'enlazada': 0.0, 'no_enlazada': 0.0}
+            evol_map[m] = {'mes': m, 'enlazada': 0.0, 'no_enlazada': 0.0, 'cantidad_enlazada': 0, 'cantidad_no_enlazada': 0}
         v = float(r['monto'] or 0)
+        n = r['cantidad'] or 0
         if r['EnlacePAC'] == 'Enlazada':
             evol_map[m]['enlazada'] = v
+            evol_map[m]['cantidad_enlazada'] = n
         else:
             evol_map[m]['no_enlazada'] += v
+            evol_map[m]['cantidad_no_enlazada'] += n
     evolucion_enlace = sorted(evol_map.values(), key=lambda x: x['mes'])
 
     # Por TipoOCInterno con split Enlazada/No Enlazada
@@ -368,6 +389,49 @@ def calcular_oc_stats(anio=2026):
         .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
         .order_by('-monto')
     )
+    # "Resumen por Tipo OC" — agrupado por DescripcionTipoOC (distinto de TipoCompraInterna arriba)
+    no_enlazadas_tipo_oc_raw = list(
+        oc_no_enlazada.values('DescripcionTipoOC')
+        .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
+        .order_by('-cantidad')
+    )
+    no_enlazadas_tipo_oc = [
+        {'tipo_oc': r['DescripcionTipoOC'] or 'Sin tipo', 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
+        for r in no_enlazadas_tipo_oc_raw
+    ]
+
+    # Matriz cruzada: DescripcionTipoOC × TipoOCInterno (N° OCs), solo no enlazadas
+    matriz_raw = list(
+        oc_no_enlazada.values('DescripcionTipoOC', 'TipoOCInterno')
+        .annotate(cantidad=Count('codigo_oc'))
+    )
+    matriz_filas = sorted({(r['DescripcionTipoOC'] or 'Sin tipo') for r in matriz_raw})
+    matriz_columnas = sorted({(r['TipoOCInterno'] or 'Sin clasificar') for r in matriz_raw})
+    matriz_datos = {fila: {} for fila in matriz_filas}
+    for r in matriz_raw:
+        fila = r['DescripcionTipoOC'] or 'Sin tipo'
+        col = r['TipoOCInterno'] or 'Sin clasificar'
+        matriz_datos[fila][col] = matriz_datos[fila].get(col, 0) + r['cantidad']
+    # "Punto más relevante" de la matriz — la celda (Tipo OC, Tipo Interno) con más OC,
+    # calculado una sola vez en el backend para que dashboard y reportes lo lean igual.
+    total_matriz = sum(v for fila in matriz_datos.values() for v in fila.values())
+    celda_max = None
+    for fila, cols in matriz_datos.items():
+        for col, val in cols.items():
+            if celda_max is None or val > celda_max[2]:
+                celda_max = (fila, col, val)
+    matriz_insight = None
+    if celda_max and total_matriz:
+        f_max, c_max, v_max = celda_max
+        matriz_insight = {
+            'tipo_oc': f_max, 'tipo_interno': c_max, 'cantidad': v_max,
+            'pct_del_total': round(v_max / total_matriz * 100, 1),
+            'total_matriz': total_matriz,
+        }
+    matriz_tipo_oc_interno = {
+        'filas': matriz_filas, 'columnas': matriz_columnas, 'datos': matriz_datos,
+        'insight': matriz_insight,
+    }
 
     # ════════════════════════════════════════════════
     # OPORTUNIDAD ENLACE
@@ -527,6 +591,67 @@ def calcular_oc_stats(anio=2026):
         for r in hist_anual_raw if r['year']
     ]
 
+    # Split Enlazada/No Enlazada por año — alimenta el "Comparativo Anual" (% enlace PAC)
+    hist_enlace_anual_raw = list(
+        hist_qs
+        .extra(select={'year': "YEAR(FechaEnvio)"})
+        .values('year', 'EnlacePAC')
+        .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
+    )
+    hist_enlace_anual_map = defaultdict(lambda: {'enlazadas': 0, 'monto_enlazado': 0.0, 'monto_no_enlazado': 0.0})
+    for r in hist_enlace_anual_raw:
+        y = r['year']
+        if not y:
+            continue
+        m = float(r['monto'] or 0)
+        if r['EnlacePAC'] == 'Enlazada':
+            hist_enlace_anual_map[y]['enlazadas'] += r['cantidad']
+            hist_enlace_anual_map[y]['monto_enlazado'] += m
+        else:
+            hist_enlace_anual_map[y]['monto_no_enlazado'] += m
+
+    historico_enlace_anual = [
+        {
+            'anio': r['anio'], 'total_oc': r['total_oc'], 'monto_total': r['monto_total'],
+            'enlazadas': hist_enlace_anual_map[r['anio']]['enlazadas'],
+            'pct_enlace': round(hist_enlace_anual_map[r['anio']]['enlazadas'] / r['total_oc'] * 100, 1) if r['total_oc'] else 0.0,
+            'monto_enlazado': hist_enlace_anual_map[r['anio']]['monto_enlazado'],
+            'monto_no_enlazado': hist_enlace_anual_map[r['anio']]['monto_no_enlazado'],
+        }
+        for r in historico_anual
+    ]
+
+    # Split Enlazada/No Enlazada por (año, mes) — serie mensual multi-año para el gráfico de línea
+    hist_enlace_mensual_raw = list(
+        hist_qs
+        .extra(select={'year': "YEAR(FechaEnvio)", 'mes': "MONTH(FechaEnvio)"})
+        .values('year', 'mes', 'EnlacePAC')
+        .annotate(cantidad=Count('codigo_oc'), monto=Sum('TotalNeto'))
+    )
+    hist_enlace_mensual_map = defaultdict(lambda: {'total': 0, 'enlazadas': 0, 'monto_enlazado': 0.0, 'monto_no_enlazado': 0.0})
+    for r in hist_enlace_mensual_raw:
+        y, mes = r['year'], r['mes']
+        if not y or not mes:
+            continue
+        key = (y, mes)
+        m = float(r['monto'] or 0)
+        hist_enlace_mensual_map[key]['total'] += r['cantidad']
+        if r['EnlacePAC'] == 'Enlazada':
+            hist_enlace_mensual_map[key]['enlazadas'] += r['cantidad']
+            hist_enlace_mensual_map[key]['monto_enlazado'] += m
+        else:
+            hist_enlace_mensual_map[key]['monto_no_enlazado'] += m
+
+    historico_enlace_mensual = [
+        {
+            'anio': y, 'mes': mes,
+            'total': v['total'], 'enlazadas': v['enlazadas'],
+            'pct_enlace': round(v['enlazadas'] / v['total'] * 100, 1) if v['total'] else 0.0,
+            'monto_enlazado': v['monto_enlazado'], 'monto_no_enlazado': v['monto_no_enlazado'],
+        }
+        for (y, mes), v in sorted(hist_enlace_mensual_map.items())
+    ]
+
     hist_modal_raw = list(
         hist_qs
         .extra(select={'year': "YEAR(FechaEnvio)"})
@@ -564,8 +689,27 @@ def calcular_oc_stats(anio=2026):
             hist_sem_map[a]['s2_cantidad'] += nv
     historico_semestral = [{'anio': k, **v} for k, v in sorted(hist_sem_map.items())]
 
+    # ════════════════════════════════════════════════
+    # CORREGIDAS — revisiones manuales de enlace PAC (RevisionOCCorregible)
+    # Institucional (no filtrado por año), igual que en /ordenes-compra.
+    # ════════════════════════════════════════════════
+    revisiones = list(RevisionOCCorregible.objects.values('codigo_oc', 'resultado'))
+    revisiones_enlazada = [r for r in revisiones if r['resultado'] == 'Enlazada']
+    codigos_corregidos = {r['codigo_oc'] for r in revisiones_enlazada}
+    sincronizadas = OrdenCompra.objects.filter(
+        codigo_oc__in=codigos_corregidos, EnlacePAC='Enlazada'
+    ).count()
+    corregidas = {
+        'total_revisiones': len(revisiones),
+        'enlazadas_revisiones': len(revisiones_enlazada),
+        'oc_unicas_corregidas': len(codigos_corregidos),
+        'sincronizadas': sincronizadas,
+        'esperando_sync': len(codigos_corregidos) - sincronizadas,
+    }
+
     return {
         'anio': anio,
+        'corregidas': corregidas,
         'resumen': {
             'total_oc': resumen['total'] or 0,
             'monto_total': float(resumen['monto_total'] or 0),
@@ -624,6 +768,8 @@ def calcular_oc_stats(anio=2026):
             {'tipo_interno': r['TipoOCInterno'] or 'Sin tipo', 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
             for r in no_enlazadas_ti
         ],
+        'no_enlazadas_tipo_oc': no_enlazadas_tipo_oc,
+        'matriz_tipo_oc_interno': matriz_tipo_oc_interno,
         'oportunidades_enlace': {
             'top_licitaciones': [
                 {'codigo_licitacion': r['CodigoLicitacion'], 'cantidad': r['cantidad'], 'monto': float(r['monto'] or 0)}
@@ -667,6 +813,8 @@ def calcular_oc_stats(anio=2026):
         'historico_anual': historico_anual,
         'historico_semestral': historico_semestral,
         'historico_modalidad': historico_modalidad,
+        'historico_enlace_anual': historico_enlace_anual,
+        'historico_enlace_mensual': historico_enlace_mensual,
     }
 
 
@@ -1427,6 +1575,7 @@ def calcular_contratos_evaluaciones():
     kpi_pend = 0
     kpi_term = 0
     notas = []
+    notas_por_anio = defaultdict(list)
     por_anio = {}
     por_estado_term = {}
     detalle_pend = []
@@ -1459,6 +1608,7 @@ def calcular_contratos_evaluaciones():
             if es_evaluado:
                 kpi_ev += 1
                 notas.append(nota)
+                notas_por_anio[anio or 0].append(nota)
                 bucket['evaluados'] += 1
             elif evaluacion in _EVAL_PENDIENTE_VALS:
                 kpi_pend += 1
@@ -1476,6 +1626,10 @@ def calcular_contratos_evaluaciones():
 
     nota_promedio = round(sum(notas) / len(notas), 2) if notas else None
     pct_pendiente = round(kpi_pend / kpi_term * 100, 1) if kpi_term > 0 else 0.0
+
+    for bucket in por_anio.values():
+        notas_anio = notas_por_anio.get(bucket['anio'], [])
+        bucket['nota_promedio'] = round(sum(notas_anio) / len(notas_anio), 2) if notas_anio else None
 
     detalle_pend.sort(key=lambda x: x['monto_contrato'], reverse=True)
 
@@ -3066,6 +3220,56 @@ def calcular_pac_jerarquia(anho=None, fecha_desde=None, fecha_hasta=None):
     return {'subdirecciones': resultado}
 
 
+def calcular_pac_detalle_fsc_por_subdireccion(anho=None, fecha_desde=None, fecha_hasta=None):
+    """Detalle a nivel de CADA FormularioFSCDerivado individual (no agregado por
+    departamento), agrupado por nombre de subdirección — usado exclusivamente por
+    la reportería (`services_reportes.py`) para listar, dentro del capítulo de cada
+    subdirección, con qué formularios concretos se compone su % Dentro/Fuera PAC
+    (`calcular_pac_jerarquia` solo agrega, no lista individuos). Mismos filtros de
+    período que `calcular_pac_jerarquia`; reutiliza el detalle ya calculado por
+    `calcular_pac_cumplimiento_temporal` para no duplicar la lógica de evento-más-cercano.
+    """
+    fsc_qs = _qs_fsc_derivado_pac_cumplimiento().exclude(dentro_fuera_pac__isnull=True)
+    if fecha_desde:
+        fsc_qs = fsc_qs.filter(fecha_derivado__gte=fecha_desde)
+    if fecha_hasta:
+        fsc_qs = fsc_qs.filter(fecha_derivado__lte=fecha_hasta)
+    elif anho:
+        fsc_qs = fsc_qs.filter(fecha_derivado__gte=f'{anho}-01-01', fecha_derivado__lte=f'{anho}-12-31')
+
+    temporal_por_id = {
+        d['id']: d for d in calcular_pac_cumplimiento_temporal(
+            anho=anho, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
+        )['detalle_formularios']
+    }
+    nombres_rama, _ = _mapa_nombres_subdireccion()
+
+    por_sub = defaultdict(list)
+    for fsc in fsc_qs.select_related('sso_departamento').only(
+        'id', 'folio', 'anho', 'formulario', 'unidad_requirente', 'dentro_fuera_pac',
+        'monto_estimado', 'fecha_derivado', 'sso_departamento__subdireccion_id',
+        'sso_departamento__establecimiento_id',
+    ):
+        depto = fsc.sso_departamento
+        est_id = depto.establecimiento_id if depto else None
+        sub_id = depto.subdireccion_id if depto else None
+        nombre_sub = nombres_rama.get((est_id, sub_id), 'Sin Clasificar')
+        temporal_fsc = temporal_por_id.get(fsc.id)
+        por_sub[nombre_sub].append({
+            'id': fsc.id, 'folio': fsc.folio, 'anho': fsc.anho,
+            'id_formulario': generar_id_formulario(fsc.folio, fsc.anho, formulario_texto=fsc.formulario),
+            'unidad_requirente': fsc.unidad_requirente,
+            'dentro_fuera_pac': fsc.dentro_fuera_pac,
+            'monto_estimado': float(fsc.monto_estimado) if fsc.monto_estimado else 0,
+            'fecha_derivado': fsc.fecha_derivado,
+            'estado_temporal': temporal_fsc['estado'] if temporal_fsc else None,
+        })
+
+    for lista in por_sub.values():
+        lista.sort(key=lambda f: f['fecha_derivado'] or '', reverse=True)
+    return dict(por_sub)
+
+
 def _score_compuesto(pct_dentro, pct_en_fecha, pct_dentro_valor):
     """Score de ranking acordado con el usuario: % Dentro (cantidad) + % cumplimiento
     temporal + % Dentro ponderado por monto (evita que el score dependa del tamaño
@@ -3459,6 +3663,16 @@ def _calcular_fichas_pac_completo(anho=None, depto=None, subdireccion=None, esta
         else:
             estado_ejec = FICHA_SIN_FECHA
 
+        # `formularios_ejecutores`: identidad de cada FSC que ejecutó esta ficha (no solo
+        # el conteo) — pedido de la reportería 2026-07-23 para poder decir "con qué FSC
+        # se ejecutó el proyecto" en el capítulo de Ejecución del Plan de Compras.
+        formularios_ejecutores = [{
+            'id': fx.id, 'folio': fx.folio, 'anho': fx.anho,
+            'id_formulario': generar_id_formulario(fx.folio, fx.anho, formulario_texto=fx.formulario),
+            'comprador': fx.comprador, 'fecha_derivado': fx.fecha_derivado,
+            'dentro_fuera_pac': fx.dentro_fuera_pac,
+        } for fx in formularios]
+
         filas.append({
             'id_proyecto': id_proyecto, 'nombre_proyecto': p['nombre_proyecto'],
             'depto_texto': p['depto_texto'], 'depto_id': depto_obj.id if depto_obj else None,
@@ -3471,6 +3685,7 @@ def _calcular_fichas_pac_completo(anho=None, depto=None, subdireccion=None, esta
             'monto_total': round(p['monto_total'], 0), 'cantidad_items': p['cantidad_items'],
             'fecha_mas_proxima': fecha_mas_proxima.isoformat() if fecha_mas_proxima else None,
             'tiene_formulario': tiene_formulario, 'cantidad_formularios': len(formularios),
+            'formularios_ejecutores': formularios_ejecutores,
             'tiene_oc': tiene_oc, 'cantidad_oc': len(ocs),
             'estado_ejecucion': estado_ejec,
         })

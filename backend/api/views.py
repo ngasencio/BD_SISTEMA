@@ -3672,3 +3672,56 @@ def pac_cumplimiento_reporte_pdf(request):
     response['Content-Disposition'] = f'attachment; filename="Informe_PAC_{periodo}.pdf"'
     return response
 
+
+def _validar_anio_reporte(anio_str):
+    try:
+        anio = int(anio_str)
+    except (TypeError, ValueError):
+        return None
+    return anio if 2000 <= anio <= 2100 else None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_indicadores_reporte_word(request):
+    anio = _validar_anio_reporte(request.GET.get('anio'))
+    if anio is None:
+        return Response({'error': "Parámetro 'anio' inválido."}, status=400)
+    from .services_reportes_res188 import generar_informe_word_ind1
+    buf = generar_informe_word_ind1(anio)
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+    response['Content-Disposition'] = f'attachment; filename="Indicador1_PAC_{anio}.docx"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_indicadores_reporte_ppt(request):
+    anio = _validar_anio_reporte(request.GET.get('anio'))
+    if anio is None:
+        return Response({'error': "Parámetro 'anio' inválido."}, status=400)
+    from .services_reportes_res188 import generar_presentacion_ppt_ind1
+    buf = generar_presentacion_ppt_ind1(anio)
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    )
+    response['Content-Disposition'] = f'attachment; filename="Indicador1_PAC_{anio}.pptx"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_indicadores_reporte_pdf(request):
+    anio = _validar_anio_reporte(request.GET.get('anio'))
+    if anio is None:
+        return Response({'error': "Parámetro 'anio' inválido."}, status=400)
+    from .services_reportes_res188 import generar_reporte_pdf_ind1
+    buf = generar_reporte_pdf_ind1(anio)
+    response = HttpResponse(buf.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="Indicador1_PAC_{anio}.pdf"'
+    return response
+

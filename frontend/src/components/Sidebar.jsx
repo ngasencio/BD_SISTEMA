@@ -21,7 +21,7 @@ export default function Sidebar() {
         garantias: path.startsWith('/abastecimiento/boletas'),
         finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas'),
     });
-    const pacTab = path === '/pac' ? (new URLSearchParams(location.search).get('tab') || 'indicadores') : null;
+    const pacTab = path === '/pac' ? (new URLSearchParams(location.search).get('tab') || 'resumen') : null;
     const pacCumplimientoTab = path === '/pac-cumplimiento' ? (new URLSearchParams(location.search).get('tab') || 'resumen') : null;
 
     const handleLogout = () => {
@@ -124,18 +124,11 @@ export default function Sidebar() {
                             </div>
                             <div className="nav-mod-items" style={{ display: openMods.pac ? 'block' : 'none' }}>
                                 <div
-                                    className={`nav-item ${pacTab === 'indicadores' ? 'active' : ''}`}
-                                    onClick={() => goTo('/pac?tab=indicadores', 'abast', 'pac')}
+                                    className={`nav-item ${isActive('/pac') && pacTab === 'resumen' ? 'active' : ''}`}
+                                    onClick={() => goTo('/pac?tab=resumen', 'abast', 'pac')}
                                 >
                                     <span>📊</span>
                                     <span className="nav-item-text">Indicadores Res.188</span>
-                                </div>
-                                <div
-                                    className={`nav-item ${pacTab === 'informe' ? 'active' : ''}`}
-                                    onClick={() => goTo('/pac?tab=informe', 'abast', 'pac')}
-                                >
-                                    <span>🖨️</span>
-                                    <span className="nav-item-text">Informe PDF</span>
                                 </div>
                                 <div
                                     className={`nav-item ${isActive('/pac-cumplimiento') && pacCumplimientoTab === 'resumen' ? 'active' : ''}`}
