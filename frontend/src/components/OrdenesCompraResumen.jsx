@@ -360,6 +360,19 @@ function TabEstado({ data }) {
 
 function TabEnlacePAC({ data }) {
     const [search, setSearch] = useState('');
+    const [filtroChart, setFiltroChart] = useState(null); // { tipo: 'mes'|'semestre'|'tipoCompra'|'tipoInterno', valor, label }
+    const [sortCol, setSortCol] = useState('TotalNeto');
+    const [sortDir, setSortDir] = useState('desc');
+    const [pgPage, setPgPage] = useState(1);
+    const [pgSize, setPgSize] = useState(20);
+
+    const toggleFiltro = (tipo, valor, label) => {
+        setFiltroChart(prev => (prev && prev.tipo === tipo && prev.valor === valor) ? null : { tipo, valor, label });
+    };
+    const toggleSort = (col) => {
+        if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        else { setSortCol(col); setSortDir('desc'); }
+    };
 
     const enlazadas    = useMemo(() => data.filter(oc => oc.EnlacePAC === 'Enlazada'), [data]);
     const noEnlazadas  = useMemo(() => data.filter(oc => oc.EnlacePAC !== 'Enlazada'), [data]);
@@ -381,11 +394,13 @@ function TabEnlacePAC({ data }) {
         if (oc.EnlacePAC === 'Enlazada') mesMap[m].enl += Number(oc.TotalNeto) || 0;
         else mesMap[m].noEnl += Number(oc.TotalNeto) || 0;
     });
+    const mesBg = (base) => Array.from({ length: 12 }, (_, i) =>
+        (filtroChart?.tipo === 'mes' && filtroChart.valor !== i) ? '#e2e8f0' : base);
     const evolChart = {
         labels: MESES,
         datasets: [
-            { label: 'Enlazada',    data: Array.from({ length: 12 }, (_, i) => mesMap[i]?.enl   ?? 0), backgroundColor: '#16a34a', borderRadius: 3 },
-            { label: 'No Enlazada', data: Array.from({ length: 12 }, (_, i) => mesMap[i]?.noEnl ?? 0), backgroundColor: '#FE6565', borderRadius: 3 },
+            { label: 'Enlazada',    data: Array.from({ length: 12 }, (_, i) => mesMap[i]?.enl   ?? 0), backgroundColor: mesBg('#16a34a'), borderRadius: 3 },
+            { label: 'No Enlazada', data: Array.from({ length: 12 }, (_, i) => mesMap[i]?.noEnl ?? 0), backgroundColor: mesBg('#FE6565'), borderRadius: 3 },
         ],
     };
 
@@ -394,11 +409,13 @@ function TabEnlacePAC({ data }) {
     const s2Enl   = enlazadas.filter(oc  => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() >= 6).reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
     const s1NoEnl = noEnlazadas.filter(oc => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() < 6).reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
     const s2NoEnl = noEnlazadas.filter(oc => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() >= 6).reduce((s, oc) => s + (Number(oc.TotalNeto) || 0), 0);
+    const semBg = (base) => [0, 1].map(i =>
+        (filtroChart?.tipo === 'semestre' && filtroChart.valor !== i) ? '#e2e8f0' : base);
     const semChart = {
         labels: ['S1 (Ene–Jun)', 'S2 (Jul–Dic)'],
         datasets: [
-            { label: 'Enlazada',    data: [s1Enl, s2Enl],    backgroundColor: '#16a34a', borderRadius: 3 },
-            { label: 'No Enlazada', data: [s1NoEnl, s2NoEnl], backgroundColor: '#FE6565', borderRadius: 3 },
+            { label: 'Enlazada',    data: [s1Enl, s2Enl],    backgroundColor: semBg('#16a34a'), borderRadius: 3 },
+            { label: 'No Enlazada', data: [s1NoEnl, s2NoEnl], backgroundColor: semBg('#FE6565'), borderRadius: 3 },
         ],
     };
 
@@ -432,7 +449,9 @@ function TabEnlacePAC({ data }) {
     const tcLabels = Object.keys(tcMap).sort((a, b) => tcMap[b] - tcMap[a]);
     const tcChart = {
         labels: tcLabels,
-        datasets: [{ label: 'Monto', data: tcLabels.map(k => tcMap[k]), backgroundColor: '#E0701E', borderRadius: 3, indexAxis: 'y' }],
+        datasets: [{ label: 'Monto', data: tcLabels.map(k => tcMap[k]),
+            backgroundColor: tcLabels.map(l => (filtroChart?.tipo === 'tipoCompra' && filtroChart.valor !== l) ? '#e2e8f0' : '#E0701E'),
+            borderRadius: 3, indexAxis: 'y' }],
     };
 
     // No enlazadas por TipoOCInterno
@@ -442,25 +461,69 @@ function TabEnlacePAC({ data }) {
         return acc;
     }, {});
     const tiLabels = Object.keys(tiMap).sort((a, b) => tiMap[b] - tiMap[a]);
+    const TI_COLORS = ['#006FB3','#2D717C','#E0701E','#FE6565','#6C5CE7','#22c55e','#f59e0b'];
     const tiChart = {
         labels: tiLabels,
-        datasets: [{ data: tiLabels.map(k => tiMap[k]), backgroundColor: ['#006FB3','#2D717C','#E0701E','#FE6565','#6C5CE7','#22c55e','#f59e0b'], borderWidth: 0 }],
+        datasets: [{ data: tiLabels.map(k => tiMap[k]),
+            backgroundColor: tiLabels.map((l, i) => (filtroChart?.tipo === 'tipoInterno' && filtroChart.valor !== l) ? '#e2e8f0' : TI_COLORS[i % TI_COLORS.length]),
+            borderWidth: 0 }],
     };
 
     const chartOpts = (yCb) => ({
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { position: 'top', labels: { font: { size: 10 } } } },
         scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 10 }, callback: yCb } } },
+        onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
     });
     const compactCb = v => new Intl.NumberFormat('es-CL', { notation: 'compact', compactDisplay: 'short' }).format(v);
 
-    // Tabla filtrada
+    // Tabla filtrada + ordenada — muestra TODAS las OC (enlazadas y no enlazadas)
     const tablaData = useMemo(() => {
         const s = search.toLowerCase();
-        return noEnlazadas.filter(oc =>
+        let rows = data.filter(oc =>
             !s || oc.codigo_oc?.toLowerCase().includes(s) || oc.P_Nombre?.toLowerCase().includes(s) || oc.CodigoLicitacion?.toLowerCase().includes(s)
-        ).sort((a, b) => (Number(b.TotalNeto) || 0) - (Number(a.TotalNeto) || 0));
-    }, [noEnlazadas, search]);
+        );
+        if (filtroChart) {
+            if (filtroChart.tipo === 'mes') {
+                rows = rows.filter(oc => oc.FechaEnvio && new Date(oc.FechaEnvio).getMonth() === filtroChart.valor);
+            } else if (filtroChart.tipo === 'semestre') {
+                rows = rows.filter(oc => oc.FechaEnvio && (new Date(oc.FechaEnvio).getMonth() < 6 ? 0 : 1) === filtroChart.valor);
+            } else if (filtroChart.tipo === 'tipoCompra') {
+                rows = rows.filter(oc => TIPO_COMPRA_LABEL(oc.TipoCompraInterna) === filtroChart.valor);
+            } else if (filtroChart.tipo === 'tipoInterno') {
+                rows = rows.filter(oc => (oc.TipoOCInterno || 'Sin clasificar') === filtroChart.valor);
+            }
+        }
+        rows = rows.slice().sort((a, b) => {
+            let va, vb;
+            if (sortCol === 'TotalNeto') { va = Number(a.TotalNeto) || 0; vb = Number(b.TotalNeto) || 0; }
+            else { va = a.FechaEnvio ? new Date(a.FechaEnvio).getTime() : 0; vb = b.FechaEnvio ? new Date(b.FechaEnvio).getTime() : 0; }
+            return sortDir === 'asc' ? va - vb : vb - va;
+        });
+        return rows;
+    }, [data, search, filtroChart, sortCol, sortDir]);
+
+    useEffect(() => { setPgPage(1); }, [search, filtroChart, sortCol, sortDir]);
+
+    const exportExcelNoEnlazadas = () => {
+        const rows = tablaData.map(oc => ({
+            'Código OC':        oc.codigo_oc,
+            'Nombre':           oc.NombreOC || '—',
+            'Modalidad':        oc.DescripcionTipoOC || oc.TipoOC || '—',
+            'Proveedor':        oc.P_Nombre || '—',
+            'Código Licitación': oc.CodigoLicitacion || '—',
+            'F. Envío':         oc.FechaEnvio ? fmtDate(oc.FechaEnvio) : '—',
+            'Monto Neto':       Number(oc.TotalNeto) || 0,
+            'Moneda':           oc.TipoMoneda || 'CLP',
+            'Enlace PAC':       oc.EnlacePAC === 'Enlazada' ? 'Enlazada' : 'No Enlazada',
+            'Link MP':          oc.LinkMP || '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'OC Mercado Publico');
+        const suffix = filtroChart ? `_${filtroChart.label.replace(/[^a-zA-Z0-9]+/g, '_')}` : '';
+        XLSX.writeFile(wb, `OC_Mercado_Publico${suffix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    };
 
     return (
         <div>
@@ -476,43 +539,82 @@ function TabEnlacePAC({ data }) {
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>
                 <div className="card" style={{ padding: 14 }}>
                     <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, fontFamily: 'Outfit,sans-serif' }}>Evolución Mensual: Enlazada vs No Enlazada</div>
-                    <div style={{ height: 210 }}><Bar data={evolChart} options={chartOpts(compactCb)} /></div>
+                    <div style={{ height: 210 }}>
+                        <Bar data={evolChart} options={{
+                            ...chartOpts(compactCb),
+                            onClick: (evt, els) => { if (els.length) toggleFiltro('mes', els[0].index, `Mes: ${MESES[els[0].index]}`); },
+                        }} />
+                    </div>
                 </div>
                 <div className="card" style={{ padding: 14 }}>
                     <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, fontFamily: 'Outfit,sans-serif' }}>Comparativo Semestral</div>
-                    <div style={{ height: 210 }}><Bar data={semChart} options={chartOpts(compactCb)} /></div>
+                    <div style={{ height: 210 }}>
+                        <Bar data={semChart} options={{
+                            ...chartOpts(compactCb),
+                            onClick: (evt, els) => { if (els.length) toggleFiltro('semestre', els[0].index, els[0].index === 0 ? 'S1 (Ene–Jun)' : 'S2 (Jul–Dic)'); },
+                        }} />
+                    </div>
                 </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
                 <div className="card" style={{ padding: 14 }}>
                     <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, fontFamily: 'Outfit,sans-serif' }}>No Enlazadas por Tipo Compra Interna</div>
                     <div style={{ height: 200 }}>
-                        {tcLabels.length ? <Bar data={tcChart} options={{ ...chartOpts(compactCb), indexAxis: 'y', plugins: { legend: { display: false } } }} /> : <p style={{ color: '#94a3b8', textAlign: 'center', paddingTop: 60 }}>Sin datos</p>}
+                        {tcLabels.length ? <Bar data={tcChart} options={{
+                            ...chartOpts(compactCb), indexAxis: 'y', plugins: { legend: { display: false } },
+                            onClick: (evt, els) => { if (els.length) toggleFiltro('tipoCompra', tcLabels[els[0].index], `Tipo Compra: ${tcLabels[els[0].index]}`); },
+                        }} /> : <p style={{ color: '#94a3b8', textAlign: 'center', paddingTop: 60 }}>Sin datos</p>}
                     </div>
                 </div>
                 <div className="card" style={{ padding: 14 }}>
                     <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, fontFamily: 'Outfit,sans-serif' }}>No Enlazadas por Tipo OC Interno</div>
                     <div style={{ height: 200 }}>
-                        {tiLabels.length ? <Doughnut data={tiChart} options={{ maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 10 } } } } }} /> : <p style={{ color: '#94a3b8', textAlign: 'center', paddingTop: 60 }}>Sin datos</p>}
+                        {tiLabels.length ? <Doughnut data={tiChart} options={{
+                            maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 10 } } } },
+                            onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+                            onClick: (evt, els) => { if (els.length) toggleFiltro('tipoInterno', tiLabels[els[0].index], `Tipo OC Interno: ${tiLabels[els[0].index]}`); },
+                        }} /> : <p style={{ color: '#94a3b8', textAlign: 'center', paddingTop: 60 }}>Sin datos</p>}
                     </div>
                 </div>
             </div>
 
-            {/* Tabla No Enlazadas */}
+            {/* Tabla OC Mercado Público (todas — enlazadas y no enlazadas) */}
             <div className="card">
-                <div className="card-header card-header-accent"><span>📋</span><span className="card-title">OC No Enlazadas ({noEnlazadas.length})</span></div>
-                <SearchTable placeholder="🔍 OC, proveedor, licitación…" value={search} onChange={setSearch} count={tablaData.length} total={noEnlazadas.length} />
+                <div className="card-header card-header-accent">
+                    <span>📋</span><span className="card-title">OC Mercado Público ({data.length})</span>
+                    <button onClick={exportExcelNoEnlazadas} style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 7, border: 'none',
+                        background: '#16a34a', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                        ⬇ Excel
+                    </button>
+                </div>
+                <SearchTable placeholder="🔍 OC, proveedor, licitación…" value={search} onChange={setSearch} count={tablaData.length} total={data.length} />
+                {filtroChart && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: '#eff6ff', borderBottom: '1px solid #dbeafe', fontSize: 12 }}>
+                        <span>Filtrando por: <strong>{filtroChart.label}</strong></span>
+                        <button onClick={() => setFiltroChart(null)} style={{ padding: '2px 8px', borderRadius: 10, border: '1px solid #bfdbfe',
+                            background: '#fff', color: '#2563eb', fontSize: 11, cursor: 'pointer' }}>
+                            ✕ Quitar filtro
+                        </button>
+                    </div>
+                )}
                 <div className="table-responsive">
                     <table className="table-gob">
                         <thead>
                             <tr>
                                 <th>Código OC</th><th>Nombre</th><th>Modalidad</th><th>Proveedor</th>
-                                <th>CodigoLicitacion</th><th>F. Envío</th>
-                                <th style={{ textAlign: 'right' }}>Monto Neto</th><th>Link MP</th>
+                                <th>CodigoLicitacion</th>
+                                <th style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => toggleSort('FechaEnvio')}>
+                                    F. Envío <span style={{ opacity: 0.5 }}>{sortCol === 'FechaEnvio' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                                </th>
+                                <th style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => toggleSort('TotalNeto')}>
+                                    Monto Neto <span style={{ opacity: 0.5 }}>{sortCol === 'TotalNeto' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                                </th>
+                                <th>Enlace PAC</th>
+                                <th>Link MP</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {tablaData.slice(0, 100).map(oc => (
+                            {tablaData.slice((pgPage - 1) * pgSize, pgPage * pgSize).map(oc => (
                                 <tr key={oc.codigo_oc}>
                                     <td><strong style={{ fontFamily: 'monospace', fontSize: 11 }}>{oc.codigo_oc}</strong></td>
                                     <td style={{ maxWidth: 200 }}><div className="truncate-text" title={oc.NombreOC}>{oc.NombreOC}</div></td>
@@ -525,13 +627,15 @@ function TabEnlacePAC({ data }) {
                                     </td>
                                     <td style={{ fontSize: 11, color: '#64748b' }}>{fmtDate(oc.FechaEnvio)}</td>
                                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(Number(oc.TotalNeto), oc.TipoMoneda || 'CLP')}</td>
+                                    <td><EnlaceBadge valor={oc.EnlacePAC} /></td>
                                     <td>{oc.LinkMP ? <a href={oc.LinkMP} target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>🔗 MP</a> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
                                 </tr>
                             ))}
-                            {tablaData.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>Sin resultados</td></tr>}
+                            {tablaData.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>Sin resultados</td></tr>}
                         </tbody>
                     </table>
                 </div>
+                <Pagination page={pgPage} setPage={setPgPage} pageSize={pgSize} setPageSize={setPgSize} total={tablaData.length} />
             </div>
         </div>
     );
