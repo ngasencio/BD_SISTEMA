@@ -37,7 +37,7 @@
   --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
 
   /* Layout */
-  --sidebar-w: 260px;
+  --sidebar-w: 320px;
   --topbar-h: 56px;
   --radius: 8px;
   --radius-lg: 12px;
@@ -173,7 +173,7 @@ button {
   flex-direction: column;
   border-right: 1px solid rgba(255,255,255,0.04);
   overflow: hidden;
-  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
 }
 
 .sidebar:hover {

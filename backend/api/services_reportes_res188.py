@@ -49,7 +49,8 @@ from .services_reportes import (
     _titulo_capitulo_docx, _titulo_seccion_docx,
     _PDF_ESTILOS, _PDF_TABLA_ESTILO, _celda, _celda_encabezado, _fila_encabezado, _pdf_imagen,
     _ppt_slide_en_blanco, _ppt_titulo, _ppt_parrafo, _ppt_imagen, _ppt_pie_pagina, _ppt_numerar_diapositivas,
-    COLOR_TITULO_PPT, COLOR_TEXTO_PPT,
+    _ppt_portada, _ppt_divisor_seccion, _ppt_estilizar_tabla,
+    COLOR_TITULO_PPT, COLOR_TEXTO_PPT, PPT_ANCHO, PPT_ALTO, PPT_MARGEN, PPT_ANCHO_CONTENIDO,
 )
 
 import matplotlib.pyplot as plt  # backend Agg ya fijado por el import de services_reportes arriba
@@ -713,18 +714,14 @@ def _ppt_tabla_generica(slide, tabla: Tabla, top, limite=8):
     filas_datos = tabla.filas[:limite]
     n_filas = len(filas_datos) + 1
     n_cols = len(tabla.encabezados)
-    tabla_shape = slide.shapes.add_table(n_filas, n_cols, PptxInches(0.5), top, PptxInches(9), PptxInches(0.4 * n_filas))
+    tabla_shape = slide.shapes.add_table(n_filas, n_cols, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.4 * n_filas))
     t = tabla_shape.table
     for i, h in enumerate(tabla.encabezados):
         t.cell(0, i).text = str(h)
     for r, fila in enumerate(filas_datos, start=1):
         for c, val in enumerate(fila):
             t.cell(r, c).text = str(val)
-    for row in t.rows:
-        for cell in row.cells:
-            for p in cell.text_frame.paragraphs:
-                for run in p.runs:
-                    run.font.size = PptxPt(11)
+    _ppt_estilizar_tabla(t, tamano_fuente=11)
 
 
 def _render_seccion_ppt(prs, s: Seccion):
@@ -736,7 +733,7 @@ def _render_seccion_ppt(prs, s: Seccion):
         top = PptxInches(1.85)
     if s.graficos and s.graficos[0].imagen:
         g = s.graficos[0]
-        _ppt_imagen(slide, g.imagen, PptxInches((10 - g.ancho_ppt) / 2), top, PptxInches(g.ancho_ppt))
+        _ppt_imagen(slide, g.imagen, PptxInches((PPT_ANCHO - g.ancho_ppt) / 2), top, PptxInches(g.ancho_ppt))
     elif s.tabla:
         _ppt_tabla_generica(slide, s.tabla, top)
     _ppt_pie_pagina(slide)
@@ -745,20 +742,30 @@ def _render_seccion_ppt(prs, s: Seccion):
 
 def generar_presentacion_ppt_ind1(anio):
     """Genera la presentación PPT del Indicador 1 — un slide por sección (versión
-    ejecutiva). Retorna BytesIO."""
+    ejecutiva), con el mismo lenguaje visual que `generar_presentacion_ppt`
+    (Cumplimiento Interno PAC) vía los helpers compartidos de `services_reportes`.
+    Retorna BytesIO."""
     datos = _construir_datos(anio)
     secciones = _construir_secciones(datos)
 
     prs = Presentation()
-    prs.slide_width = PptxInches(10)
-    prs.slide_height = PptxInches(7.5)
+    prs.slide_width = PptxInches(PPT_ANCHO)
+    prs.slide_height = PptxInches(PPT_ALTO)
 
-    slide = _ppt_slide_en_blanco(prs)
-    _ppt_titulo(slide, TITULO_INFORME_IND1, top=PptxInches(2.6), tamano=28)
-    _ppt_parrafo(slide, f'{NOMBRE_INSTITUCION}\nAño PAC: {anio} · Generado el {datos["hoy"].strftime("%d-%m-%Y")}', PptxInches(3.6), tamano=14)
-    _ppt_pie_pagina(slide)
+    _ppt_portada(
+        prs,
+        badge_texto='INDICADOR RES.188/2026',
+        titulo_lineas=['Informe de Gestión PAC', 'Indicador 1: % Compras dentro del PAC'],
+        subtitulo_inst=NOMBRE_INSTITUCION.upper(),
+        meta_texto=f'Año PAC: {anio} · Generado el {datos["hoy"].strftime("%d-%m-%Y")}',
+        logo_bytes=_logo_bytes(), imagen_bytes=_edificio_bytes(),
+    )
 
+    numero_seccion = 0
     for s in secciones:
+        if s.nivel == 1:
+            numero_seccion += 1
+            _ppt_divisor_seccion(prs, f'{numero_seccion:02d}', [s.titulo])
         _render_seccion_ppt(prs, s)
         if s.tabla and s.graficos and s.graficos[0].imagen:
             # Sección con gráfico Y tabla: la tabla va en un segundo slide (versión ejecutiva no las mezcla).

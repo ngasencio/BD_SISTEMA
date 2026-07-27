@@ -199,7 +199,7 @@ export default function Sidebar() {
                                     className={`nav-item ${isActive('/anexo3/reporte-sigfe') ? 'active' : ''}`}
                                     onClick={() => goTo('/anexo3/reporte-sigfe', 'finanzas', 'finReportes')}
                                 >
-                                    <span>🌳</span> <span className="nav-item-text">Anexo N°3 — Reporte Jerárquico SIGFE</span>
+                                    <span>🌳</span> <span className="nav-item-text">Anexo N°3 - Reporte Deuda</span>
                                 </div>
                             </div>
                         </div>

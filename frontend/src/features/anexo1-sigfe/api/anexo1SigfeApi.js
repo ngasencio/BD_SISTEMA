@@ -11,6 +11,48 @@ export const fetchEstadoBDAnexo1 = (anhoDesde) =>
 export const fetchAnexo1 = (params = {}) =>
     apiClient.get('sigfe-anexo1/', { params });
 
+// Tabs de "Análisis de Ejecución Presupuestaria" (migrados desde
+// Dashboard_SSO_Integrado.html) — filtros comunes: ue, anho, mes_desde,
+// mes_hasta, excluir_34_35.
+export const fetchResumenAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/resumen/', { params });
+
+export const fetchAlertasAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/alertas/', { params });
+
+export const fetchSemaforoAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/semaforo/', { params });
+
+export const fetchBurnRateAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/burn-rate/', { params });
+
+export const fetchDeudaFlotanteAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/deuda-flotante/', { params });
+
+export const fetchTendenciasAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/tendencias/', { params });
+
+export const fetchFinancieroAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/financiero/', { params });
+
+export const fetchDetalladoAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/detallado/', { params });
+
+export const fetchDetalladoParetoAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/detallado/pareto/', { params });
+
+export const fetchDetalladoTemporalAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/detallado/temporal/', { params });
+
+export const fetchDetalladoControlAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/detallado/control/', { params });
+
+export const descargarReporteAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/reporte-pdf/', { params, responseType: 'blob' });
+
+export const fetchConciliacionDevengoAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/conciliacion-devengo/', { params });
+
 // ETL: descarga (Selenium headless, servidor) + consolidación desde SIGFE.
 // Las credenciales SIGFE viajan solo en este POST — no se persisten.
 export const iniciarActualizacionAnexo1 = ({ usuario, password, fechaDesde, fechaHasta }) =>

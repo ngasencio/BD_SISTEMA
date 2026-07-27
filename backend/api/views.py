@@ -322,6 +322,295 @@ def sigfe_anexo1_estado_bd(request):
     return Response(response_data)
 
 
+# -- Análisis de Ejecución Presupuestaria (tabs sobre api_sigfe_anexo1) -------
+# Migración del dashboard standalone Dashboard_SSO_Integrado.html — cada
+# endpoint corresponde a un tab. Lógica de cálculo en services_anexo1_ejecucion.py.
+
+def _int_o_none(valor):
+    try:
+        return int(valor) if valor not in (None, '') else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _bool_query(valor, default=True):
+    if valor is None or valor == '':
+        return default
+    return str(valor).lower() in ('1', 'true', 'si', 'sí')
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_resumen(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    mes_desde = _int_o_none(request.GET.get('mes_desde'))
+    mes_hasta = _int_o_none(request.GET.get('mes_hasta'))
+    subtitulo = request.GET.get('subtitulo') or None
+    anho_comparacion = _int_o_none(request.GET.get('anho_comparacion'))
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_resumen_{ue}_{anho}_{mes_desde}_{mes_hasta}_{subtitulo}_{anho_comparacion}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_resumen
+    response_data = calcular_anexo1_resumen(
+        codigo_ue=ue, anho=anho, mes_desde=mes_desde, mes_hasta=mes_hasta,
+        subtitulo=subtitulo, anho_comparacion=anho_comparacion, excluir_34_35=excluir_34_35,
+    )
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_alertas(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    mes_desde = _int_o_none(request.GET.get('mes_desde'))
+    mes_hasta = _int_o_none(request.GET.get('mes_hasta'))
+
+    cache_key = f'sigfe_anexo1_alertas_{ue}_{anho}_{mes_desde}_{mes_hasta}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_alertas
+    response_data = calcular_anexo1_alertas(codigo_ue=ue, anho=anho, mes_desde=mes_desde, mes_hasta=mes_hasta)
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_semaforo(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_semaforo_{ue}_{anho}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_semaforo
+    response_data = calcular_anexo1_semaforo(codigo_ue=ue, anho=anho, excluir_34_35=excluir_34_35)
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_burn_rate(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    subtitulo = request.GET.get('subtitulo') or None
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_burn_rate_{ue}_{anho}_{subtitulo}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_burn_rate
+    response_data = calcular_anexo1_burn_rate(codigo_ue=ue, anho=anho, subtitulo=subtitulo, excluir_34_35=excluir_34_35)
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_deuda_flotante(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_deuda_flotante_{ue}_{anho}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_deuda_flotante
+    response_data = calcular_anexo1_deuda_flotante(codigo_ue=ue, anho=anho, excluir_34_35=excluir_34_35)
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_tendencias(request):
+    ue = request.GET.get('ue') or None
+    subtitulo = request.GET.get('subtitulo') or None
+    anhos_raw = request.GET.get('anhos') or ''
+    anhos = [int(a) for a in anhos_raw.split(',') if a.strip().isdigit()] or None
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_tendencias_{ue}_{subtitulo}_{anhos_raw}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_tendencias
+    response_data = calcular_anexo1_tendencias(codigo_ue=ue, subtitulo=subtitulo, anhos=anhos, excluir_34_35=excluir_34_35)
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_financiero(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    mes_desde = _int_o_none(request.GET.get('mes_desde'))
+    mes_hasta = _int_o_none(request.GET.get('mes_hasta'))
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_financiero_{ue}_{anho}_{mes_desde}_{mes_hasta}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_financiero
+    response_data = calcular_anexo1_financiero(
+        codigo_ue=ue, anho=anho, mes_desde=mes_desde, mes_hasta=mes_hasta, excluir_34_35=excluir_34_35,
+    )
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_detallado(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    mes_desde = _int_o_none(request.GET.get('mes_desde'))
+    mes_hasta = _int_o_none(request.GET.get('mes_hasta'))
+    search = request.GET.get('search') or None
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_detallado_{ue}_{anho}_{mes_desde}_{mes_hasta}_{search}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_detallado
+    response_data = calcular_anexo1_detallado(
+        codigo_ue=ue, anho=anho, mes_desde=mes_desde, mes_hasta=mes_hasta, search=search, excluir_34_35=excluir_34_35,
+    )
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_detallado_pareto(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    mes_desde = _int_o_none(request.GET.get('mes_desde'))
+    mes_hasta = _int_o_none(request.GET.get('mes_hasta'))
+    metrica = request.GET.get('metrica') or 'dev'
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_pareto_{ue}_{anho}_{mes_desde}_{mes_hasta}_{metrica}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_detallado_pareto
+    response_data = calcular_anexo1_detallado_pareto(
+        codigo_ue=ue, anho=anho, mes_desde=mes_desde, mes_hasta=mes_hasta, metrica=metrica, excluir_34_35=excluir_34_35,
+    )
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_detallado_temporal(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    vista = request.GET.get('vista') or 'apilado'
+    concepto = request.GET.get('concepto') or None
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_temporal_{ue}_{anho}_{vista}_{concepto}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_detallado_temporal
+    response_data = calcular_anexo1_detallado_temporal(
+        codigo_ue=ue, anho=anho, vista=vista, concepto=concepto, excluir_34_35=excluir_34_35,
+    )
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_detallado_control(request):
+    ue = request.GET.get('ue') or None
+    concepto = request.GET.get('concepto') or None
+
+    cache_key = f'sigfe_anexo1_control_{ue}_{concepto}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_detallado_control
+    response_data = calcular_anexo1_detallado_control(codigo_ue=ue, concepto=concepto)
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_reporte_pdf(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    mes_desde = _int_o_none(request.GET.get('mes_desde'))
+    mes_hasta = _int_o_none(request.GET.get('mes_hasta'))
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+    secciones_raw = request.GET.get('secciones') or ''
+    secciones = {s.strip() for s in secciones_raw.split(',') if s.strip()} or None
+
+    from .services_reportes_anexo1 import generar_reporte_anexo1_pdf
+    buf = generar_reporte_anexo1_pdf(
+        codigo_ue=ue, anho=anho, mes_desde=mes_desde, mes_hasta=mes_hasta,
+        excluir_34_35=excluir_34_35, secciones=secciones,
+    )
+    response = HttpResponse(buf.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="Anexo1_Ejecucion_Presupuestaria_{anho or ""}.pdf"'
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sigfe_anexo1_conciliacion_devengo(request):
+    """Cruza Deuda Flotante (Anexo N°1, flujo del período) vs. Deuda
+    Pendiente (Anexo N°3, stock actual) por Subtítulo — ver docstring de
+    calcular_anexo1_conciliacion_devengo para la explicación conceptual."""
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    mes_desde = _int_o_none(request.GET.get('mes_desde'))
+    mes_hasta = _int_o_none(request.GET.get('mes_hasta'))
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_conciliacion_{ue}_{anho}_{mes_desde}_{mes_hasta}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_conciliacion_devengo
+    response_data = calcular_anexo1_conciliacion_devengo(
+        codigo_ue=ue, anho=anho, mes_desde=mes_desde, mes_hasta=mes_hasta, excluir_34_35=excluir_34_35,
+    )
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
 # -- Actualización desde SIGFE (Selenium, disparada desde el dashboard) -------
 
 _tareas_actualizacion_anexo1: dict = {}
@@ -386,9 +675,13 @@ def _ejecutar_actualizacion_anexo1(task_id: str, usuario: str, password: str,
             "fallidos_detalle": consolidacion.get("fallidos_detalle", []),
         }
 
-        # El panel 'Base de datos' cachea 5 min por año-desde -- invalidar el
-        # default (el que usa la página) para que refleje lo recién cargado.
-        cache.delete('sigfe_anexo1_estado_bd_default')
+        # El panel 'Base de datos' y los 9 tabs de "Análisis de Ejecución
+        # Presupuestaria" cachean por combinación de filtros (ue/año/mes/
+        # subtítulo/...) -- imposible enumerar esas keys con LocMemCache, así
+        # que se limpia todo el cache (mismo patrón ya usado para invalidar
+        # tras generar reportes PAC, ver líneas ~3869/3884). Barato: es solo
+        # un cache-miss para el resto de los módulos, no pérdida de datos.
+        cache.clear()
 
         _tareas_actualizacion_anexo1[task_id].update(
             status="completado", paso=5,

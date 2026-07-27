@@ -1,14 +1,34 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useAnexo1EstadoBD } from '../hooks/useAnexo1EstadoBD';
 import { iniciarActualizacionAnexo1, estadoActualizacionAnexo1, cancelarActualizacionAnexo1 } from '../api/anexo1SigfeApi';
 import MatrizEstadoBD from './MatrizEstadoBD';
 import ModalActualizarAnexo1 from './ModalActualizarAnexo1';
 import BannerActualizacionAnexo1 from './BannerActualizacionAnexo1';
 import PanelCambiosAnexo1 from './PanelCambiosAnexo1';
+import FiltroEjecucion from './FiltroEjecucion';
+import TabResumen from './tabs/TabResumen';
+import TabAlertas from './tabs/TabAlertas';
+import TabSemaforo from './tabs/TabSemaforo';
+import TabBurnRate from './tabs/TabBurnRate';
+import TabDeudaFlotante from './tabs/TabDeudaFlotante';
+import TabTendencias from './tabs/TabTendencias';
+import TabFinanciero from './tabs/TabFinanciero';
+import TabDetallado from './tabs/TabDetallado';
+import TabExportar from './tabs/TabExportar';
+import TabConciliacion from './tabs/TabConciliacion';
 
 const TABS = [
     { id: 'base-datos', label: '🗄️ Base de datos' },
-    // Próximos tabs (reporte HTML) se agregan acá cuando estén listos.
+    { id: 'resumen', label: '📊 Resumen Ejecutivo' },
+    { id: 'detallado', label: '🔍 Análisis Detallado' },
+    { id: 'tendencias', label: '📈 Histórico y Tendencias' },
+    { id: 'alertas', label: '⚠️ Alertas' },
+    { id: 'semaforo', label: '🚦 Semáforo de Cierre' },
+    { id: 'burn-rate', label: '⚡ Burn Rate' },
+    { id: 'deuda-flotante', label: '📉 Deuda Flotante' },
+    { id: 'financiero', label: '📐 Análisis Financiero' },
+    { id: 'conciliacion', label: '🔄 Conciliación N°3' },
+    { id: 'exportar', label: '📤 Exportar Reporte' },
 ];
 
 export default function Anexo1SigfePage() {
@@ -22,6 +42,19 @@ export default function Anexo1SigfePage() {
     const [panelCambios, setPanelCambios] = useState(null);
     const pollingRef = useRef(null);
 
+    // Filtro compartido por los tabs de Análisis de Ejecución Presupuestaria +
+    // contador que fuerza el re-fetch de todos los tabs cuando termina un ETL.
+    const anhos = useMemo(() => {
+        const set = new Set((data?.periodos || []).map((p) => parseInt(p.split('-')[0], 10)));
+        return [...set].sort((a, b) => b - a);
+    }, [data]);
+    const [filtros, setFiltros] = useState({ ue: 'todas', anho: undefined, mesDesde: 1, mesHasta: 12, excluir3435: true });
+    const filtrosConAnho = useMemo(
+        () => ({ ...filtros, anho: filtros.anho || anhos[0] }),
+        [filtros, anhos],
+    );
+    const [refreshKey, setRefreshKey] = useState(0);
+
     const iniciarPolling = useCallback((taskId) => {
         clearInterval(pollingRef.current);
         pollingRef.current = setInterval(async () => {
@@ -32,6 +65,7 @@ export default function Anexo1SigfePage() {
                     clearInterval(pollingRef.current);
                     if (data.status === 'completado') {
                         refresh();
+                        setRefreshKey((k) => k + 1);
                         if (data.diff) setPanelCambios(data.diff);
                     }
                 }
@@ -122,6 +156,46 @@ export default function Anexo1SigfePage() {
                     {error && <div className="error-message">{error}</div>}
                     {data && <MatrizEstadoBD data={data} />}
                 </>
+            )}
+
+            {tab !== 'base-datos' && data && anhos.length > 0 && (
+                <FiltroEjecucion
+                    establecimientos={data.establecimientos}
+                    anhos={anhos}
+                    value={filtrosConAnho}
+                    onChange={setFiltros}
+                />
+            )}
+
+            {tab === 'resumen' && anhos.length > 0 && (
+                <TabResumen filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'detallado' && anhos.length > 0 && (
+                <TabDetallado filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'alertas' && anhos.length > 0 && (
+                <TabAlertas filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'semaforo' && anhos.length > 0 && (
+                <TabSemaforo filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'burn-rate' && anhos.length > 0 && (
+                <TabBurnRate filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'deuda-flotante' && anhos.length > 0 && (
+                <TabDeudaFlotante filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'tendencias' && anhos.length > 0 && (
+                <TabTendencias filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'financiero' && anhos.length > 0 && (
+                <TabFinanciero filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'conciliacion' && anhos.length > 0 && (
+                <TabConciliacion filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'exportar' && anhos.length > 0 && (
+                <TabExportar filtros={filtrosConAnho} />
             )}
 
             {modalAbierto && (

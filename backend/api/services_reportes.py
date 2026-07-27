@@ -63,7 +63,7 @@ COLOR_INSTITUCIONAL = '#1e3a5f'        # --gob-azul (frontend/src/index.css)
 COLOR_INSTITUCIONAL_CLARO = '#38b2bd'  # --gob-celeste
 COLOR_DENTRO = '#16a34a'
 COLOR_FUERA = '#dc2626'
-COLOR_PENDIENTE = '#f59e0b'
+COLOR_PENDIENTE = '#d97706'
 COLOR_SIN_DATO = '#9ca3af'
 
 NOMBRES_SUBDIRECCIONES_INSTITUCIONALES = {
@@ -1763,28 +1763,97 @@ def generar_reporte_pdf(periodo):
 # `_ppt_capitulo_subdireccion`, espejo del capítulo de Word/PDF pero en slides.
 # =============================================================================
 
-COLOR_TITULO_PPT = PptxRGBColor(0x1e, 0x3a, 0x5f)
-COLOR_ACENTO_PPT = PptxRGBColor(0x38, 0xb2, 0xbd)
-COLOR_TEXTO_PPT = PptxRGBColor(0x37, 0x41, 0x51)
-COLOR_PIE_PPT = PptxRGBColor(0x94, 0xa3, 0xb8)
+# Paleta y medidas — extraídas de `PAC_SSO_2026 (1).pptx` (mazo institucional de
+# referencia del Subdepartamento de Abastecimiento), para que los informes
+# generados por el sistema tengan el mismo lenguaje visual. Ver detalle de
+# patrones de diapositiva en el plan de implementación.
+COLOR_TITULO_PPT = PptxRGBColor(0x00, 0x23, 0x4e)          # navy primario
+COLOR_ACENTO_PPT = PptxRGBColor(0x4d, 0xaa, 0xdf)           # azul acento (barras finas)
+COLOR_TEXTO_PPT = PptxRGBColor(0x33, 0x33, 0x33)            # texto cuerpo
+COLOR_PIE_PPT = PptxRGBColor(0xaa, 0xaa, 0xaa)              # texto de pie (slides claras)
+
+COLOR_PPT_AZUL_PROFUNDO = PptxRGBColor(0x00, 0x4b, 0x8d)
+COLOR_PPT_AZUL_MEDIO = PptxRGBColor(0x00, 0x5a, 0x9e)
+COLOR_PPT_FONDO_CLARO = PptxRGBColor(0xf0, 0xf5, 0xfa)
+COLOR_PPT_FILA_ALT = PptxRGBColor(0xf8, 0xfa, 0xff)
+COLOR_PPT_TEXTO_MUTED = PptxRGBColor(0x64, 0x74, 0x8b)
+COLOR_PPT_TEXTO_FORMULA = PptxRGBColor(0x1e, 0x3a, 0x5f)
+COLOR_PPT_VERDE = PptxRGBColor(0x16, 0xa3, 0x4a)
+COLOR_PPT_AMBAR = PptxRGBColor(0xd9, 0x77, 0x06)
+COLOR_PPT_ROJO = PptxRGBColor(0xdc, 0x26, 0x26)
+COLOR_PPT_DESTACADO_BG = PptxRGBColor(0xeb, 0xf2, 0xff)
+COLOR_PPT_NUMERO_DIVISOR = PptxRGBColor(0x1a, 0x3a, 0x6b)   # número gigante de separador de sección
+COLOR_PPT_PIE_OSCURO = PptxRGBColor(0xb0, 0xc8, 0xe0)       # texto de pie sobre fondo navy
+
+# Lienzo 16:9 estándar de PowerPoint (13.333x7.5") — el alto no cambia respecto
+# al 4:3 anterior (10x7.5"), así que la mayoría de los `top=`/`height=` ya
+# existentes en este archivo siguen siendo válidos; solo se reescalaron los
+# `left=`/`width=` para aprovechar el ancho nuevo.
+PPT_ANCHO = 13.333
+PPT_ALTO = 7.5
+PPT_MARGEN = 0.5
+PPT_ANCHO_CONTENIDO = PPT_ANCHO - 2 * PPT_MARGEN  # ≈ 12.33"
 
 
 def _ppt_slide_en_blanco(prs):
-    return prs.slides.add_slide(prs.slide_layouts[6])
+    """Slide de CONTENIDO (fondo claro): fondo `F0F5FA` + barra superior navy
+    delgada, mimetizando las diapositivas de contenido del mazo de referencia.
+    El pie (barra inferior + texto + numeración) se agrega al final vía
+    `_ppt_pie_pagina`/`_ppt_numerar_diapositivas` — no hace falta tocar cada
+    call-site que ya usa esta función."""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.background.fill.solid()
+    slide.background.fill.fore_color.rgb = COLOR_PPT_FONDO_CLARO
+    barra = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(0), PptxInches(0), PptxInches(PPT_ANCHO), PptxInches(0.08))
+    barra.fill.solid()
+    barra.fill.fore_color.rgb = COLOR_TITULO_PPT
+    barra.line.fill.background()
+    barra.shadow.inherit = False
+    return slide
 
 
-def _ppt_titulo(slide, texto, top=PptxInches(0.35), tamano=26):
-    caja = slide.shapes.add_textbox(PptxInches(0.5), top, PptxInches(9), PptxInches(0.8))
+def _ppt_slide_oscura(prs):
+    """Slide OSCURA (fondo navy) para portadas y separadores de sección: barras
+    de acento superior/inferior + barra vertical izquierda, como en el mazo de
+    referencia. El contenido (título, número, etc.) se agrega por el llamador."""
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.background.fill.solid()
+    slide.background.fill.fore_color.rgb = COLOR_TITULO_PPT
+    for top in (0, PPT_ALTO - 0.08):
+        barra = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(0), PptxInches(top), PptxInches(PPT_ANCHO), PptxInches(0.08))
+        barra.fill.solid()
+        barra.fill.fore_color.rgb = COLOR_ACENTO_PPT
+        barra.line.fill.background()
+        barra.shadow.inherit = False
+    lateral = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(0), PptxInches(0.08), PptxInches(0.3), PptxInches(PPT_ALTO - 0.16))
+    lateral.fill.solid()
+    lateral.fill.fore_color.rgb = COLOR_PPT_AZUL_PROFUNDO
+    lateral.line.fill.background()
+    lateral.shadow.inherit = False
+    return slide
+
+
+def _ppt_titulo(slide, texto, subtitulo=None, top=PptxInches(0.2), tamano=24):
+    caja = slide.shapes.add_textbox(PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.55))
     p = caja.text_frame.paragraphs[0]
     run = p.add_run()
     run.text = texto
     run.font.size = PptxPt(tamano)
     run.font.bold = True
     run.font.color.rgb = COLOR_TITULO_PPT
+    if subtitulo:
+        caja_sub = slide.shapes.add_textbox(
+            PptxInches(PPT_MARGEN), top + PptxInches(0.5), PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.3),
+        )
+        p_sub = caja_sub.text_frame.paragraphs[0]
+        run_sub = p_sub.add_run()
+        run_sub.text = subtitulo
+        run_sub.font.size = PptxPt(11)
+        run_sub.font.color.rgb = COLOR_PPT_TEXTO_MUTED
     return caja
 
 
-def _ppt_parrafo(slide, texto, top, left=PptxInches(0.5), width=PptxInches(9), tamano=14, height=PptxInches(1.2)):
+def _ppt_parrafo(slide, texto, top, left=PptxInches(PPT_MARGEN), width=PptxInches(PPT_ANCHO_CONTENIDO), tamano=14, height=PptxInches(1.2)):
     caja = slide.shapes.add_textbox(left, top, width, height)
     tf = caja.text_frame
     tf.word_wrap = True
@@ -1801,8 +1870,28 @@ def _ppt_imagen(slide, img_bytes, left, top, width):
         slide.shapes.add_picture(img_bytes, left, top, width=width)
 
 
+def _ppt_es_slide_oscura(slide):
+    try:
+        return slide.background.fill.fore_color.rgb == COLOR_TITULO_PPT
+    except Exception:
+        return False
+
+
 def _ppt_pie_pagina(slide):
-    caja = slide.shapes.add_textbox(PptxInches(0.4), PptxInches(7.05), PptxInches(9.2), PptxInches(0.35))
+    """Barra inferior navy + texto de pie — solo en slides de contenido (fondo
+    claro). Las slides oscuras (portada/separadores) ya dibujan su propio pie
+    como parte de su contenido custom, así que se ignoran aquí — permite seguir
+    llamando esta función sobre TODAS las slides sin distinción."""
+    if _ppt_es_slide_oscura(slide):
+        return
+    barra = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, PptxInches(0), PptxInches(PPT_ALTO - 0.08), PptxInches(PPT_ANCHO), PptxInches(0.08),
+    )
+    barra.fill.solid()
+    barra.fill.fore_color.rgb = COLOR_TITULO_PPT
+    barra.line.fill.background()
+    barra.shadow.inherit = False
+    caja = slide.shapes.add_textbox(PptxInches(PPT_MARGEN), PptxInches(PPT_ALTO - 0.34), PptxInches(PPT_ANCHO_CONTENIDO - 0.7), PptxInches(0.24))
     p = caja.text_frame.paragraphs[0]
     run = p.add_run()
     run.text = NOMBRE_INSTITUCION
@@ -1813,7 +1902,11 @@ def _ppt_pie_pagina(slide):
 def _ppt_numerar_diapositivas(prs):
     total = len(prs.slides._sldIdLst)
     for i, slide in enumerate(prs.slides, start=1):
-        caja = slide.shapes.add_textbox(PptxInches(9.3), PptxInches(7.05), PptxInches(0.6), PptxInches(0.35))
+        if _ppt_es_slide_oscura(slide):
+            continue
+        caja = slide.shapes.add_textbox(
+            PptxInches(PPT_ANCHO - PPT_MARGEN - 0.6), PptxInches(PPT_ALTO - 0.34), PptxInches(0.6), PptxInches(0.24),
+        )
         p = caja.text_frame.paragraphs[0]
         p.alignment = PP_ALIGN.RIGHT
         run = p.add_run()
@@ -1822,12 +1915,261 @@ def _ppt_numerar_diapositivas(prs):
         run.font.color.rgb = COLOR_PIE_PPT
 
 
+def _ppt_portada(prs, badge_texto, titulo_lineas, subtitulo_inst, meta_texto, logo_bytes=None, imagen_bytes=None):
+    """Portada estilo `PAC_SSO_2026.pptx`: fondo navy, badge azul acento, título
+    grande blanco (multilínea), subtítulo institucional, línea divisoria fina,
+    meta-texto de pie. `titulo_lineas` es una lista de strings (una por línea)."""
+    slide = _ppt_slide_oscura(prs)
+    if logo_bytes:
+        slide.shapes.add_picture(logo_bytes, PptxInches(PPT_ANCHO - PPT_MARGEN - 1.3), PptxInches(0.35), height=PptxInches(1.0))
+    if badge_texto:
+        badge = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(0.7), PptxInches(0.5), PptxInches(3.4), PptxInches(0.42))
+        badge.fill.solid()
+        badge.fill.fore_color.rgb = COLOR_ACENTO_PPT
+        badge.line.fill.background()
+        badge.shadow.inherit = False
+        tf = badge.text_frame
+        tf.margin_left = PptxInches(0.08)
+        tf.margin_top = 0
+        tf.margin_bottom = 0
+        p = tf.paragraphs[0]
+        run = p.add_run()
+        run.text = badge_texto
+        run.font.size = PptxPt(13)
+        run.font.bold = True
+        run.font.color.rgb = COLOR_TITULO_PPT
+    caja_t = slide.shapes.add_textbox(PptxInches(0.7), PptxInches(1.35), PptxInches(PPT_ANCHO - 1.4), PptxInches(2.2))
+    tf_t = caja_t.text_frame
+    tf_t.word_wrap = True
+    for i, linea in enumerate(titulo_lineas):
+        p = tf_t.paragraphs[0] if i == 0 else tf_t.add_paragraph()
+        run = p.add_run()
+        run.text = linea
+        run.font.size = PptxPt(34)
+        run.font.bold = True
+        run.font.color.rgb = PptxRGBColor(0xff, 0xff, 0xff)
+    if subtitulo_inst:
+        caja_sub = slide.shapes.add_textbox(PptxInches(0.7), PptxInches(1.35 + 0.7 * len(titulo_lineas) + 0.3), PptxInches(PPT_ANCHO - 1.4), PptxInches(0.6))
+        p_sub = caja_sub.text_frame.paragraphs[0]
+        run_sub = p_sub.add_run()
+        run_sub.text = subtitulo_inst
+        run_sub.font.size = PptxPt(20)
+        run_sub.font.color.rgb = COLOR_ACENTO_PPT
+    if imagen_bytes:
+        # Ancho acotado (no solo alto) para que quepa entre el subtítulo y la línea
+        # divisoria del pie sin desbordar el lienzo — la imagen del edificio
+        # institucional tiene una relación de aspecto más alta que ancha.
+        slide.shapes.add_picture(imagen_bytes, PptxInches((PPT_ANCHO - 3.5) / 2), PptxInches(3.75), width=PptxInches(3.5))
+    if meta_texto:
+        divisor = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(0.7), PptxInches(PPT_ALTO - 1.0), PptxInches(6), PptxInches(0.035))
+        divisor.fill.solid()
+        divisor.fill.fore_color.rgb = COLOR_ACENTO_PPT
+        divisor.line.fill.background()
+        divisor.shadow.inherit = False
+        caja_meta = slide.shapes.add_textbox(PptxInches(0.7), PptxInches(PPT_ALTO - 0.85), PptxInches(PPT_ANCHO - 1.4), PptxInches(0.6))
+        p_meta = caja_meta.text_frame.paragraphs[0]
+        run_meta = p_meta.add_run()
+        run_meta.text = meta_texto
+        run_meta.font.size = PptxPt(13)
+        run_meta.font.color.rgb = COLOR_PPT_PIE_OSCURO
+    return slide
+
+
+def _ppt_divisor_seccion(prs, numero, titulo_lineas, subtitulo=None):
+    """Separador de sección estilo `PAC_SSO_2026.pptx`: fondo navy, número
+    gigante, título multilínea blanco bold, subtítulo azul acento."""
+    slide = _ppt_slide_oscura(prs)
+    caja_n = slide.shapes.add_textbox(PptxInches(0.7), PptxInches(0.6), PptxInches(3), PptxInches(1.5))
+    p_n = caja_n.text_frame.paragraphs[0]
+    run_n = p_n.add_run()
+    run_n.text = numero
+    run_n.font.size = PptxPt(80)
+    run_n.font.bold = True
+    run_n.font.color.rgb = COLOR_PPT_NUMERO_DIVISOR
+    caja_t = slide.shapes.add_textbox(PptxInches(0.7), PptxInches(2.3), PptxInches(PPT_ANCHO - 1.4), PptxInches(2.2))
+    tf_t = caja_t.text_frame
+    tf_t.word_wrap = True
+    for i, linea in enumerate(titulo_lineas):
+        p = tf_t.paragraphs[0] if i == 0 else tf_t.add_paragraph()
+        run = p.add_run()
+        run.text = linea
+        run.font.size = PptxPt(36)
+        run.font.bold = True
+        run.font.color.rgb = PptxRGBColor(0xff, 0xff, 0xff)
+    if subtitulo:
+        caja_sub = slide.shapes.add_textbox(
+            PptxInches(0.7), PptxInches(2.3 + 0.75 * len(titulo_lineas) + 0.2), PptxInches(PPT_ANCHO - 1.4), PptxInches(0.6),
+        )
+        p_sub = caja_sub.text_frame.paragraphs[0]
+        run_sub = p_sub.add_run()
+        run_sub.text = subtitulo
+        run_sub.font.size = PptxPt(15)
+        run_sub.font.color.rgb = COLOR_ACENTO_PPT
+    return slide
+
+
+def _ppt_tarjeta_kpi(slide, left, top, width, height, valor, etiqueta, color_bg=None, color_texto_etiqueta=None):
+    """Tile KPI sólido (número grande blanco + etiqueta) — como los stat cards
+    de las diapositivas 15/16 de la referencia."""
+    color_bg = color_bg or COLOR_TITULO_PPT
+    color_texto_etiqueta = color_texto_etiqueta or PptxRGBColor(0xcc, 0xe0, 0xf5)
+    tile = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, height)
+    tile.fill.solid()
+    tile.fill.fore_color.rgb = color_bg
+    tile.line.fill.background()
+    tile.shadow.inherit = False
+    caja_v = slide.shapes.add_textbox(left + PptxInches(0.06), top + PptxInches(0.04), width - PptxInches(0.12), height * 0.62)
+    p_v = caja_v.text_frame.paragraphs[0]
+    run_v = p_v.add_run()
+    run_v.text = str(valor)
+    run_v.font.size = PptxPt(24)
+    run_v.font.bold = True
+    run_v.font.color.rgb = PptxRGBColor(0xff, 0xff, 0xff)
+    caja_e = slide.shapes.add_textbox(left + PptxInches(0.06), top + height * 0.62, width - PptxInches(0.12), height * 0.36)
+    p_e = caja_e.text_frame.paragraphs[0]
+    run_e = p_e.add_run()
+    run_e.text = etiqueta
+    run_e.font.size = PptxPt(10.5)
+    run_e.font.color.rgb = color_texto_etiqueta
+
+
+def _ppt_fila_indicador(slide, top, etiqueta, valor, color, comparacion=None, explicacion=None, flecha='→'):
+    """Fila de indicador estilo diapositiva 13 de la referencia: icono de
+    tendencia + etiqueta + valor grande coloreado + comparación gris +
+    explicación en texto oscuro."""
+    alto = PptxInches(0.66)
+    fondo = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), alto)
+    fondo.fill.solid()
+    fondo.fill.fore_color.rgb = PptxRGBColor(0xff, 0xff, 0xff)
+    fondo.line.fill.background()
+    fondo.shadow.inherit = False
+    barra = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(PPT_MARGEN), top, PptxInches(0.09), alto)
+    barra.fill.solid()
+    barra.fill.fore_color.rgb = color
+    barra.line.fill.background()
+    barra.shadow.inherit = False
+    caja_icono = slide.shapes.add_textbox(PptxInches(PPT_MARGEN + 0.18), top + PptxInches(0.13), PptxInches(0.4), PptxInches(0.4))
+    p_icono = caja_icono.text_frame.paragraphs[0]
+    run_icono = p_icono.add_run()
+    run_icono.text = flecha
+    run_icono.font.size = PptxPt(18)
+    run_icono.font.bold = True
+    run_icono.font.color.rgb = color
+    caja_e = slide.shapes.add_textbox(PptxInches(PPT_MARGEN + 0.75), top + PptxInches(0.06), PptxInches(2.7), PptxInches(0.3))
+    p_e = caja_e.text_frame.paragraphs[0]
+    run_e = p_e.add_run()
+    run_e.text = etiqueta
+    run_e.font.size = PptxPt(12)
+    run_e.font.bold = True
+    run_e.font.color.rgb = COLOR_TITULO_PPT
+    caja_v = slide.shapes.add_textbox(PptxInches(PPT_MARGEN + 0.75), top + PptxInches(0.32), PptxInches(1.6), PptxInches(0.3))
+    p_v = caja_v.text_frame.paragraphs[0]
+    run_v = p_v.add_run()
+    run_v.text = str(valor)
+    run_v.font.size = PptxPt(16)
+    run_v.font.bold = True
+    run_v.font.color.rgb = color
+    if comparacion:
+        caja_c = slide.shapes.add_textbox(PptxInches(PPT_MARGEN + 2.5), top + PptxInches(0.35), PptxInches(2.8), PptxInches(0.25))
+        p_c = caja_c.text_frame.paragraphs[0]
+        run_c = p_c.add_run()
+        run_c.text = comparacion
+        run_c.font.size = PptxPt(9.5)
+        run_c.font.color.rgb = COLOR_PPT_TEXTO_MUTED
+    if explicacion:
+        caja_x = slide.shapes.add_textbox(PptxInches(PPT_MARGEN + 5.5), top + PptxInches(0.08), PptxInches(PPT_ANCHO_CONTENIDO - 5.6), alto - PptxInches(0.16))
+        tf_x = caja_x.text_frame
+        tf_x.word_wrap = True
+        p_x = tf_x.paragraphs[0]
+        run_x = p_x.add_run()
+        run_x.text = explicacion
+        run_x.font.size = PptxPt(9.5)
+        run_x.font.color.rgb = COLOR_TEXTO_PPT
+
+
+def _ppt_tarjeta_numerada(slide, top, numero, titulo, descripcion=None, color=None, height=0.75):
+    """Tarjeta blanca con badge numerado — Agenda / listas de conclusiones,
+    como las diapositivas 2 y 8 de la referencia."""
+    color = color or COLOR_TITULO_PPT
+    alto = PptxInches(height)
+    fondo = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), alto)
+    fondo.fill.solid()
+    fondo.fill.fore_color.rgb = PptxRGBColor(0xff, 0xff, 0xff)
+    fondo.line.fill.background()
+    fondo.shadow.inherit = False
+    badge = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(PPT_MARGEN), top, PptxInches(0.62), alto)
+    badge.fill.solid()
+    badge.fill.fore_color.rgb = color
+    badge.line.fill.background()
+    badge.shadow.inherit = False
+    tf_b = badge.text_frame
+    tf_b.word_wrap = True
+    p_b = tf_b.paragraphs[0]
+    p_b.alignment = PP_ALIGN.CENTER
+    run_b = p_b.add_run()
+    run_b.text = numero
+    run_b.font.size = PptxPt(18)
+    run_b.font.bold = True
+    run_b.font.color.rgb = PptxRGBColor(0xff, 0xff, 0xff)
+    caja_t = slide.shapes.add_textbox(PptxInches(PPT_MARGEN + 0.78), top + PptxInches(0.06), PptxInches(PPT_ANCHO_CONTENIDO - 0.9), PptxInches(0.32))
+    p_t = caja_t.text_frame.paragraphs[0]
+    run_t = p_t.add_run()
+    run_t.text = titulo
+    run_t.font.size = PptxPt(14)
+    run_t.font.bold = True
+    run_t.font.color.rgb = COLOR_TITULO_PPT
+    if descripcion:
+        caja_d = slide.shapes.add_textbox(PptxInches(PPT_MARGEN + 0.78), top + PptxInches(0.38), PptxInches(PPT_ANCHO_CONTENIDO - 0.9), alto - PptxInches(0.42))
+        tf_d = caja_d.text_frame
+        tf_d.word_wrap = True
+        p_d = tf_d.paragraphs[0]
+        run_d = p_d.add_run()
+        run_d.text = descripcion
+        run_d.font.size = PptxPt(10.5)
+        run_d.font.color.rgb = COLOR_PPT_TEXTO_MUTED
+
+
+def _ppt_estilizar_tabla(tabla, color_header=None, zebra=True, resaltar_ultima_fila=False, tamano_fuente=11):
+    """Aplica el estilo de tabla del mazo de referencia: header navy con texto
+    blanco bold, filas zebra (blanco/`F8FAFF`), fila TOTAL opcional resaltada.
+    Se llama al final de cada función `_ppt_tabla_*`, sobre una tabla ya
+    poblada con texto."""
+    color_header = color_header or COLOR_TITULO_PPT
+    n_filas = len(tabla.rows)
+    for r, row in enumerate(tabla.rows):
+        es_header = r == 0
+        es_total = resaltar_ultima_fila and r == n_filas - 1
+        for cell in row.cells:
+            cell.margin_top = PptxInches(0.03)
+            cell.margin_bottom = PptxInches(0.03)
+            cell.fill.solid()
+            if es_header:
+                cell.fill.fore_color.rgb = color_header
+            elif es_total:
+                cell.fill.fore_color.rgb = COLOR_PPT_DESTACADO_BG
+            elif zebra and r % 2 == 0:
+                cell.fill.fore_color.rgb = COLOR_PPT_FILA_ALT
+            else:
+                cell.fill.fore_color.rgb = PptxRGBColor(0xff, 0xff, 0xff)
+            for p in cell.text_frame.paragraphs:
+                for run in p.runs:
+                    run.font.size = PptxPt(tamano_fuente)
+                    if es_header:
+                        run.font.bold = True
+                        run.font.color.rgb = PptxRGBColor(0xff, 0xff, 0xff)
+                    elif es_total:
+                        run.font.bold = True
+                        run.font.color.rgb = COLOR_TITULO_PPT
+                    else:
+                        run.font.color.rgb = COLOR_TEXTO_PPT
+
+
 def _ppt_tabla_resumen_combinado(slide, subdirecciones, top):
     """Una sola tabla que resume las 4 subdirecciones institucionales — versión
     ejecutiva del capítulo por subdirección exhaustivo de Word/PDF."""
     filas_datos = [s for s in subdirecciones if s['institucional']]
     n_filas = len(filas_datos) + 1
-    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(0.5), top, PptxInches(9), PptxInches(0.45 * n_filas))
+    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.45 * n_filas))
     tabla = tabla_shape.table
     for i, h in enumerate(['Subdirección', 'Formularios', '% Dentro PAC', 'Fichas Plan Compras', '% Ejecutado']):
         tabla.cell(0, i).text = h
@@ -1838,17 +2180,13 @@ def _ppt_tabla_resumen_combinado(slide, subdirecciones, top):
         tabla.cell(r, 2).text = f"{fsc['pct_dentro']}%" if fsc else '—'
         tabla.cell(r, 3).text = str(planer['total']) if planer else '—'
         tabla.cell(r, 4).text = f"{planer['pct_ejecutado']}%" if planer else '—'
-    for row in tabla.rows:
-        for cell in row.cells:
-            for p in cell.text_frame.paragraphs:
-                for run in p.runs:
-                    run.font.size = PptxPt(12)
+    _ppt_estilizar_tabla(tabla, tamano_fuente=12)
 
 
 def _ppt_tabla_ranking(slide, filas, top, limite=5):
     filas_datos = filas[:limite]
     n_filas = len(filas_datos) + 1
-    tabla_shape = slide.shapes.add_table(n_filas, 4, PptxInches(0.5), top, PptxInches(9), PptxInches(0.42 * n_filas))
+    tabla_shape = slide.shapes.add_table(n_filas, 4, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.42 * n_filas))
     tabla = tabla_shape.table
     for i, h in enumerate(['Departamento', 'Subdirección', 'Score', '% Dentro']):
         tabla.cell(0, i).text = h
@@ -1857,11 +2195,7 @@ def _ppt_tabla_ranking(slide, filas, top, limite=5):
         tabla.cell(r, 1).text = _nombre_subdireccion_display(f['subdireccion'])
         tabla.cell(r, 2).text = f"{f['score']:.0f}"
         tabla.cell(r, 3).text = f"{f['pct_dentro']}%"
-    for row in tabla.rows:
-        for cell in row.cells:
-            for p in cell.text_frame.paragraphs:
-                for run in p.runs:
-                    run.font.size = PptxPt(12)
+    _ppt_estilizar_tabla(tabla, tamano_fuente=12)
 
 
 def _ppt_fijar_anchos_columnas(tabla, anchos_pulgadas):
@@ -1881,9 +2215,9 @@ def _ppt_tabla_depto_dentro_fuera(slide, departamentos, top, limite=12):
     Mismos campos que `_tabla_departamentos` (Word), formato compacto de slide."""
     filas_datos = departamentos[:limite]
     n_filas = len(filas_datos) + 1
-    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.4 * n_filas))
     tabla = tabla_shape.table
-    _ppt_fijar_anchos_columnas(tabla, [3.4, 1.45, 1.45, 1.45, 1.45])
+    _ppt_fijar_anchos_columnas(tabla, [4.55, 1.94, 1.94, 1.94, 1.94])
     for i, h in enumerate(['Departamento', 'Total', 'Dentro', 'Fuera', '% Dentro']):
         tabla.cell(0, i).text = h
     for r, d in enumerate(filas_datos, start=1):
@@ -1892,11 +2226,7 @@ def _ppt_tabla_depto_dentro_fuera(slide, departamentos, top, limite=12):
         tabla.cell(r, 2).text = str(d['dentro'])
         tabla.cell(r, 3).text = str(d['fuera'])
         tabla.cell(r, 4).text = f"{d['pct_dentro']}%"
-    for row in tabla.rows:
-        for cell in row.cells:
-            for p in cell.text_frame.paragraphs:
-                for run in p.runs:
-                    run.font.size = PptxPt(12)
+    _ppt_estilizar_tabla(tabla, tamano_fuente=12)
     if len(departamentos) > limite:
         _ppt_parrafo(
             slide, f'… y {len(departamentos) - limite} departamento(s) adicional(es) — ver detalle en el informe Word/PDF.',
@@ -1909,9 +2239,9 @@ def _ppt_tabla_depto_ejecucion(slide, departamentos, top, limite=12):
     subdirección del PPT. Mismos campos que `_tabla_deptos_ejecucion` (Word)."""
     filas_datos = departamentos[:limite]
     n_filas = len(filas_datos) + 1
-    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.4 * n_filas))
     tabla = tabla_shape.table
-    _ppt_fijar_anchos_columnas(tabla, [3.4, 1.45, 1.45, 1.45, 1.45])
+    _ppt_fijar_anchos_columnas(tabla, [4.55, 1.94, 1.94, 1.94, 1.94])
     for i, h in enumerate(['Departamento', 'Total', 'Ejecutadas', 'Atrasadas', '% Ejecutado']):
         tabla.cell(0, i).text = h
     for r, d in enumerate(filas_datos, start=1):
@@ -1920,11 +2250,7 @@ def _ppt_tabla_depto_ejecucion(slide, departamentos, top, limite=12):
         tabla.cell(r, 2).text = str(d['ejecutados'])
         tabla.cell(r, 3).text = str(d['atrasados'])
         tabla.cell(r, 4).text = f"{d['pct_ejecutado']}%"
-    for row in tabla.rows:
-        for cell in row.cells:
-            for p in cell.text_frame.paragraphs:
-                for run in p.runs:
-                    run.font.size = PptxPt(12)
+    _ppt_estilizar_tabla(tabla, tamano_fuente=12)
     if len(departamentos) > limite:
         _ppt_parrafo(
             slide, f'… y {len(departamentos) - limite} departamento(s) adicional(es) — ver detalle en el informe Word/PDF.',
@@ -1937,9 +2263,9 @@ def _ppt_tabla_formularios_detalle(slide, formularios, top, limite=12):
     `_tabla_formularios_detalle_docx`, para el capítulo de subdirección del PPT."""
     filas_datos = formularios[:limite]
     n_filas = len(filas_datos) + 1
-    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.4 * n_filas))
     tabla = tabla_shape.table
-    _ppt_fijar_anchos_columnas(tabla, [1.1, 3.4, 1.1, 1.7, 1.9])
+    _ppt_fijar_anchos_columnas(tabla, [1.47, 4.55, 1.47, 2.27, 2.54])
     for i, h in enumerate(['Formulario', 'Unidad Requirente', 'Dentro/Fuera', 'Monto', 'Fecha Derivado']):
         tabla.cell(0, i).text = h
     for r, f in enumerate(filas_datos, start=1):
@@ -1948,11 +2274,7 @@ def _ppt_tabla_formularios_detalle(slide, formularios, top, limite=12):
         tabla.cell(r, 2).text = 'Dentro' if f['dentro_fuera_pac'] == 'DENTRO' else 'Fuera'
         tabla.cell(r, 3).text = _money(f['monto_estimado'])
         tabla.cell(r, 4).text = f['fecha_derivado'] or '—'
-    for row in tabla.rows:
-        for cell in row.cells:
-            for p in cell.text_frame.paragraphs:
-                for run in p.runs:
-                    run.font.size = PptxPt(11)
+    _ppt_estilizar_tabla(tabla, tamano_fuente=11)
     if len(formularios) > limite:
         _ppt_parrafo(
             slide, f'… y {len(formularios) - limite} formulario(s) adicional(es) — ver detalle en el informe Word/PDF.',
@@ -1965,9 +2287,9 @@ def _ppt_tabla_fichas_ejecucion(slide, fichas, top, limite=10):
     ejecutó cada uno — versión slide de `_tabla_fichas_ejecucion_detalle_docx`."""
     filas_datos = fichas[:limite]
     n_filas = len(filas_datos) + 1
-    tabla_shape = slide.shapes.add_table(n_filas, 4, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla_shape = slide.shapes.add_table(n_filas, 4, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.4 * n_filas))
     tabla = tabla_shape.table
-    _ppt_fijar_anchos_columnas(tabla, [2.3, 1.9, 1.1, 3.9])
+    _ppt_fijar_anchos_columnas(tabla, [3.08, 2.54, 1.47, 5.21])
     for i, h in enumerate(['Proyecto', 'Departamento', 'Estado', 'Ejecutado con (Formulario)']):
         tabla.cell(0, i).text = h
     for r, f in enumerate(filas_datos, start=1):
@@ -1977,11 +2299,7 @@ def _ppt_tabla_fichas_ejecucion(slide, fichas, top, limite=10):
         tabla.cell(r, 1).text = _truncar(f['depto_nombre'] or f['depto_texto'], 30)
         tabla.cell(r, 2).text = f['estado_ejecucion']
         tabla.cell(r, 3).text = _truncar(texto_ejecutores, 45)
-    for row in tabla.rows:
-        for cell in row.cells:
-            for p in cell.text_frame.paragraphs:
-                for run in p.runs:
-                    run.font.size = PptxPt(11)
+    _ppt_estilizar_tabla(tabla, tamano_fuente=11)
     if len(fichas) > limite:
         _ppt_parrafo(
             slide, f'… y {len(fichas) - limite} proyecto(s) adicional(es) — ver detalle en el informe Word/PDF.',
@@ -1994,9 +2312,9 @@ def _ppt_tabla_fichas_pac(slide, fichas, top, limite=10):
     `_tabla_fichas_pac_docx`, usada por Alertas y Seguimiento agrupado por subdirección."""
     filas_datos = fichas[:limite]
     n_filas = len(filas_datos) + 1
-    tabla_shape = slide.shapes.add_table(n_filas, 4, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla_shape = slide.shapes.add_table(n_filas, 4, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.4 * n_filas))
     tabla = tabla_shape.table
-    _ppt_fijar_anchos_columnas(tabla, [3.4, 2.4, 1.7, 1.7])
+    _ppt_fijar_anchos_columnas(tabla, [4.55, 3.21, 2.27, 2.27])
     for i, h in enumerate(['Proyecto', 'Departamento', 'Fecha Compra', 'Estado']):
         tabla.cell(0, i).text = h
     for r, f in enumerate(filas_datos, start=1):
@@ -2004,11 +2322,7 @@ def _ppt_tabla_fichas_pac(slide, fichas, top, limite=10):
         tabla.cell(r, 1).text = _truncar(f['depto_nombre'] or f['depto_texto'], 32)
         tabla.cell(r, 2).text = f['fecha_mas_proxima'] or '—'
         tabla.cell(r, 3).text = f['estado_ejecucion']
-    for row in tabla.rows:
-        for cell in row.cells:
-            for p in cell.text_frame.paragraphs:
-                for run in p.runs:
-                    run.font.size = PptxPt(11)
+    _ppt_estilizar_tabla(tabla, tamano_fuente=11)
     if len(fichas) > limite:
         _ppt_parrafo(
             slide, f'… y {len(fichas) - limite} ficha(s) adicional(es) — ver detalle en el informe Word/PDF.',
@@ -2019,20 +2333,16 @@ def _ppt_tabla_fichas_pac(slide, fichas, top, limite=10):
 def _ppt_tabla_proyectos_sin_iniciar(slide, proyectos, top, limite=10):
     filas_datos = proyectos[:limite]
     n_filas = len(filas_datos) + 1
-    tabla_shape = slide.shapes.add_table(n_filas, 3, PptxInches(0.4), top, PptxInches(9.2), PptxInches(0.4 * n_filas))
+    tabla_shape = slide.shapes.add_table(n_filas, 3, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.4 * n_filas))
     tabla = tabla_shape.table
-    _ppt_fijar_anchos_columnas(tabla, [5.0, 2.2, 2.0])
+    _ppt_fijar_anchos_columnas(tabla, [6.69, 2.94, 2.67])
     for i, h in enumerate(['Proyecto', 'Fecha Planificada', 'Estado']):
         tabla.cell(0, i).text = h
     for r, p in enumerate(filas_datos, start=1):
         tabla.cell(r, 0).text = _truncar(p.get('nombre_proyecto') or p['id_proyecto'], 55)
         tabla.cell(r, 1).text = p['fecha_inicio_compra']
         tabla.cell(r, 2).text = 'Pendiente' if p['estado'] == 'PENDIENTE' else 'Atrasado'
-    for row in tabla.rows:
-        for cell in row.cells:
-            for p_ in cell.text_frame.paragraphs:
-                for run in p_.runs:
-                    run.font.size = PptxPt(11)
+    _ppt_estilizar_tabla(tabla, tamano_fuente=11)
     if len(proyectos) > limite:
         _ppt_parrafo(
             slide, f'… y {len(proyectos) - limite} proyecto(s) adicional(es) — ver detalle en el informe Word/PDF.',
@@ -2052,12 +2362,13 @@ def _ppt_capitulo_subdireccion(prs, nombre_display, fsc, planer, responsables, a
     (períodos cortos)."""
     formularios_detalle = formularios_detalle or []
     fichas_detalle = fichas_detalle or []
-    # --- Portada de capítulo + KPIs -----------------------------------------
+    # --- Portada de capítulo: franja + tarjetas KPI + donuts -----------------
     slide = _ppt_slide_en_blanco(prs)
-    franja = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(0), PptxInches(0), PptxInches(10), PptxInches(1.15))
+    franja = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, PptxInches(0), PptxInches(0.08), PptxInches(PPT_ANCHO), PptxInches(1.1))
     franja.fill.solid()
     franja.fill.fore_color.rgb = COLOR_TITULO_PPT
     franja.line.fill.background()
+    franja.shadow.inherit = False
     tf = franja.text_frame
     tf.word_wrap = True
     p = tf.paragraphs[0]
@@ -2068,34 +2379,41 @@ def _ppt_capitulo_subdireccion(prs, nombre_display, fsc, planer, responsables, a
     run.font.bold = True
     run.font.color.rgb = PptxRGBColor(0xff, 0xff, 0xff)
 
-    kpis_texto = []
+    n_tiles = 4
+    gap = 0.15
+    ancho_tile = (PPT_ANCHO_CONTENIDO - (n_tiles - 1) * gap) / n_tiles
+    tiles = []
     if fsc:
-        kpis_texto.append(
-            f'Formularios totales: {_n(fsc["total"])}  ·  Dentro PAC: {_n(fsc["dentro"])} ({fsc["pct_dentro"]}%)  ·  '
-            f'Fuera PAC: {_n(fsc["total"] - fsc["dentro"])}'
-        )
+        tiles.append((_n(fsc['total']), 'Formularios Totales', COLOR_TITULO_PPT))
+        tiles.append((f"{fsc['pct_dentro']}%", 'Dentro del PAC', COLOR_PPT_VERDE if fsc['pct_dentro'] >= 50 else COLOR_PPT_AMBAR))
     else:
-        kpis_texto.append('Sin formularios registrados en este período.')
+        tiles.append(('—', 'Formularios Totales', COLOR_TITULO_PPT))
+        tiles.append(('—', 'Dentro del PAC', COLOR_TITULO_PPT))
     if planer:
-        kpis_texto.append(
-            f'Plan de Compras {anho}: {_n(planer["total"])} fichas  ·  Ejecutadas: {_n(planer["ejecutados"])} '
-            f'({planer["pct_ejecutado"]}%)  ·  Atrasadas: {_n(planer["atrasados"])}  ·  '
-            f'Monto planificado: {_money(planer["monto_total"])}'
-        )
+        tiles.append((_n(planer['total']), f'Fichas Plan {anho}', COLOR_PPT_AZUL_PROFUNDO))
+        tiles.append((f"{planer['pct_ejecutado']}%", '% Ejecutado', COLOR_PPT_VERDE if planer['pct_ejecutado'] >= 70 else COLOR_PPT_AMBAR))
     else:
-        kpis_texto.append(f'Sin fichas del Plan de Compras {anho} registradas para esta subdirección.')
-    if responsables:
-        kpis_texto.append('Responsables: ' + ', '.join(responsables[:5]) + ('…' if len(responsables) > 5 else ''))
-    _ppt_parrafo(slide, '\n\n'.join(kpis_texto), top=PptxInches(1.5), tamano=14, height=PptxInches(2))
+        tiles.append(('—', f'Plan de Compras {anho}', COLOR_PPT_AZUL_PROFUNDO))
+        tiles.append(('—', '% Ejecutado', COLOR_PPT_AZUL_PROFUNDO))
+    for i, (valor, etiqueta, color) in enumerate(tiles):
+        left = PptxInches(PPT_MARGEN + i * (ancho_tile + gap))
+        _ppt_tarjeta_kpi(slide, left, PptxInches(1.35), PptxInches(ancho_tile), PptxInches(0.85), valor, etiqueta, color_bg=color)
 
+    top_donas = PptxInches(2.4)
+    if responsables:
+        _ppt_parrafo(
+            slide, 'Responsables: ' + ', '.join(responsables[:5]) + ('…' if len(responsables) > 5 else ''),
+            top=PptxInches(2.35), tamano=10.5, height=PptxInches(0.3),
+        )
+        top_donas = PptxInches(2.8)
     if fsc:
         _ppt_imagen(slide, grafico_donut_dentro_fuera(fsc['pct_dentro'], titulo='Dentro / Fuera PAC'),
-                    PptxInches(1.2), PptxInches(3.8), PptxInches(3.2))
+                    PptxInches(3.17), top_donas, PptxInches(3.2))
     if planer:
         _ppt_imagen(
             slide,
             grafico_donut_ejecucion_planer(planer['ejecutados'], planer['pendientes'], planer['atrasados']),
-            PptxInches(5.6), PptxInches(3.8), PptxInches(3.2),
+            PptxInches(6.97), top_donas, PptxInches(3.2),
         )
 
     # --- Dentro/Fuera por departamento: tabla + gráfico ----------------------
@@ -2111,7 +2429,7 @@ def _ppt_capitulo_subdireccion(prs, nombre_display, fsc, planer, responsables, a
         if img_ranking:
             slide = _ppt_slide_en_blanco(prs)
             _ppt_titulo(slide, f'{nombre_display} — Ranking % Dentro PAC')
-            _ppt_imagen(slide, img_ranking, PptxInches(1.4), PptxInches(1.1), PptxInches(7.2))
+            _ppt_imagen(slide, img_ranking, PptxInches(1.87), PptxInches(1.1), PptxInches(9.6))
 
     # --- Detalle de formularios individuales (2026-07-23) --------------------
     if formularios_detalle:
@@ -2136,7 +2454,7 @@ def _ppt_capitulo_subdireccion(prs, nombre_display, fsc, planer, responsables, a
         if img_ejec_depto:
             slide = _ppt_slide_en_blanco(prs)
             _ppt_titulo(slide, f'{nombre_display} — Ejecución por Departamento')
-            _ppt_imagen(slide, img_ejec_depto, PptxInches(1.4), PptxInches(1.1), PptxInches(7.2))
+            _ppt_imagen(slide, img_ejec_depto, PptxInches(1.87), PptxInches(1.1), PptxInches(9.6))
 
     # --- Detalle de proyectos y con qué formulario se ejecutaron (2026-07-23) ----
     if fichas_detalle:
@@ -2163,33 +2481,18 @@ def generar_presentacion_ppt(periodo):
     label, anho, anho_ant, hoy = d['label'], d['anho'], d['anho_anterior'], d['hoy']
 
     prs = Presentation()
-    prs.slide_width = PptxInches(10)
-    prs.slide_height = PptxInches(7.5)
+    prs.slide_width = PptxInches(PPT_ANCHO)
+    prs.slide_height = PptxInches(PPT_ALTO)
 
     # --- Portada -------------------------------------------------------------
-    slide = _ppt_slide_en_blanco(prs)
-    logo = _logo_bytes()
-    if logo:
-        slide.shapes.add_picture(logo, PptxInches(4.2), PptxInches(0.35), height=PptxInches(1.1))
-    _ppt_titulo(slide, TITULO_INFORME, top=PptxInches(1.7), tamano=30)
-    caja_sub = slide.shapes.add_textbox(PptxInches(0.5), PptxInches(2.55), PptxInches(9), PptxInches(0.5))
-    p_sub = caja_sub.text_frame.paragraphs[0]
-    p_sub.alignment = PP_ALIGN.CENTER
-    run_sub = p_sub.add_run()
-    run_sub.text = NOMBRE_INSTITUCION.upper()
-    run_sub.font.size = PptxPt(16)
-    run_sub.font.bold = True
-    run_sub.font.color.rgb = COLOR_ACENTO_PPT
-    edificio = _edificio_bytes()
-    if edificio:
-        slide.shapes.add_picture(edificio, PptxInches(2.4), PptxInches(3.15), width=PptxInches(5.2))
-    caja_meta = slide.shapes.add_textbox(PptxInches(0.5), PptxInches(6.7), PptxInches(9), PptxInches(0.6))
-    p_meta = caja_meta.text_frame.paragraphs[0]
-    p_meta.alignment = PP_ALIGN.CENTER
-    run_meta = p_meta.add_run()
-    run_meta.text = f'Período: {label} · Año PAC {anho} · Generado el {hoy.strftime("%d-%m-%Y")}'
-    run_meta.font.size = PptxPt(12)
-    run_meta.font.color.rgb = COLOR_TEXTO_PPT
+    _ppt_portada(
+        prs,
+        badge_texto='INFORME INSTITUCIONAL',
+        titulo_lineas=['Informe de Seguimiento y Ejecución', 'del Plan Anual de Compras'],
+        subtitulo_inst=NOMBRE_INSTITUCION.upper(),
+        meta_texto=f'Período: {label} · Año PAC {anho} · Generado el {hoy.strftime("%d-%m-%Y")}',
+        logo_bytes=_logo_bytes(), imagen_bytes=_edificio_bytes(),
+    )
 
     # --- Agenda ----------------------------------------------------------------
     slide = _ppt_slide_en_blanco(prs)
@@ -2206,46 +2509,60 @@ def generar_presentacion_ppt(periodo):
         'Alertas y Seguimiento',
         'Conclusiones y Recomendaciones',
     ]
-    tamano_agenda = 18 if len(agenda) <= 8 else 14
-    espacio_agenda = 14 if len(agenda) <= 8 else 8
-    caja = slide.shapes.add_textbox(PptxInches(0.8), PptxInches(1.15), PptxInches(8.4), PptxInches(5.8))
-    tf = caja.text_frame
-    tf.word_wrap = True
+    n_agenda = len(agenda)
+    gap_agenda = 0.08
+    alto_disponible_agenda = 6.0
+    alto_tile_agenda = max(0.4, min(0.58, (alto_disponible_agenda - gap_agenda * (n_agenda - 1)) / n_agenda))
+    top_agenda = PptxInches(1.0)
     for i, item in enumerate(agenda):
-        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        run = p.add_run()
-        run.text = f'{i + 1}.  {item}'
-        run.font.size = PptxPt(tamano_agenda)
-        run.font.color.rgb = COLOR_TEXTO_PPT
-        p.space_after = PptxPt(espacio_agenda)
+        _ppt_tarjeta_numerada(slide, top_agenda, f'{i + 1:02d}', item, height=alto_tile_agenda)
+        top_agenda += PptxInches(alto_tile_agenda + gap_agenda)
+
+    # --- Separador — Resumen Ejecutivo ---------------------------------------
+    _ppt_divisor_seccion(prs, '01', ['RESUMEN EJECUTIVO', 'INSTITUCIONAL'], f'Período: {label} · Año PAC {anho}')
 
     # --- Resumen Ejecutivo -------------------------------------------------
     slide = _ppt_slide_en_blanco(prs)
-    _ppt_titulo(slide, 'Resumen Ejecutivo Institucional')
+    _ppt_titulo(slide, 'Resumen Ejecutivo Institucional', subtitulo=f'Período: {label}')
     kpis = d['dentro_fuera']['kpis']
     var_ant = d['comparativa_periodos']['periodo_anterior']['variacion_pp']
-    resumen_kpis = (
-        f'Total formularios: {_n(kpis["total"])} — Dentro PAC: {_n(kpis["dentro"])} ({kpis["pct_dentro"]}%) — '
-        f'Fuera PAC: {_n(kpis["fuera"])}\nVariación vs período anterior: {var_ant:+.1f} p.p.\n'
-        f'% Cumplimiento temporal: {d["temporal"]["kpis"]["pct_en_fecha"]}%\n'
-        f'Plan de Compras {anho}: {_n(d["total_fichas"])} fichas — {d["pct_ejecutado_fichas"]}% ejecutadas'
+    top_fila = PptxInches(1.0)
+    _ppt_fila_indicador(
+        slide, top_fila, 'Formularios Dentro del PAC', f"{kpis['pct_dentro']}%",
+        COLOR_PPT_VERDE if kpis['pct_dentro'] >= 50 else COLOR_PPT_AMBAR,
+        comparacion=f"Total: {_n(kpis['total'])}  ·  Dentro: {_n(kpis['dentro'])}  ·  Fuera: {_n(kpis['fuera'])}",
+        explicacion=f"Variación vs período anterior: {var_ant:+.1f} p.p.",
+        flecha='↑' if var_ant >= 0 else '↓',
     )
-    _ppt_parrafo(slide, resumen_kpis, top=PptxInches(1.05), tamano=14, height=PptxInches(1.6))
-    _ppt_imagen(slide, grafico_donut_dentro_fuera(kpis['pct_dentro']), PptxInches(0.5), PptxInches(2.9), PptxInches(3.2))
-    _ppt_imagen(slide, grafico_donut_cumplimiento_temporal(d['temporal']['kpis']), PptxInches(4.2), PptxInches(2.9), PptxInches(3.2))
+    top_fila += PptxInches(0.76)
+    pct_en_fecha = d['temporal']['kpis']['pct_en_fecha']
+    _ppt_fila_indicador(
+        slide, top_fila, 'Cumplimiento Temporal', f"{pct_en_fecha}%",
+        COLOR_PPT_VERDE if pct_en_fecha >= 70 else COLOR_PPT_AMBAR,
+        explicacion='% de fichas del Plan de Compras ejecutadas dentro del plazo planificado.', flecha='→',
+    )
+    top_fila += PptxInches(0.76)
+    _ppt_fila_indicador(
+        slide, top_fila, f'Ejecución Plan de Compras {anho}', f"{d['pct_ejecutado_fichas']}%",
+        COLOR_PPT_VERDE if d['pct_ejecutado_fichas'] >= 70 else COLOR_PPT_AMBAR,
+        comparacion=f"{_n(d['total_fichas'])} fichas totales",
+        explicacion=f"{_n(d['ejecutados_fichas'])} ejecutadas con formulario u OC enlazada.", flecha='→',
+    )
+    _ppt_imagen(slide, grafico_donut_dentro_fuera(kpis['pct_dentro']), PptxInches(3.97), PptxInches(3.5), PptxInches(2.4))
+    _ppt_imagen(slide, grafico_donut_cumplimiento_temporal(d['temporal']['kpis']), PptxInches(6.97), PptxInches(3.5), PptxInches(2.4))
 
     # --- Comparativa histórica + Evolución mensual --------------------------
     img_comp = grafico_barras_comparativa_anual(d['dentro_fuera']['comparativa_anual'])
     if img_comp:
         slide = _ppt_slide_en_blanco(prs)
         _ppt_titulo(slide, 'Comparativa Histórica — Dentro vs Fuera PAC')
-        _ppt_imagen(slide, img_comp, PptxInches(1), PptxInches(1.2), PptxInches(8))
+        _ppt_imagen(slide, img_comp, PptxInches(2.17), PptxInches(1.2), PptxInches(9))
 
     img_evol = grafico_evolucion_mensual_dentro_fuera(d['temporalidad_mensual']['meses'], anho, anho_ant)
     if img_evol:
         slide = _ppt_slide_en_blanco(prs)
         _ppt_titulo(slide, f'Evolución Mensual {anho} vs {anho_ant}')
-        _ppt_imagen(slide, img_evol, PptxInches(0.8), PptxInches(1.2), PptxInches(8.4))
+        _ppt_imagen(slide, img_evol, PptxInches(1.4), PptxInches(1.2), PptxInches(10.5))
 
     # --- Avance Trimestral (solo si el período es un trimestre) --------------
     if d['avance_trimestral']:
@@ -2265,9 +2582,9 @@ def generar_presentacion_ppt(periodo):
             top=PptxInches(1.05), tamano=13, height=PptxInches(0.6),
         )
         img_av_fsc = grafico_evolucion_mensual_dentro_fuera(av['meses_fsc'], anho, anho_ant, titulo=f'% Dentro PAC — {label}')
-        _ppt_imagen(slide, img_av_fsc, PptxInches(0.3), PptxInches(1.8), PptxInches(4.7))
+        _ppt_imagen(slide, img_av_fsc, PptxInches(0.5), PptxInches(1.8), PptxInches(6.0))
         img_av_planer = grafico_barras_ejecucion_mensual_planer(av['meses_planer'], titulo=f'Ejecución — {label}')
-        _ppt_imagen(slide, img_av_planer, PptxInches(5.1), PptxInches(1.8), PptxInches(4.7))
+        _ppt_imagen(slide, img_av_planer, PptxInches(6.8), PptxInches(1.8), PptxInches(6.0))
 
     # --- Ejecución del Plan de Compras ---------------------------------------
     slide = _ppt_slide_en_blanco(prs)
@@ -2281,7 +2598,7 @@ def generar_presentacion_ppt(periodo):
     )
     img_ejec = grafico_barras_ejecucion_mensual_planer(d['temporal_mensual_planer']['meses'])
     if img_ejec:
-        _ppt_imagen(slide, img_ejec, PptxInches(0.8), PptxInches(2.1), PptxInches(8.4))
+        _ppt_imagen(slide, img_ejec, PptxInches(1.5), PptxInches(2.1), PptxInches(10.3))
 
     # --- Resumen general por subdirección (1 tabla combinada, panorama antes
     # del detalle) ------------------------------------------------------------
@@ -2295,12 +2612,16 @@ def generar_presentacion_ppt(periodo):
     )
     _ppt_tabla_resumen_combinado(slide, d['subdirecciones'], top=PptxInches(1.75))
 
-    # --- Detalle por subdirección: un capítulo completo por cada una --------
+    # --- Separador — Detalle por Subdirección + capítulos --------------------
+    _ppt_divisor_seccion(prs, '02', ['DETALLE POR', 'SUBDIRECCIÓN'], 'KPIs, gráficos y departamentos de cada subdirección institucional')
     for s in subdirecciones_institucionales:
         _ppt_capitulo_subdireccion(
             prs, _nombre_subdireccion_display(s['nombre']), s['fsc'], s['planer'], s['responsables'], anho,
             formularios_detalle=s['formularios_detalle'], fichas_detalle=s['fichas_detalle'],
         )
+
+    # --- Separador — Rankings -------------------------------------------------
+    _ppt_divisor_seccion(prs, '03', ['RANKINGS', 'INSTITUCIONALES'], 'Mejores departamentos y mayor oportunidad de mejora')
 
     # --- Rankings ----------------------------------------------------------
     slide = _ppt_slide_en_blanco(prs)
@@ -2317,6 +2638,9 @@ def generar_presentacion_ppt(periodo):
     else:
         _ppt_parrafo(slide, 'Sin datos suficientes para generar el ranking en este período.', top=PptxInches(1.2))
 
+    # --- Separador — Alertas y Seguimiento ------------------------------------
+    _ppt_divisor_seccion(prs, '04', ['ALERTAS Y', 'SEGUIMIENTO'], 'Proyectos sin iniciar, fichas próximas y atrasadas')
+
     # --- Alertas y Seguimiento: resumen institucional + detalle por subdirección
     # (2026-07-23, para mayor claridad) --------------------------------------
     n_sin_iniciar = _total_items_grupos(d['proyectos_sin_iniciar'])
@@ -2324,13 +2648,19 @@ def generar_presentacion_ppt(periodo):
     n_atrasadas = _total_items_grupos(d['atrasadas'])
     slide = _ppt_slide_en_blanco(prs)
     _ppt_titulo(slide, 'Alertas y Seguimiento')
-    alertas_texto = (
-        f'⚠  Proyectos planificados sin formulario Dentro PAC derivado: {_n(n_sin_iniciar)}\n\n'
-        f'📅  Fichas a ejecutar el próximo mes (Año PAC {anho}): {_n(n_proximo_mes)}\n\n'
-        f'⏰  Fichas atrasadas (Año PAC {anho}): {_n(n_atrasadas)}\n\n'
-        'Detalle por subdirección en las diapositivas siguientes.'
+    _ppt_tarjeta_numerada(
+        slide, PptxInches(1.2), '⚠', f'Proyectos planificados sin formulario Dentro PAC derivado: {_n(n_sin_iniciar)}',
+        color=COLOR_PPT_ROJO, height=0.75,
     )
-    _ppt_parrafo(slide, alertas_texto, top=PptxInches(1.3), tamano=17, height=PptxInches(3.4))
+    _ppt_tarjeta_numerada(
+        slide, PptxInches(2.15), '📅', f'Fichas a ejecutar el próximo mes (Año PAC {anho}): {_n(n_proximo_mes)}',
+        color=COLOR_PPT_AZUL_PROFUNDO, height=0.75,
+    )
+    _ppt_tarjeta_numerada(
+        slide, PptxInches(3.1), '⏰', f'Fichas atrasadas (Año PAC {anho}): {_n(n_atrasadas)}',
+        color=COLOR_PPT_AMBAR, height=0.75,
+    )
+    _ppt_parrafo(slide, 'Detalle por subdirección en las diapositivas siguientes.', top=PptxInches(4.1), tamano=12, height=PptxInches(0.4))
 
     for grupo in d['proyectos_sin_iniciar']:
         slide = _ppt_slide_en_blanco(prs)
@@ -2346,6 +2676,9 @@ def generar_presentacion_ppt(periodo):
         slide = _ppt_slide_en_blanco(prs)
         _ppt_titulo(slide, f'Fichas atrasadas — {grupo["nombre_display"]}')
         _ppt_tabla_fichas_pac(slide, grupo['items'], top=PptxInches(1.1))
+
+    # --- Separador — Conclusiones ---------------------------------------------
+    _ppt_divisor_seccion(prs, '05', ['CONCLUSIONES Y', 'RECOMENDACIONES'], 'Cierre y próximos pasos del Plan Anual de Compras')
 
     # --- Conclusiones ----------------------------------------------------------
     slide = _ppt_slide_en_blanco(prs)
