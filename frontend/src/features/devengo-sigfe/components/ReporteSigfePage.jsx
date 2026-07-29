@@ -87,12 +87,12 @@ export default function ReporteSigfePage() {
         }, 3000);
     }, [cargarReporte]);
 
-    const handleConfirmarActualizar = async ({ usuario, password, fechaDesde, fechaHasta }) => {
+    const handleConfirmarActualizar = async ({ usuario, password, fechaDesde, fechaHasta, visible }) => {
         setModalAbierto(false);
         if (iniciando) return;
         setIniciando(true);
         try {
-            const { data } = await iniciarActualizacionSigfe({ usuario, password, fechaDesde, fechaHasta });
+            const { data } = await iniciarActualizacionSigfe({ usuario, password, fechaDesde, fechaHasta, visible });
             setTarea({ status: 'iniciado', task_id: data.task_id, paso: 0, paso_desc: 'Iniciando...', progreso_pct: 0, logs_recientes: [] });
             iniciarPolling(data.task_id);
         } catch (err) {

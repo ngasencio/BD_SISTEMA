@@ -54,6 +54,7 @@ from selenium.common.exceptions import (
     TimeoutException,
     NoSuchElementException,
     ElementClickInterceptedException,
+    ElementNotInteractableException,
 )
 
 # --------------------------------------------------------------------------
@@ -231,20 +232,39 @@ def set_input_value_js(driver, element_id: str, value: str):
 
 def click_seguro(driver, by, selector, timeout=TIMEOUT, descripcion=""):
     """Espera a que un elemento sea clickeable y hace click, con reintento
-    vía JavaScript si el click normal es interceptado."""
+    vía JavaScript si el click normal es interceptado o si el elemento
+    todavía no es interactuable (0 tamaño/posición — ver click_con_fallback_js)."""
     try:
         el = WebDriverWait(driver, timeout).until(
             EC.element_to_be_clickable((by, selector))
         )
         el.click()
-    except ElementClickInterceptedException:
-        log.warning(f"Click interceptado en '{descripcion}', reintentando con JS.")
+    except (ElementClickInterceptedException, ElementNotInteractableException):
+        log.warning(f"Click no interactuable en '{descripcion}', reintentando con JS.")
         el = driver.find_element(by, selector)
         driver.execute_script("arguments[0].click();", el)
     except TimeoutException:
         log.error(f"Timeout esperando elemento clickeable: {descripcion} ({selector})")
         raise
     return el
+
+
+def click_con_fallback_js(driver, el, descripcion=""):
+    """Click nativo con reintento vía JavaScript.
+
+    Los <td> de los menús ADF (Reportabilidad, submenús, ítems de contexto
+    como 'Ampliar Todo Debajo') existen en el DOM apenas su menú padre se
+    abre, pero a veces todavía no tienen tamaño/posición renderizado en el
+    instante exacto del click - eso es lo que produce
+    'element not interactable: ... has no size and location'. El click vía
+    JS dispara el evento sin depender de que el elemento tenga dimensiones
+    visibles, así que sirve de respaldo cuando el click nativo falla por
+    esta razón (o por estar tapado por otro elemento)."""
+    try:
+        el.click()
+    except (ElementClickInterceptedException, ElementNotInteractableException) as e:
+        log.warning(f"Click nativo falló en '{descripcion}' ({type(e).__name__}), reintentando con JS.")
+        driver.execute_script("arguments[0].click();", el)
 
 
 def crear_driver(headless: bool = False):
@@ -357,7 +377,9 @@ class SigfeDevengosScraper:
                 "No se pudo acceder al menú de Reportabilidad tras iniciar sesión. "
                 "Verifica que el usuario y la contraseña de SIGFE sean correctos."
             )
-        ActionChains(self.driver).move_to_element(menu_reportabilidad).click().perform()
+        ActionChains(self.driver).move_to_element(menu_reportabilidad).perform()
+        time.sleep(0.3)
+        click_con_fallback_js(self.driver, menu_reportabilidad, descripcion="Menú Reportabilidad")
         time.sleep(1)
 
         log.info("Seleccionando submenú 'Descarga de Información Transaccional'...")
@@ -366,7 +388,9 @@ class SigfeDevengosScraper:
                 (By.XPATH, "//td[contains(@class,'af_menu_submenu-text') and contains(text(),'Descarga de Informaci')]")
             )
         )
-        ActionChains(self.driver).move_to_element(submenu).click().perform()
+        ActionChains(self.driver).move_to_element(submenu).perform()
+        time.sleep(0.3)
+        click_con_fallback_js(self.driver, submenu, descripcion="Submenú Descarga de Información Transaccional")
         time.sleep(1)
 
         log.info("Seleccionando 'Disponibilidad de Devengos Presupuestarios'...")
@@ -375,7 +399,7 @@ class SigfeDevengosScraper:
                 (By.XPATH, "//td[contains(@class,'af_commandMenuItem_menu-item-text') and contains(text(),'Disponibilidad de Devengos')]")
             )
         )
-        item.click()
+        click_con_fallback_js(self.driver, item, descripcion="Ítem Disponibilidad de Devengos")
         time.sleep(2)
 
         self.seleccionar_tipo_gasto()
@@ -454,7 +478,7 @@ class SigfeDevengosScraper:
                     (By.XPATH, "//td[contains(@class,'af_commandMenuItem_menu-item-text') and contains(text(),'Ampliar Todo Debajo')]")
                 )
             )
-            opcion_ampliar.click()
+            click_con_fallback_js(self.driver, opcion_ampliar, descripcion="Opción 'Ampliar Todo Debajo'")
             time.sleep(2)
             log.info("Árbol expandido.")
         except (TimeoutException, NoSuchElementException) as e:
@@ -857,12 +881,21 @@ def _iso_a_ddmmaa(fecha_iso: str) -> str:
 def ejecutar_actualizacion_sigfe(usuario: str, password: str,
                                   fecha_desde_iso: str, fecha_hasta_iso: str,
                                   establecimientos: Optional[List[str]] = None,
-                                  progress_callback=None) -> dict:
+                                  progress_callback=None,
+                                  headless: bool = True) -> dict:
     """
     Punto de entrada PROGRAMÁTICO (sin input(), sin prompts) para disparar
     la descarga + consolidación desde el hilo de un backend web (Django).
-    A diferencia de main(): no bloquea esperando ENTER, corre Chrome
-    headless siempre, y garantiza driver.quit() pase lo que pase.
+    A diferencia de main(): no bloquea esperando ENTER, y garantiza
+    driver.quit() pase lo que pase.
+
+    headless=True (default) corre Chrome sin ventana, como corresponde a un
+    hilo de servidor sin pantalla. Pasar headless=False (botón "👁 Ver
+    navegador" del modal de actualización) abre una ventana de Chrome real
+    en el escritorio donde corre el proceso de Django — solo tiene sentido
+    si el backend corre en la misma máquina física desde la que se está
+    mirando, y sirve para diagnosticar visualmente en qué paso exacto falla
+    la automatización (ver debug_html/ para el HTML de cada paso fallido).
 
     Devuelve un dict con el detalle de la descarga y de la consolidación
     (incluye 'nuevos_detalle' y 'resumen_por_ue' para el panel de cambios).
@@ -875,7 +908,7 @@ def ejecutar_actualizacion_sigfe(usuario: str, password: str,
         fecha_hasta=_iso_a_ddmmaa(fecha_hasta_iso),
     )
 
-    driver = crear_driver(headless=True)
+    driver = crear_driver(headless=headless)
     scraper = SigfeDevengosScraper(driver, config, progress_callback=progress_callback)
 
     try:

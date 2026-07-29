@@ -8,11 +8,14 @@ import apiClient from '../../../lib/axios';
 export const fetchReporteSigfeHtml = (rango = 'reciente') =>
     apiClient.get('devengo-sigfe-anual/reporte-html/', { params: { rango }, responseType: 'text' });
 
-// ETL: descarga (Selenium headless, servidor) + consolidación desde SIGFE.
+// ETL: descarga (Selenium, servidor) + consolidación desde SIGFE.
 // Las credenciales SIGFE viajan solo en este POST — no se persisten.
-export const iniciarActualizacionSigfe = ({ usuario, password, fechaDesde, fechaHasta }) =>
+// visible=true corre Chrome con ventana visible en el escritorio del servidor
+// en vez de headless — solo útil para diagnosticar si el proceso corre en la
+// misma máquina física desde la que se está mirando.
+export const iniciarActualizacionSigfe = ({ usuario, password, fechaDesde, fechaHasta, visible }) =>
     apiClient.post('devengo-sigfe-anual/actualizar/', {
-        usuario, password, fecha_desde: fechaDesde, fecha_hasta: fechaHasta,
+        usuario, password, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, visible: !!visible,
     });
 
 export const estadoActualizacionSigfe = (taskId) =>

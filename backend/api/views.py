@@ -895,9 +895,13 @@ _PATRON_FECHA_ISO_SIGFE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
 def _ejecutar_actualizacion_sigfe(task_id: str, usuario: str, password: str,
-                                   fecha_desde: str, fecha_hasta: str):
-    """Descarga (Selenium headless) + consolida los devengos SIGFE por
-    establecimiento, delegando en sigfe_descarga_devengos_Completo."""
+                                   fecha_desde: str, fecha_hasta: str,
+                                   headless: bool = True):
+    """Descarga (Selenium) + consolida los devengos SIGFE por
+    establecimiento, delegando en sigfe_descarga_devengos_Completo.
+    headless=False abre una ventana de Chrome visible en el escritorio del
+    servidor (botón "👁 Ver navegador" del modal) para poder diagnosticar
+    en qué paso falla la automatización."""
     _tareas_actualizacion_sigfe[task_id]["thread_id"] = threading.current_thread().ident
 
     ruta_modulo = str(_RUTA_DATA_DEVENGO)
@@ -935,6 +939,7 @@ def _ejecutar_actualizacion_sigfe(task_id: str, usuario: str, password: str,
 
         resultado = sigfe_etl.ejecutar_actualizacion_sigfe(
             usuario, password, fecha_desde, fecha_hasta, progress_callback=_cb,
+            headless=headless,
         )
 
         consolidacion = resultado["consolidacion"]
@@ -977,7 +982,8 @@ def _ejecutar_actualizacion_sigfe(task_id: str, usuario: str, password: str,
 @permission_classes([IsAuthenticated])
 def iniciar_actualizacion_sigfe(request):
     """Inicia la descarga + consolidación de devengos SIGFE por establecimiento.
-    Body: {usuario, password, fecha_desde, fecha_hasta} (fechas YYYY-MM-DD)."""
+    Body: {usuario, password, fecha_desde, fecha_hasta, visible} (fechas YYYY-MM-DD;
+    visible=true abre Chrome con ventana visible en vez de headless, para diagnóstico)."""
     for tarea in _tareas_actualizacion_sigfe.values():
         if tarea.get("status") in ("iniciado", "en_proceso"):
             return Response({"error": "Ya hay una actualización SIGFE en curso."}, status=409)
@@ -986,6 +992,7 @@ def iniciar_actualizacion_sigfe(request):
     password = str(request.data.get("password", "")).strip()
     fecha_desde = str(request.data.get("fecha_desde", "")).strip()
     fecha_hasta = str(request.data.get("fecha_hasta", "")).strip()
+    headless = not _bool_query(request.data.get("visible"), default=False)
 
     if not usuario or not password:
         return Response({"error": "Debe indicar usuario y contraseña de SIGFE."}, status=400)
@@ -1007,6 +1014,7 @@ def iniciar_actualizacion_sigfe(request):
     threading.Thread(
         target=_ejecutar_actualizacion_sigfe,
         args=(task_id, usuario, password, fecha_desde, fecha_hasta),
+        kwargs={"headless": headless},
         daemon=True,
     ).start()
     return Response({"task_id": task_id, "status": "iniciado"})
