@@ -10,4 +10,4 @@ export const fmtCompacto = (n) => {
     return fmtCLP(n);
 };
 
-export const colorPct = (pct) => (pct >= 70 ? '#15803d' : pct >= 40 ? '#b45309' : '#dc2626');
+export const colorPct = (pct) => (pct == null ? '#94a3b8' : pct >= 70 ? '#15803d' : pct >= 40 ? '#b45309' : '#dc2626');

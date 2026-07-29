@@ -1,17 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+import { fmtN, fmtCompacto } from '../../../utils/format';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
-
-const fmt = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
-const fmtB = (n) => {
-    if (n == null) return '—';
-    if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
-    if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-    return fmt(n);
-};
-const fmtN = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
 
 const cardStyle = { background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px', boxShadow: '0 1px 2px rgba(15,23,42,.04)' };
 
@@ -44,8 +36,21 @@ export default function EjecucionComprasSubtab({ temporal }) {
     const detalle = temporal?.detalle_formularios ?? [];
     const proyectosSinIniciar = temporal?.proyectos_sin_iniciar ?? [];
 
+    // Total del donut = las 4 categorías (incluye "Sin planificación con fecha"), a diferencia
+    // de `kpis.total_evaluado` (backend, `services.py:calcular_pac_cumplimiento_temporal`) que
+    // deliberadamente EXCLUYE "Sin planificación con fecha" del denominador de `pct_en_fecha`
+    // (esas fichas no son evaluables por falta de fecha planificada). Antes el tooltip no
+    // mostraba porcentaje y la tarjeta KPI sí ("X% del total evaluado"), con denominadores
+    // distintos — para el mismo dato "En fecha" el lector veía un % en la tarjeta que no
+    // coincidía con lo que el ojo interpreta del tamaño del gajo del donut (bug real,
+    // revisión de código 2026-07-27). Se resuelve mostrando SIEMPRE de qué total sale cada %
+    // — nunca un número ambiguo sin su base.
+    const donutTotal = kpis
+        ? kpis.en_fecha + kpis.atrasado + kpis.pendiente + kpis.sin_planificacion_con_fecha
+        : 0;
+
     const donutData = useMemo(() => {
-        if (!kpis || !kpis.total_evaluado) return null;
+        if (!kpis || !donutTotal) return null;
         return {
             labels: ['En fecha', 'Atrasado', 'Pendiente', 'Sin planificación con fecha'],
             datasets: [{
@@ -55,13 +60,20 @@ export default function EjecucionComprasSubtab({ temporal }) {
                 hoverOffset: 6,
             }],
         };
-    }, [kpis]);
+    }, [kpis, donutTotal]);
 
     const donutOptions = {
         cutout: '70%',
         plugins: {
             legend: { position: 'bottom', labels: { color: '#64748b', padding: 14, font: { size: 11 } } },
-            tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${fmtN(ctx.raw)}` } },
+            tooltip: {
+                callbacks: {
+                    label: (ctx) => {
+                        const pct = donutTotal ? Math.round((ctx.raw / donutTotal) * 100) : 0;
+                        return ` ${ctx.label}: ${fmtN(ctx.raw)} (${pct}% del gráfico)`;
+                    },
+                },
+            },
         },
     };
 
@@ -81,7 +93,7 @@ export default function EjecucionComprasSubtab({ temporal }) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <KpiCard label="✅ En fecha" value={fmtN(kpis.en_fecha)} color="#16a34a" sub={`${kpis.pct_en_fecha}% del total evaluado`} />
+                <KpiCard label="✅ En fecha" value={fmtN(kpis.en_fecha)} color="#16a34a" sub={`${kpis.pct_en_fecha}% de ${fmtN(kpis.total_evaluado)} evaluados`} />
                 <KpiCard label="⏰ Atrasado" value={fmtN(kpis.atrasado)} color="#dc2626" />
                 <KpiCard label="⏳ Pendiente" value={fmtN(kpis.pendiente)} color="#f59e0b" sub="planificado, aún no vence" />
                 <KpiCard label="❓ Sin planificación con fecha" value={fmtN(kpis.sin_planificacion_con_fecha)} color="#6b7280" sub="Dentro PAC sin fecha planificada cargada" />
@@ -94,6 +106,10 @@ export default function EjecucionComprasSubtab({ temporal }) {
                         {donutData ? <Doughnut data={donutData} options={donutOptions} /> : (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: 12 }}>Sin datos.</div>
                         )}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 6, lineHeight: 1.4 }}>
+                        El gráfico distribuye las 4 categorías; el % "En fecha" de la tarjeta se calcula solo
+                        sobre los formularios evaluables (excluye "Sin planificación con fecha").
                     </div>
                 </div>
 
@@ -168,7 +184,7 @@ export default function EjecucionComprasSubtab({ temporal }) {
                                         <td style={{ padding: '6px 10px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={d.unidad_requirente}>{d.unidad_requirente}</td>
                                         <td style={{ padding: '6px 10px', color: '#64748b' }}>{d.fecha_derivado || '—'}</td>
                                         <td style={{ padding: '6px 10px', color: '#64748b' }}>{d.fecha_evento_mas_cercano || '—'}</td>
-                                        <td style={{ padding: '6px 10px' }}>{fmtB(d.monto_estimado)}</td>
+                                        <td style={{ padding: '6px 10px' }}>{fmtCompacto(d.monto_estimado)}</td>
                                         <td style={{ padding: '6px 10px' }}>
                                             <span style={{ background: cfg?.bg, color: cfg?.color, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>{cfg?.label ?? d.estado}</span>
                                         </td>

@@ -33,7 +33,10 @@ export default function TablaFormulariosPac({ anho, sectionId, filtroOrg, onClea
         setCargando(true);
         try {
             const params = { page, ordering: '-fecha_derivado' };
-            if (anho) params.anho = anho;
+            // `anho_fecha_derivado` (no el filterset genérico `anho`) para que el conteo de filas
+            // calce con el "Total" agregado por calcular_pac_jerarquia/calcular_pac_dentro_fuera_stats,
+            // que filtran por el año calendario de fecha_derivado — ver FormularioFSCDerivadoViewSet.get_queryset.
+            if (anho) params.anho_fecha_derivado = anho;
             if (search) params.search = search;
             if (filtro) params.dentro_fuera_pac = filtro;
             if (filtroOrg?.ids?.length) params.sso_departamento_in = filtroOrg.ids.join(',');

@@ -2,18 +2,11 @@ import { useState } from 'react';
 import { getFormularioPacPorId } from '../../api/pacCumplimientoApi';
 import TablaFormulariosPac from '../shared/TablaFormulariosPac';
 import ModalRevisionFsc from '../shared/ModalRevisionFsc';
+import { fmtN, fmtCompacto, colorPct } from '../../utils/format';
 
-const fmt = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
-const fmtB = (n) => {
-    if (n == null) return '—';
-    if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
-    if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-    return fmt(n);
-};
-const fmtN = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
-
-const scoreColor = (score) => (score >= 70 ? '#15803d' : score >= 40 ? '#b45309' : '#dc2626');
-
+// `colorPct` sirve también para el "score" del ranking — misma escala 0-100 y mismos
+// umbrales 70/40 que el % Dentro PAC (antes duplicado acá como `scoreColor`, fórmula
+// idéntica salvo el nombre).
 const ESTADO_TEMPORAL_LABEL = {
     EN_FECHA: { label: '✅ En fecha', color: '#15803d' },
     ATRASADO: { label: '⏰ Atrasado', color: '#dc2626' },
@@ -58,7 +51,7 @@ function FilaDepto({ f, pos, onVerFormularios }) {
             <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtN(f.total)}</td>
             <td style={{ padding: '8px 10px', textAlign: 'right' }}>{f.pct_dentro}%</td>
             <td style={{ padding: '8px 10px', textAlign: 'right' }}>{f.pct_en_fecha ?? '—'}{f.pct_en_fecha != null ? '%' : ''}</td>
-            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: scoreColor(f.score) }}>{f.score}</td>
+            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: colorPct(f.score) }}>{f.score}</td>
             <td style={{ padding: '8px 10px' }}>
                 <BotonVerFormularios onClick={() => onVerFormularios(f)} />
             </td>
@@ -75,14 +68,14 @@ function FilaFormulario({ f, pos, onRevisar }) {
                 <div style={{ fontWeight: 600, color: '#1e293b' }}>Folio {f.folio}/{f.anho} — {f.unidad_requirente}</div>
                 <div style={{ fontSize: 11, color: '#94a3b8', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.requerimiento}>{f.requerimiento}</div>
             </td>
-            <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtB(f.monto_estimado)}</td>
+            <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtCompacto(f.monto_estimado)}</td>
             <td style={{ padding: '8px 10px' }}>
                 <span style={{ color: f.dentro_fuera_pac === 'DENTRO' ? '#15803d' : '#dc2626', fontWeight: 600 }}>
                     {f.dentro_fuera_pac === 'DENTRO' ? '✅ Dentro' : '⛔ Fuera'}
                 </span>
             </td>
             <td style={{ padding: '8px 10px', color: estado?.color ?? '#94a3b8' }}>{estado?.label ?? '—'}</td>
-            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: scoreColor(f.score) }}>{f.score}</td>
+            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: colorPct(f.score) }}>{f.score}</td>
             <td style={{ padding: '8px 10px' }}>
                 <BotonVerFormularios onClick={() => onRevisar(f)} label="🔍 Revisar" />
             </td>
@@ -175,7 +168,7 @@ export default function RankingsTab({ rankings, rankingTipo, onChangeTipo, anho 
             {rankings && (
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     <KpiCard label="Elementos evaluados" value={fmtN(rankings.total_elegibles)} color="#0ea5e9" sub={rankingTipo === 'depto' ? 'departamentos con muestra suficiente' : 'formularios del período'} />
-                    <KpiCard label="Score promedio" value={rankings.score_promedio} color={scoreColor(rankings.score_promedio)} />
+                    <KpiCard label="Score promedio" value={rankings.score_promedio} color={colorPct(rankings.score_promedio)} />
                     <KpiCard label="🏆 Mejor score" value={mejores[0]?.score ?? '—'} color="#16a34a" sub={rankingTipo === 'depto' ? mejores[0]?.nombre : mejores[0] ? `Folio ${mejores[0].folio}/${mejores[0].anho}` : undefined} />
                     <KpiCard label="⚠️ Peor score" value={peores[0]?.score ?? '—'} color="#dc2626" sub={rankingTipo === 'depto' ? peores[0]?.nombre : peores[0] ? `Folio ${peores[0].folio}/${peores[0].anho}` : undefined} />
                 </div>

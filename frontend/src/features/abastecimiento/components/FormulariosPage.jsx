@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import * as XLSX from 'xlsx';
 import * as d3 from 'd3';
 import {
-    getFormulariosStats, getFormulariosFlujo,
+    getFormulariosStats, getFormulariosFlujo, getFormulariosOrganigrama,
     getFormularios, getFormulariosDerivados, getFormulariosProductos,
     getFormulariosAlertas, getFormulariosUnificacion, getFormulariosHistorial,
     getFormularioById,
@@ -50,6 +50,26 @@ function DiasBadge({ dias, compact }) {
 
 const fmtN = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
 const fmtCLP = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
+
+// ─── Badge PAC — indica si el formulario tiene id_plan asociado ───────────────
+
+function PacBadge({ idPlan }) {
+    const tiene = Boolean(idPlan);
+    return (
+        <span
+            title={tiene ? `Plan de Compras: ${idPlan}` : 'Sin ID de Plan de Compras'}
+            style={{
+                display: 'inline-block', padding: '1px 7px', borderRadius: 20,
+                fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+                background: tiene ? '#f0fdf4' : '#fef2f2',
+                color: tiene ? '#16a34a' : '#dc2626',
+                border: `1px solid ${tiene ? 'rgba(22,163,74,0.25)' : 'rgba(220,38,38,0.25)'}`,
+            }}
+        >
+            {tiene ? '✓' : '✕'}
+        </span>
+    );
+}
 
 const RE_TIPO_FORMULARIO = /Nro\s*(\d+)/i;
 const parseTipoFormulario = (texto) => {
@@ -918,10 +938,13 @@ function FlujoVisacion({ anioSeleccionado, estadoSel, onSelectEstado }) {
 
 // ─── Tabla de solicitudes FSC ─────────────────────────────────────────────────
 
-function TablaSolicitudes({ filtroBandeja, onFiltroChange, anioSeleccionado, tablaRef }) {
+function TablaSolicitudes({ filtroBandeja, onFiltroChange, anioSeleccionado, subdireccionSel, deptoSel, tablaRef }) {
     const filtros = {
         ...(filtroBandeja?.length ? { estado: filtroBandeja.join(',') } : {}),
         ...(anioSeleccionado ? { anho: anioSeleccionado } : {}),
+        ...(subdireccionSel === 'sin_clasificar'
+            ? { sin_clasificar: 1 }
+            : deptoSel ? { depto: deptoSel } : subdireccionSel ? { subdireccion: subdireccionSel } : {}),
     };
     const { search, setSearch, ordering, setOrdering, page, setPage, data, cargando } =
         useListaServidor(getFormularios, '-fecha_solicitud', Object.keys(filtros).length ? filtros : null);
@@ -990,15 +1013,19 @@ function TablaSolicitudes({ filtroBandeja, onFiltroChange, anioSeleccionado, tab
                             <SortableTh label="Monto Estimado"       campo="monto_estimado"     ordering={ordering} setOrdering={setOrdering} align="right" />
                             <th style={{ ...thStyle, textAlign: 'center' }} title="Días desde la fecha de solicitud hasta hoy">Días</th>
                             <SortableTh label="Bandeja"              campo="estado"             ordering={ordering} setOrdering={setOrdering} tip="Bandeja de visación actual del formulario" />
+                            <th style={{ ...thStyle, textAlign: 'center' }} title="Indica si el formulario tiene un ID de Plan de Compras (id_plan) asociado">
+                                PAC
+                                <InfoTooltip text="Verde: el formulario declara un ID de Plan de Compras (id_plan). Rojo: no tiene ID de Plan asociado." />
+                            </th>
                             <SortableTh label="Destino Actual"       campo="destino_actual"     ordering={ordering} setOrdering={setOrdering} tip="Persona que actualmente tiene el formulario en su bandeja" />
                             <th style={{ ...thStyle, textAlign: 'center' }}>Documento</th>
                         </tr>
                     </thead>
                     <tbody>
                         {cargando ? (
-                            <tr><td colSpan={10} className="loading-spinner-sm" style={{ textAlign: 'center', padding: 24 }}>Cargando solicitudes…</td></tr>
+                            <tr><td colSpan={11} className="loading-spinner-sm" style={{ textAlign: 'center', padding: 24 }}>Cargando solicitudes…</td></tr>
                         ) : data.results.length === 0 ? (
-                            <tr><td colSpan={10} style={{ textAlign: 'center', padding: 28, color: '#94a3b8', fontSize: 13 }}>No se encontraron solicitudes.</td></tr>
+                            <tr><td colSpan={11} style={{ textAlign: 'center', padding: 28, color: '#94a3b8', fontSize: 13 }}>No se encontraron solicitudes.</td></tr>
                         ) : data.results.map((f, i) => (
                             <tr key={f.id}
                                 style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa', transition: 'background 0.1s' }}
@@ -1017,6 +1044,7 @@ function TablaSolicitudes({ filtroBandeja, onFiltroChange, anioSeleccionado, tab
                                 <td style={{ padding: '8px 10px', textAlign: 'right', fontSize: 13, color: '#374151', fontWeight: 500 }}>{fmtCLP(f.monto_estimado)}</td>
                                 <td style={{ padding: '8px 10px', textAlign: 'center' }}><DiasBadge dias={diasDesde(f.fecha_solicitud)} compact /></td>
                                 <td style={{ padding: '8px 10px' }}><EstadoFSCBadge codigo={f.estado} /></td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center' }}><PacBadge idPlan={f.id_plan} /></td>
                                 <td style={{ padding: '8px 10px', maxWidth: 160 }}>
                                     {f.destino_actual
                                         ? <div className="truncate-text" title={f.destino_actual} style={{ fontSize: 12, color: '#5b21b6' }}>👤 {f.destino_actual}</div>
@@ -1052,7 +1080,7 @@ function TablaSolicitudes({ filtroBandeja, onFiltroChange, anioSeleccionado, tab
 
 // ─── Resumen + Gráficos + Tabla (tab unificado) ───────────────────────────────
 
-function ResumenFormularios({ stats, anioSeleccionado, filtroBandeja, onFiltroChange }) {
+function ResumenFormularios({ stats, anioSeleccionado, filtroBandeja, onFiltroChange, subdireccionSel, deptoSel }) {
     const kpis     = stats?.kpis;
     const tablaRef = useRef(null);
 
@@ -1123,6 +1151,8 @@ function ResumenFormularios({ stats, anioSeleccionado, filtroBandeja, onFiltroCh
                         filtroBandeja={filtroBandeja}
                         onFiltroChange={onFiltroChange}
                         anioSeleccionado={anioSeleccionado}
+                        subdireccionSel={subdireccionSel}
+                        deptoSel={deptoSel}
                         tablaRef={tablaRef}
                     />
                 </div>
@@ -3671,6 +3701,9 @@ export function FormulariosPage() {
     const [stats, setStats]               = useState(null);
     const [filtroBandeja, setFiltroBandeja] = useState([]);
     const [anioGlobal, setAnioGlobal]     = useState(null);
+    const [organigrama, setOrganigrama]   = useState(null);
+    const [subdireccionSel, setSubdireccionSel] = useState('');
+    const [deptoSel, setDeptoSel]         = useState('');
 
 
     const [tarea, setTarea]         = useState(null);
@@ -3690,6 +3723,17 @@ export function FormulariosPage() {
 
     // Resetear filtro de bandeja al cambiar el año global
     useEffect(() => { setFiltroBandeja([]); }, [anioGlobal]);
+
+    // Árbol Subdirección → Departamento para el filtro de la tabla Solicitudes FSC
+    // (no depende del año — se carga una sola vez).
+    useEffect(() => {
+        getFormulariosOrganigrama()
+            .then(({ data }) => setOrganigrama(data))
+            .catch(() => setOrganigrama(null));
+    }, []);
+
+    // Al cambiar de subdirección, el departamento seleccionado (si pertenecía a otra) deja de ser válido.
+    useEffect(() => { setDeptoSel(''); }, [subdireccionSel]);
 
 
     useEffect(() => () => clearInterval(pollingRef.current), []);
@@ -3768,13 +3812,38 @@ export function FormulariosPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '14px 0 18px' }}>
                 <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
                     Filtros
-                    <InfoTooltip text="El año seleccionado se aplica a los indicadores, al flujo de visación y a los listados de Solicitudes y Derivados." />
+                    <InfoTooltip text="El año se aplica a los indicadores, al flujo de visación y a los listados de Solicitudes y Derivados. Subdirección y Departamento acotan solo la tabla Solicitudes FSC." />
                     :
                 </span>
                 <span style={{ fontSize: 12, color: '#64748b' }}>📅 Año</span>
                 <select className="filtro-select" value={anioGlobal || ''} onChange={e => setAnioGlobal(e.target.value || null)}>
                     <option value="">Todos los años</option>
                     {aniosDisponibles?.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+
+                <span style={{ fontSize: 12, color: '#64748b', marginLeft: 6 }}>🏛️ Subdirección</span>
+                <select className="filtro-select" value={subdireccionSel} onChange={e => setSubdireccionSel(e.target.value)}>
+                    <option value="">Todas</option>
+                    {organigrama?.subdirecciones.map(s => (
+                        <option key={s.subdireccion_id ?? 'sin_clasificar'} value={s.subdireccion_id ?? 'sin_clasificar'}>
+                            {s.nombre} ({fmtN(s.total)})
+                        </option>
+                    ))}
+                </select>
+
+                <span style={{ fontSize: 12, color: '#64748b' }}>Departamento</span>
+                <select
+                    className="filtro-select"
+                    value={deptoSel}
+                    onChange={e => setDeptoSel(e.target.value)}
+                    disabled={!subdireccionSel}
+                >
+                    <option value="">Todos</option>
+                    {organigrama?.subdirecciones
+                        .find(s => String(s.subdireccion_id) === subdireccionSel)
+                        ?.departamentos.map(d => (
+                            <option key={d.depto_id} value={d.depto_id}>{d.nombre} ({fmtN(d.total)})</option>
+                        ))}
                 </select>
             </div>
 
@@ -3793,6 +3862,8 @@ export function FormulariosPage() {
                     anioSeleccionado={anioGlobal}
                     filtroBandeja={filtroBandeja}
                     onFiltroChange={setFiltroBandeja}
+                    subdireccionSel={subdireccionSel}
+                    deptoSel={deptoSel}
                 />
             )}
 

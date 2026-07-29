@@ -3,9 +3,11 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -1651,6 +1653,34 @@ _SCRIPT_DESCARGA = (
 )
 
 
+_RETENCION_DESCARGA_OFERTAS_DIAS = 5
+
+
+def _limpiar_descargas_antiguas(carpeta: Path, dias: int = _RETENCION_DESCARGA_OFERTAS_DIAS) -> None:
+    """
+    Borra ZIPs (y carpetas sin comprimir que hayan quedado de corridas viejas
+    de run_api.py) con más de `dias` de antigüedad.
+
+    Esta carpeta se reutiliza para CADA tarea de descarga y nunca se limpiaba
+    sola: cada licitación scrapeada quedaba acumulada ahí para siempre. Con
+    cientos de archivos/varios GB acumulados, cada corrida nueva se sentía
+    cada vez más lenta — el mismo patrón de "borro la carpeta y descarga
+    rápido de nuevo" que reportó el usuario, salvo que la carpeta relevante
+    es esta del servidor, no la del navegador.
+    """
+    limite = time.time() - dias * 86400
+    for item in carpeta.iterdir():
+        try:
+            if item.stat().st_mtime >= limite:
+                continue
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+        except OSError as e:
+            logger.warning("No se pudo limpiar %s de descarga_ofertas: %s", item, e)
+
+
 def _carpeta_descargas() -> Path:
     """
     Carpeta de trabajo del SERVIDOR donde Chrome/Selenium descarga los
@@ -1662,6 +1692,7 @@ def _carpeta_descargas() -> Path:
     """
     carpeta = Path(settings.MEDIA_ROOT) / "descarga_ofertas"
     carpeta.mkdir(parents=True, exist_ok=True)
+    _limpiar_descargas_antiguas(carpeta)
     return carpeta
 
 
@@ -3542,6 +3573,36 @@ def formularios_flujo_view(request):
     return Response(data)
 
 
+_CACHE_KEY_MAPA_UNIDAD_ORGANIGRAMA = "formularios_mapa_unidad_organigrama_v1"
+
+
+def _mapa_unidad_requirente_organigrama_cacheado():
+    """Envoltorio con cache del matching unidad_requirente → depto/subdirección
+    (ver services._mapa_unidad_requirente_organigrama) — se recalcula sobre TODO
+    FormularioFSC en cada miss, así que se cachea para no repetirlo en cada
+    request de la tabla Solicitudes FSC (búsqueda, orden, paginación)."""
+    from .services import _mapa_unidad_requirente_organigrama
+    mapa = cache.get(_CACHE_KEY_MAPA_UNIDAD_ORGANIGRAMA)
+    if mapa is None:
+        mapa = _mapa_unidad_requirente_organigrama()
+        cache.set(_CACHE_KEY_MAPA_UNIDAD_ORGANIGRAMA, mapa, timeout=300)
+    return mapa
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def formularios_organigrama_view(request):
+    """Árbol Subdirección → Departamento para poblar el filtro en cascada de la
+    tabla 'Solicitudes FSC' (ver calcular_formularios_organigrama en services.py)."""
+    from .services import calcular_formularios_organigrama
+    cache_key = "formularios_organigrama_v1"
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_formularios_organigrama()
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
 class FormularioFSCFilter(django_filters.FilterSet):
     estado = django_filters.BaseInFilter(field_name='estado', lookup_expr='in')
 
@@ -3562,6 +3623,37 @@ class FormularioFSCViewSet(viewsets.ReadOnlyModelViewSet):
         "especificaciones_tecnicas", "estado",
     ]
     ordering_fields = ["folio", "anho", "monto_estimado", "fecha_solicitud", "unidad_requirente", "estado", "destino_actual"]
+
+    def get_queryset(self):
+        """`?subdireccion=<id>` / `?depto=<id>` — filtro en cascada de la tabla
+        Solicitudes FSC (ver InfoTooltip 'Filtros' en FormulariosPage.jsx). Como
+        FormularioFSC no persiste un FK a Departamento (a diferencia de
+        FormularioFSCDerivado.sso_departamento), se resuelve el match
+        unidad_requirente → depto/subdirección en caliente vía
+        `_mapa_unidad_requirente_organigrama_cacheado()` y se filtra por la lista
+        de `unidad_requirente` resultante. `?sin_clasificar=1` — formularios cuyo
+        unidad_requirente no calzó con ningún Departamento."""
+        qs = super().get_queryset()
+        subdireccion = self.request.query_params.get('subdireccion', '').strip()
+        depto = self.request.query_params.get('depto', '').strip()
+        sin_clasificar = self.request.query_params.get('sin_clasificar', '').strip() in ('1', 'true', 'True')
+        if not (subdireccion or depto or sin_clasificar):
+            return qs
+
+        mapa_unidad = _mapa_unidad_requirente_organigrama_cacheado()
+        unidades_match = []
+        for unidad, info in mapa_unidad.items():
+            if info is None:
+                if sin_clasificar:
+                    unidades_match.append(unidad)
+                continue
+            if depto and str(info['depto_id']) != depto:
+                continue
+            if subdireccion and str(info['subdireccion_id']) != subdireccion:
+                continue
+            if depto or subdireccion:
+                unidades_match.append(unidad)
+        return qs.filter(unidad_requirente__in=unidades_match)
 
 
 class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
@@ -3591,13 +3683,31 @@ class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
         `?sin_clasificar=1` — filtra a los formularios con `sso_departamento` NULL (el nodo
         "Sin Clasificar" de la jerarquía). Se combina con `sso_departamento_in` si ambos
         vienen (ej. seleccionar una subdirección completa que incluye su rama Sin Clasificar
-        no aplica hoy, pero deja la puerta abierta sin romper nada)."""
+        no aplica hoy, pero deja la puerta abierta sin romper nada).
+
+        `?anho_fecha_derivado=<año>` — SOLO junto con `establecimiento`: filtra por el año
+        calendario de `fecha_derivado`, igual que `calcular_pac_jerarquia`/
+        `calcular_pac_dentro_fuera_stats` (`services.py`), en vez del filterset genérico
+        `?anho=` (que compara contra `FormularioFSCDerivado.anho`, un campo propio del FSC
+        que puede no coincidir con el año en que efectivamente se derivó). Sin esto, el
+        drill-down "Ver formularios" del tab Jerarquía podía mostrar un conteo de filas que
+        no calzaba con el "Total" agregado del mismo departamento/período (bug real,
+        revisión de código 2026-07-27) — también excluye acá los formularios sin clasificar
+        Dentro/Fuera PAC (`dentro_fuera_pac` NULL), que esas mismas funciones ya excluyen del
+        total agregado."""
         qs = super().get_queryset()
         establecimiento = self.request.query_params.get('establecimiento', '').strip()
         if establecimiento.isdigit():
             qs = qs.filter(
                 Q(sso_departamento__establecimiento_id=int(establecimiento)) | Q(sso_departamento__isnull=True)
             )
+            qs = qs.exclude(dentro_fuera_pac__isnull=True)
+            anho_fecha_derivado = self.request.query_params.get('anho_fecha_derivado', '').strip()
+            if anho_fecha_derivado.isdigit():
+                qs = qs.filter(
+                    fecha_derivado__gte=f'{anho_fecha_derivado}-01-01',
+                    fecha_derivado__lte=f'{anho_fecha_derivado}-12-31',
+                )
 
         depto_ids_raw = self.request.query_params.get('sso_departamento_in', '').strip()
         sin_clasificar = self.request.query_params.get('sin_clasificar', '').strip() in ('1', 'true', 'True')

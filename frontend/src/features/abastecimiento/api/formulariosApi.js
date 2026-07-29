@@ -2,6 +2,7 @@ import apiClient from '../../../lib/axios';
 
 export const getFormulariosStats = (params = {}) => apiClient.get('formularios/stats/', { params });
 export const getFormulariosFlujo = (params = {}) => apiClient.get('formularios/flujo/', { params });
+export const getFormulariosOrganigrama = () => apiClient.get('formularios/organigrama/');
 
 export const getFormularios          = (params = {}) => apiClient.get('formularios-fsc/', { params });
 export const getFormulariosDerivados = (params = {}) => apiClient.get('formularios-fsc-derivados/', { params });

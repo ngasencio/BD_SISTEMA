@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import TablaFormulariosPac from '../shared/TablaFormulariosPac';
+import { fmtN, fmtCompacto, colorPct } from '../../utils/format';
 
 const TABLA_FORMULARIOS_ID = 'jerarquia-tabla-formularios';
 
@@ -26,17 +27,6 @@ function BotonVerFormularios({ onClick, title }) {
         </button>
     );
 }
-
-const fmt = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
-const fmtB = (n) => {
-    if (n == null) return '—';
-    if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
-    if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-    return fmt(n);
-};
-const fmtN = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
-
-const colorPct = (pct) => (pct == null ? '#94a3b8' : pct >= 70 ? '#15803d' : pct >= 40 ? '#b45309' : '#dc2626');
 
 // Muestra mínima para que un % sea representativo — mismo umbral que calcular_pac_rankings
 // (services.py: "if d['total'] < 3: continue") para no destacar un 100%/0% con 1 solo formulario.
@@ -92,8 +82,8 @@ function tooltipRendimiento(d) {
     const partes = [
         `Total: ${fmtN(d.total)} formularios`,
         `Dentro: ${fmtN(d.dentro)}  ·  Fuera: ${fmtN(d.fuera)}`,
-        `Monto Dentro: ${fmtB(d.monto_dentro)}`,
-        `Monto Fuera: ${fmtB(d.monto_fuera)}`,
+        `Monto Dentro: ${fmtCompacto(d.monto_dentro)}`,
+        `Monto Fuera: ${fmtCompacto(d.monto_fuera)}`,
         `% En fecha: ${d.pct_en_fecha == null ? 'sin datos' : d.pct_en_fecha + '%'}`,
     ];
     if (d.total < MUESTRA_MINIMA) {
@@ -186,8 +176,8 @@ function FilaDepto({ claveDepto, d, expandidos, toggleDepto, onVerFormularios })
                 <td style={{ padding: '7px 12px', color: '#dc2626', fontWeight: 600 }}>{fmtN(d.fuera)}</td>
                 <td style={{ padding: '7px 12px' }}><BarraPct pct={d.pct_dentro} color={colorPct(d.pct_dentro)} /></td>
                 <td style={{ padding: '7px 12px' }}><BarraPct pct={d.pct_en_fecha} color={colorPct(d.pct_en_fecha)} /></td>
-                <td style={{ padding: '7px 12px', color: '#64748b' }}>{fmtB(d.monto_dentro)}</td>
-                <td style={{ padding: '7px 12px', color: '#64748b' }}>{fmtB(d.monto_fuera)}</td>
+                <td style={{ padding: '7px 12px', color: '#64748b' }}>{fmtCompacto(d.monto_dentro)}</td>
+                <td style={{ padding: '7px 12px', color: '#64748b' }}>{fmtCompacto(d.monto_fuera)}</td>
                 <td style={{ padding: '7px 12px' }}>
                     <BotonVerFormularios onClick={() => onVerFormularios(
                         [d.depto_id, ...d.subdepartamentos.map((s) => s.depto_id)],
@@ -211,8 +201,8 @@ function FilaDepto({ claveDepto, d, expandidos, toggleDepto, onVerFormularios })
                     <td style={{ padding: '6px 12px', color: '#dc2626', fontSize: 11.5 }}>{fmtN(s.fuera)}</td>
                     <td style={{ padding: '6px 12px' }}><BarraPct pct={s.pct_dentro} color={colorPct(s.pct_dentro)} /></td>
                     <td style={{ padding: '6px 12px' }}><BarraPct pct={s.pct_en_fecha} color={colorPct(s.pct_en_fecha)} /></td>
-                    <td style={{ padding: '6px 12px', color: '#94a3b8', fontSize: 11.5 }}>{fmtB(s.monto_dentro)}</td>
-                    <td style={{ padding: '6px 12px', color: '#94a3b8', fontSize: 11.5 }}>{fmtB(s.monto_fuera)}</td>
+                    <td style={{ padding: '6px 12px', color: '#94a3b8', fontSize: 11.5 }}>{fmtCompacto(s.monto_dentro)}</td>
+                    <td style={{ padding: '6px 12px', color: '#94a3b8', fontSize: 11.5 }}>{fmtCompacto(s.monto_fuera)}</td>
                     <td style={{ padding: '6px 12px' }}>
                         <BotonVerFormularios onClick={() => onVerFormularios([s.depto_id], s.nombre)} />
                     </td>
@@ -277,7 +267,7 @@ export default function JerarquiaTab({ jerarquia, anho }) {
                         value={kpis.deptoLider ? kpis.deptoLider.nombre : '—'}
                         sub={kpis.deptoLider ? `${kpis.deptoLider.pct_dentro}% Dentro · ${kpis.deptoLider.subdireccion}` : `Sin depto con ≥${MUESTRA_MINIMA} formularios`}
                     />
-                    <KpiCard label="💰 Monto Dentro / Fuera" value={fmtB(kpis.montoDentro)} color="#16a34a" sub={`${fmtB(kpis.montoFuera)} fuera del PAC`} />
+                    <KpiCard label="💰 Monto Dentro / Fuera" value={fmtCompacto(kpis.montoDentro)} color="#16a34a" sub={`${fmtCompacto(kpis.montoFuera)} fuera del PAC`} />
                 </div>
             )}
 
@@ -302,7 +292,7 @@ export default function JerarquiaTab({ jerarquia, anho }) {
                                 <span style={{ fontSize: 11, color: '#94a3b8' }}>({sub.departamentos.length} departamentos · {fmtN(sub.total)} formularios)</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                                <div style={{ fontSize: 11, color: '#64748b' }}>💰 {fmtB(sub.monto_dentro)} dentro / {fmtB(sub.monto_fuera)} fuera</div>
+                                <div style={{ fontSize: 11, color: '#64748b' }}>💰 {fmtCompacto(sub.monto_dentro)} dentro / {fmtCompacto(sub.monto_fuera)} fuera</div>
                                 <BarraPct pct={sub.pct_dentro} color={colorPct(sub.pct_dentro)} />
                                 <BotonVerFormularios
                                     onClick={() => onVerFormularios(idsDeSubdireccion(sub), sub.nombre)}

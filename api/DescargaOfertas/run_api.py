@@ -10,6 +10,7 @@
 
 import sys
 import os
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -130,6 +131,18 @@ def run(codigo: str, carpeta_base: Path):
         except OSError as e:
             print(f"[ERROR] No se pudo crear el ZIP: {e}", file=sys.stderr)
             zip_path = None
+
+        # El ZIP ya contiene todo el contenido de la carpeta — se borra la
+        # copia sin comprimir para no duplicar peso en carpeta_base (el
+        # servidor reutiliza la misma carpeta de trabajo para cada tarea,
+        # así que sin este borrado el directorio crece sin límite y cada
+        # descarga nueva se vuelve más lenta a medida que acumula licitaciones
+        # previas).
+        if zip_path and zip_path.exists():
+            try:
+                shutil.rmtree(carpeta_principal)
+            except OSError as e:
+                print(f"[WARN] No se pudo borrar la carpeta sin comprimir: {e}")
 
         # Estas líneas son leídas por el backend Django
         print(f"CARPETA_PATH:{rutas['carpeta_principal']}")

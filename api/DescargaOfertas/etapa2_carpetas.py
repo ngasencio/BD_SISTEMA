@@ -38,18 +38,29 @@ def _sanitizar(texto: str, max_len: int) -> str:
 
 
 def _escritorio() -> Path:
-    """Retorna la ruta al Escritorio del usuario (OneDrive o clásico)."""
+    """
+    Retorna la carpeta de Descargas del usuario — NO Escritorio/Documentos,
+    que en equipos con OneDrive "Known Folder Move" quedan sincronizados.
+
+    Descargar cientos de archivos dentro de una carpeta sincronizada hace que
+    OneDrive intercepte cada escritura para subirla/hashearla, y con el
+    backlog acumulado de licitaciones anteriores el I/O se degrada
+    progresivamente ("se pone lento entre archivos"). "Downloads" es el
+    nombre físico real de la carpeta incluso en Windows en español (el
+    "Descargas" que se ve en el Explorador es solo una etiqueta de
+    desktop.ini) y OneDrive no la ofrece para sincronización por defecto, así
+    que queda fuera de cualquier árbol sincronizado.
+    """
     home = Path.home()
     candidatos = [
-        home / "OneDrive" / "Escritorio",
-        home / "OneDrive" / "Desktop",
-        home / "Desktop",
-        home / "Escritorio",
+        home / "Downloads",
+        home / "Descargas",
+        home / "OneDrive" / "Downloads",
+        home / "OneDrive" / "Descargas",
     ]
     for c in candidatos:
         if c.exists():
             return c
-    # Si ninguno existe, usar el primero (OneDrive/Escritorio) y dejar que mkdir lo cree
     return candidatos[0]
 
 

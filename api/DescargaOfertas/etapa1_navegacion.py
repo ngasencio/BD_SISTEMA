@@ -88,6 +88,12 @@ def iniciar_chrome():
         "plugins.always_open_pdf_externally": True,
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
+        # Evita que Chrome haga una consulta de reputación a Google por cada
+        # archivo descargado antes de liberar el rename .crdownload → final.
+        # Con decenas de PDFs/DOCX por licitación, ese round-trip de red se
+        # suma a la latencia de MP y de cualquier escaneo local (antivirus).
+        "safebrowsing.enabled": False,
+        "safebrowsing_for_trusted_sources_enabled": False,
     })
 
     try:

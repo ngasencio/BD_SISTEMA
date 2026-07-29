@@ -2902,14 +2902,40 @@ def _parsear_fecha_planer(s):
     return None
 
 
-def _eventos_planificados_por_proyecto(anho=None):
+def _eventos_planificados_por_proyecto(anho=None, subdireccion=None, depto=None):
     """Agrupa PlanerPAC por (id_proyecto, fecha_inicio_compra) = 'evento de compra'
-    — un mismo proyecto puede tener varios ítems programados en meses distintos."""
+    — un mismo proyecto puede tener varios ítems programados en meses distintos.
+
+    `subdireccion`/`depto` acotan el universo de proyectos planificados a una rama
+    organizacional, resolviendo `PlanerPAC.depto`/`sub` (texto) igual que
+    `_calcular_fichas_pac_completo` — necesario porque `calcular_pac_cumplimiento_temporal`
+    cruza este universo contra un `fsc_qs` que SÍ filtra por subdirección/depto; sin este
+    filtro, un proyecto de OTRA subdirección sin FSC en el filtro actual se contaba igual
+    como "sin iniciar" de la subdirección filtrada (bug real, revisión de código 2026-07-27)."""
     qs = PlanerPAC.objects.exclude(id_proyecto__isnull=True).exclude(fecha_inicio_compra__isnull=True)
     if anho:
         qs = qs.filter(pac=str(anho))
+
+    mapa_deptos = mapa_subs = None
+    depto_ids = None
+    if depto is not None:
+        depto_ids = depto if isinstance(depto, (list, set, tuple)) else [depto]
+        mapa_deptos = _mapa_departamentos_por_nombre()
+    if subdireccion is not None:
+        mapa_subs = _mapa_subdirecciones_por_nombre()
+
     eventos = defaultdict(set)
-    for id_proyecto, fecha_str in qs.values_list('id_proyecto', 'fecha_inicio_compra'):
+    for id_proyecto, fecha_str, depto_texto, sub_texto in qs.values_list(
+        'id_proyecto', 'fecha_inicio_compra', 'depto', 'sub',
+    ):
+        if depto_ids is not None:
+            depto_obj = _resolver_depto_ficha_pac(depto_texto, mapa_deptos)
+            if not depto_obj or depto_obj.id not in depto_ids:
+                continue
+        if subdireccion is not None:
+            sub_obj = _resolver_subdireccion_ficha_pac(sub_texto, mapa_subs)
+            if not sub_obj or sub_obj.subdireccion_id != subdireccion:
+                continue
         fecha = _parsear_fecha_planer(fecha_str)
         if fecha:
             eventos[id_proyecto].add(fecha)
@@ -2937,26 +2963,38 @@ def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=
         tiene fecha_inicio_compra cargada en PlanerPAC (años no cargados aún).
     """
     hoy = date.today()
-    eventos = _eventos_planificados_por_proyecto(anho)
+    eventos = _eventos_planificados_por_proyecto(anho, subdireccion=subdireccion, depto=depto)
 
-    fsc_qs = (
+    fsc_qs_base = (
         _qs_fsc_derivado_pac_cumplimiento()
         .filter(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)
         .exclude(fecha_derivado__isnull=True).exclude(fecha_derivado='')
         .exclude(id_plan__isnull=True).exclude(id_plan='')
     )
+    if subdireccion:
+        fsc_qs_base = fsc_qs_base.filter(sso_departamento__subdireccion_id=subdireccion)
+    if depto:
+        fsc_qs_base = fsc_qs_base.filter(sso_departamento_id=depto)
+
+    fsc_qs = fsc_qs_base
     if fecha_desde:
         fsc_qs = fsc_qs.filter(fecha_derivado__gte=fecha_desde)
     if fecha_hasta:
         fsc_qs = fsc_qs.filter(fecha_derivado__lte=fecha_hasta)
     elif anho:
         fsc_qs = fsc_qs.filter(fecha_derivado__gte=f'{anho}-01-01', fecha_derivado__lte=f'{anho}-12-31')
-    if subdireccion:
-        fsc_qs = fsc_qs.filter(sso_departamento__subdireccion_id=subdireccion)
-    if depto:
-        fsc_qs = fsc_qs.filter(sso_departamento_id=depto)
 
-    proyectos_con_fsc = set()
+    fecha_tope = fecha_hasta or (f'{anho}-12-31' if anho else hoy.isoformat())
+    # Universo de "¿este proyecto ya tiene algún FSC Dentro PAC derivado, alguna vez hasta
+    # fecha_tope?" — deliberadamente SIN el límite inferior fecha_desde/anho-01-01: antes este
+    # set se armaba dentro del loop de abajo a partir de `fsc_qs` (ya acotado por fecha_desde),
+    # así que un proyecto ejecutado en enero aparecía como "sin iniciar" en un reporte de junio
+    # solo porque su FSC quedó fuera de la ventana del período (bug real, revisión de código
+    # 2026-07-27). Separado acá en su propia consulta, acotada solo por el cierre del período.
+    proyectos_con_fsc = set(
+        fsc_qs_base.filter(fecha_derivado__lte=fecha_tope).values_list('id_plan', flat=True)
+    )
+
     detalle = []
     conteo = {EN_FECHA: 0, ATRASADO: 0, SIN_PLANIFICACION: 0}
 
@@ -2970,7 +3008,6 @@ def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=
             estado, evento_cercano = SIN_PLANIFICACION, None
             conteo[SIN_PLANIFICACION] += 1
         else:
-            proyectos_con_fsc.add(fsc.id_plan)
             evento_cercano = min(eventos_proyecto, key=lambda e: abs((e - fecha_derivado).days))
             mismo_mes = (fecha_derivado.year, fecha_derivado.month) == (evento_cercano.year, evento_cercano.month)
             estado = EN_FECHA if (mismo_mes or fecha_derivado < evento_cercano) else ATRASADO
@@ -2986,15 +3023,21 @@ def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=
             'monto_estimado': float(fsc.monto_estimado) if fsc.monto_estimado else 0,
         })
 
-    # Proyectos planificados sin ningún FSC Dentro PAC derivado todavía.
+    # Proyectos planificados sin ningún FSC Dentro PAC derivado todavía (hasta fecha_tope).
     proyectos_sin_iniciar = []
     n_pendientes = n_atrasados_sin_iniciar = 0
-    primer_dia_mes_actual = date(hoy.year, hoy.month, 1)
+    # Fecha de referencia para "¿el evento ya venció?": el cierre del período reportado
+    # (fecha_hasta) cuando se pasa uno, o la fecha real de hoy para la vista interactiva del
+    # dashboard (sin período explícito). Antes siempre usaba `hoy`, así que un reporte de un
+    # trimestre pasado clasificaba Pendiente/Atrasado según la fecha de HOY en vez del cierre
+    # del período que dice estar reportando (bug real, revisión de código 2026-07-27).
+    fecha_referencia = _parsear_fecha_planer(fecha_hasta) if fecha_hasta else hoy
+    primer_dia_mes_referencia = date(fecha_referencia.year, fecha_referencia.month, 1)
     for id_proyecto, fechas in eventos.items():
         if id_proyecto in proyectos_con_fsc:
             continue
         primera_fecha = fechas[0]
-        estado_proyecto = PENDIENTE if primera_fecha >= primer_dia_mes_actual else ATRASADO
+        estado_proyecto = PENDIENTE if primera_fecha >= primer_dia_mes_referencia else ATRASADO
         n_pendientes += estado_proyecto == PENDIENTE
         n_atrasados_sin_iniciar += estado_proyecto == ATRASADO
         proyectos_sin_iniciar.append({
@@ -3541,6 +3584,96 @@ def _mapa_subdirecciones_por_nombre():
     (dependencia directa de la Dirección), distinto nombre. Se resuelve por prefijo en
     `_resolver_subdireccion_ficha_pac`, no acá."""
     return {_normalizar_texto_pac(s.nombre): s for s in SsoSubdireccion.objects.all()}
+
+
+# =============================================================================
+# Formularios FSC — filtro Subdirección/Departamento (Solicitudes FSC)
+# =============================================================================
+#
+# FormularioFSC (a diferencia de FormularioFSCDerivado) no persiste un FK
+# `sso_departamento` — esa clasificación solo la calcula el ETL de
+# page_data_panel.py sobre el Derivado. Para el filtro de la tabla "Solicitudes
+# FSC" se optó (decisión del usuario, 2026-07-29) por resolver el match
+# unidad_requirente → Departamento en caliente en vez de agregar una migración +
+# tocar el ETL: FormularioFSC tiene baja cardinalidad de unidad_requirente
+# distintos (~cientos), así que recalcular es barato. La vista que consume esto
+# (FormularioFSCViewSet.get_queryset, views.py) cachea el resultado con
+# LocMemCache para no repetir el cálculo en cada request de la tabla.
+
+def _mapa_unidad_requirente_organigrama():
+    """unidad_requirente (texto libre de FormularioFSC) → depto raíz + subdirección,
+    usando el mismo matching normalizado que `_clasificar_dentro_fuera_pac()` en
+    page_data_panel.py aplica sobre FormularioFSCDerivado.unidad_requirente, pero
+    sin persistirlo. None = "Sin Clasificar" (unidad_requirente sin match en
+    Departamento), nunca se descarta."""
+    mapa_deptos = _mapa_departamentos()
+    mapa_por_nombre = _mapa_departamentos_por_nombre()
+    nombres_rama, _ = _mapa_nombres_subdireccion()
+
+    resultado = {}
+    unidades = (
+        FormularioFSC.objects.exclude(unidad_requirente__isnull=True).exclude(unidad_requirente='')
+        .values_list('unidad_requirente', flat=True).distinct()
+    )
+    for unidad in unidades:
+        depto = mapa_por_nombre.get(_normalizar_texto_pac(unidad))
+        if not depto:
+            resultado[unidad] = None
+            continue
+        raiz_id = _resolver_depto_raiz(depto.id, mapa_deptos)
+        raiz_info = mapa_deptos.get(raiz_id) or {}
+        establecimiento_id = raiz_info.get('establecimiento_id', depto.establecimiento_id)
+        subdireccion_id = raiz_info.get('subdireccion_id', depto.subdireccion_id)
+        resultado[unidad] = {
+            'depto_id': raiz_id,
+            'nombre_depto': raiz_info.get('descripcion') or depto.descripcion,
+            'establecimiento_id': establecimiento_id,
+            'subdireccion_id': subdireccion_id,
+            'nombre_subdireccion': nombres_rama.get((establecimiento_id, subdireccion_id), 'Sin Clasificar'),
+        }
+    return resultado
+
+
+def calcular_formularios_organigrama():
+    """Árbol Subdirección/Hospital → Departamento(raíz) para poblar el filtro en
+    cascada de la tabla "Solicitudes FSC" (Abastecimiento › Formularios). Solo
+    estructura + conteo de formularios por nodo — a diferencia de
+    `calcular_pac_jerarquia`, no cruza con `dentro_fuera_pac` (ese campo no existe
+    en FormularioFSC) y no se acota a un establecimiento: Formularios FSC cubre
+    toda la red, a diferencia del módulo PAC Cumplimiento (ver
+    `ESTABLECIMIENTO_PAC_CUMPLIMIENTO`)."""
+    mapa_unidad = _mapa_unidad_requirente_organigrama()
+    conteo_por_unidad = dict(
+        FormularioFSC.objects.exclude(unidad_requirente__isnull=True).exclude(unidad_requirente='')
+        .values('unidad_requirente').annotate(n=Count('id')).values_list('unidad_requirente', 'n')
+    )
+
+    subdirecciones = {}
+    sin_clasificar_total = 0
+    for unidad, info in mapa_unidad.items():
+        n = conteo_por_unidad.get(unidad, 0)
+        if info is None:
+            sin_clasificar_total += n
+            continue
+        clave_sub = (info['establecimiento_id'], info['subdireccion_id'])
+        nodo_sub = subdirecciones.setdefault(clave_sub, {
+            'subdireccion_id': info['subdireccion_id'], 'nombre': info['nombre_subdireccion'],
+            'departamentos': {}, 'total': 0,
+        })
+        nodo_sub['total'] += n
+        nodo_depto = nodo_sub['departamentos'].setdefault(info['depto_id'], {
+            'depto_id': info['depto_id'], 'nombre': info['nombre_depto'], 'total': 0,
+        })
+        nodo_depto['total'] += n
+
+    resultado = []
+    for nodo in subdirecciones.values():
+        nodo['departamentos'] = sorted(nodo['departamentos'].values(), key=lambda d: d['nombre'] or '')
+        resultado.append(nodo)
+    resultado.sort(key=lambda n: n['nombre'] or '')
+    if sin_clasificar_total:
+        resultado.append({'subdireccion_id': None, 'nombre': 'Sin Clasificar', 'departamentos': [], 'total': sin_clasificar_total})
+    return {'subdirecciones': resultado}
 
 
 def _resolver_depto_ficha_pac(depto_texto, mapa_deptos):

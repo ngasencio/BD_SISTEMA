@@ -1039,7 +1039,7 @@ def generar_informe_word(periodo):
         _titulo_seccion_docx(doc, f'Formularios de Solicitud de Compra — Período {label}')
         if sub['fsc'] and sub['fsc']['total']:
             mejor_rk, peor_rk = _mejor_peor_de_ranking(d['rankings_depto'], sub['nombre'])
-            doc.add_paragraph(parrafo_capitulo_subdireccion(sub['nombre'], sub['fsc'], mejor_rk, peor_rk))
+            doc.add_paragraph(parrafo_capitulo_subdireccion(nombre_display, sub['fsc'], mejor_rk, peor_rk))
             if sub['fsc']['departamentos']:
                 _tabla_departamentos(doc, sub['fsc']['departamentos'])
 
@@ -1277,9 +1277,14 @@ def _pdf_imagen(img_bytes, width_in, height_in):
     return img
 
 
-def _pdf_tabla_departamentos(departamentos, limite=20):
+def _pdf_tabla_departamentos(departamentos):
+    """Sin `limite` — a diferencia de versiones anteriores (`limite=20`), que
+    truncaban silenciosamente subdirecciones con más de 20 departamentos mientras
+    su par Word (`_tabla_departamentos`) mostraba la lista completa (bug real,
+    revisión de código 2026-07-27). Se iguala al comportamiento de Word: mostrar
+    todos los departamentos, sin límite."""
     filas = [_fila_encabezado(['Departamento', 'Total', '% Dentro', '% En fecha', 'Monto Dentro PAC'])]
-    for d in departamentos[:limite]:
+    for d in departamentos:
         filas.append([
             _celda(d['nombre'].title()), str(d['total']), f"{d['pct_dentro']}%",
             f"{d['pct_en_fecha']}%" if d['pct_en_fecha'] is not None else '—', _money(d['monto_dentro']),
@@ -1289,9 +1294,11 @@ def _pdf_tabla_departamentos(departamentos, limite=20):
     return tabla
 
 
-def _pdf_tabla_deptos_ejecucion(departamentos, limite=20):
+def _pdf_tabla_deptos_ejecucion(departamentos):
+    """Sin `limite` — ver docstring de `_pdf_tabla_departamentos` (mismo bug,
+    misma corrección: paridad con el Word sin límite)."""
     filas = [_fila_encabezado(['Departamento', 'Total Fichas', 'Ejecutado', 'Pendiente', 'Atrasado'])]
-    for dpt in departamentos[:limite]:
+    for dpt in departamentos:
         filas.append([_celda(dpt['nombre'].title()), str(dpt['total']), str(dpt['ejecutados']), str(dpt['pendientes']), str(dpt['atrasados'])])
     tabla = Table(filas, colWidths=[2.7 * inch, 0.7 * inch, 0.75 * inch, 0.75 * inch, 0.75 * inch], repeatRows=1)
     tabla.setStyle(_PDF_TABLA_ESTILO)
@@ -1333,7 +1340,26 @@ def _pdf_tabla_resumen_subdireccion(filas, anho, anho_anterior, limite=15):
     return tabla
 
 
-def _pdf_tabla_fichas_pac(filas, limite=25):
+def _pdf_nota_adicionales(total, limite, texto_unidad):
+    """Paragraph '… y N adicional(es)' cuando una tabla PDF trunca una lista más larga
+    que `limite` — paridad con el aviso equivalente que ya llevan las tablas Word
+    truncadas (`_tabla_fichas_pac_docx`, `_tabla_proyectos_sin_iniciar_docx`, etc.);
+    el PDF no lo tenía en ninguna de sus tablas (bug real, revisión de código
+    2026-07-27), dejando al lector sin forma de saber que hubo recorte. Devuelve
+    `None` (nada que agregar al story) cuando no hubo truncamiento."""
+    if total <= limite:
+        return None
+    return Paragraph(
+        f'… y {total - limite} {texto_unidad} adicional(es) — ver detalle completo en el dashboard interactivo.',
+        _PDF_ESTILOS['Leyenda'],
+    )
+
+
+def _pdf_tabla_fichas_pac(filas, limite=40):
+    """`limite=40` — antes 25, mientras el Word equivalente (`_tabla_fichas_pac_docx`)
+    usa 40 para la MISMA fuente de datos (`d['proximo_mes']`/`d['atrasadas']`); el PDF
+    podía omitir hasta 15 fichas que el Word sí mostraba (bug real, revisión de código
+    2026-07-27). Ahora retorna `[tabla, nota_o_none]` — ver `_pdf_nota_adicionales`."""
     encabezado = ['ID Proyecto', 'Proyecto', 'Departamento', 'Responsable', 'Fecha Compra', 'Estado']
     tabla_filas = [_fila_encabezado(encabezado)]
     for f in filas[:limite]:
@@ -1343,12 +1369,14 @@ def _pdf_tabla_fichas_pac(filas, limite=25):
         ])
     tabla = Table(tabla_filas, colWidths=[0.75 * inch, 1.55 * inch, 1.5 * inch, 1.15 * inch, 0.8 * inch, 0.7 * inch], repeatRows=1)
     tabla.setStyle(_PDF_TABLA_ESTILO)
-    return tabla
+    nota = _pdf_nota_adicionales(len(filas), limite, 'ficha(s)')
+    return [tabla, nota] if nota else [tabla]
 
 
 def _pdf_tabla_formularios_detalle(formularios, limite=30):
     """Detalle a nivel de CADA FSC individual — complemento reportlab de
-    `_tabla_formularios_detalle_docx` para el capítulo de subdirección del PDF."""
+    `_tabla_formularios_detalle_docx` para el capítulo de subdirección del PDF.
+    Retorna `[tabla, nota_o_none]` — ver `_pdf_nota_adicionales`."""
     encabezado = ['Formulario', 'Unidad Requirente', 'Dentro/Fuera', 'Monto', 'Fecha Derivado']
     tabla_filas = [_fila_encabezado(encabezado)]
     for f in formularios[:limite]:
@@ -1359,12 +1387,14 @@ def _pdf_tabla_formularios_detalle(formularios, limite=30):
         ])
     tabla = Table(tabla_filas, colWidths=[0.95 * inch, 2.5 * inch, 0.85 * inch, 1.1 * inch, 1.05 * inch], repeatRows=1)
     tabla.setStyle(_PDF_TABLA_ESTILO)
-    return tabla
+    nota = _pdf_nota_adicionales(len(formularios), limite, 'formulario(s)')
+    return [tabla, nota] if nota else [tabla]
 
 
 def _pdf_tabla_fichas_ejecucion_detalle(fichas, limite=30):
     """Detalle de proyectos del Plan de Compras con CON QUÉ formulario(s) se
-    ejecutó cada uno — complemento reportlab de `_tabla_fichas_ejecucion_detalle_docx`."""
+    ejecutó cada uno — complemento reportlab de `_tabla_fichas_ejecucion_detalle_docx`.
+    Retorna `[tabla, nota_o_none]` — ver `_pdf_nota_adicionales`."""
     encabezado = ['ID Proyecto', 'Proyecto', 'Departamento', 'Estado', 'Ejecutado con (Formulario)']
     tabla_filas = [_fila_encabezado(encabezado)]
     for f in fichas[:limite]:
@@ -1376,7 +1406,8 @@ def _pdf_tabla_fichas_ejecucion_detalle(fichas, limite=30):
         ])
     tabla = Table(tabla_filas, colWidths=[0.75 * inch, 1.5 * inch, 1.35 * inch, 0.75 * inch, 2.15 * inch], repeatRows=1)
     tabla.setStyle(_PDF_TABLA_ESTILO)
-    return tabla
+    nota = _pdf_nota_adicionales(len(fichas), limite, 'proyecto(s)')
+    return [tabla, nota] if nota else [tabla]
 
 
 def _pdf_tabla_avance_trimestral(avance):
@@ -1402,6 +1433,7 @@ def _pdf_tabla_avance_trimestral(avance):
 
 
 def _pdf_tabla_proyectos_sin_iniciar(proyectos, limite=30):
+    """Retorna `[tabla, nota_o_none]` — ver `_pdf_nota_adicionales`."""
     tabla_filas = [_fila_encabezado(['ID Proyecto', 'Proyecto', 'Fecha Planificada', 'Estado'])]
     for p in proyectos[:limite]:
         tabla_filas.append([
@@ -1410,7 +1442,8 @@ def _pdf_tabla_proyectos_sin_iniciar(proyectos, limite=30):
         ])
     tabla = Table(tabla_filas, colWidths=[1 * inch, 2.7 * inch, 1.3 * inch, 0.9 * inch], repeatRows=1)
     tabla.setStyle(_PDF_TABLA_ESTILO)
-    return tabla
+    nota = _pdf_nota_adicionales(len(proyectos), limite, 'proyecto(s)')
+    return [tabla, nota] if nota else [tabla]
 
 
 def _render_grupos_subdireccion_pdf(story, grupos, tabla_fn, est, mensaje_vacio):
@@ -1422,7 +1455,7 @@ def _render_grupos_subdireccion_pdf(story, grupos, tabla_fn, est, mensaje_vacio)
         return
     for grupo in grupos:
         story.append(Paragraph(f'{grupo["nombre_display"]} ({_n(len(grupo["items"]))})', est['SubGrupo']))
-        story.append(tabla_fn(grupo['items']))
+        story.extend(tabla_fn(grupo['items']))
         story.append(Spacer(1, 0.12 * inch))
 
 
@@ -1597,7 +1630,7 @@ def generar_reporte_pdf(periodo):
         story.append(Paragraph(f'Formularios de Solicitud de Compra — Período {label}', est['TituloSeccion']))
         if sub['fsc'] and sub['fsc']['total']:
             mejor_rk, peor_rk = _mejor_peor_de_ranking(d['rankings_depto'], sub['nombre'])
-            story.append(Paragraph(parrafo_capitulo_subdireccion(sub['nombre'], sub['fsc'], mejor_rk, peor_rk), est['Cuerpo']))
+            story.append(Paragraph(parrafo_capitulo_subdireccion(nombre_display, sub['fsc'], mejor_rk, peor_rk), est['Cuerpo']))
             if sub['fsc']['departamentos']:
                 story.append(_pdf_tabla_departamentos(sub['fsc']['departamentos']))
 
@@ -1615,7 +1648,7 @@ def generar_reporte_pdf(periodo):
                     f'Detalle de los {_n(len(sub["formularios_detalle"]))} formularios individuales de {nombre_display} '
                     'en el período:', est['Cuerpo'],
                 ))
-                story.append(_pdf_tabla_formularios_detalle(sub['formularios_detalle']))
+                story.extend(_pdf_tabla_formularios_detalle(sub['formularios_detalle']))
         else:
             story.append(Paragraph('Sin formularios registrados en el período para esta subdirección.', est['Cuerpo']))
 
@@ -1651,7 +1684,7 @@ def generar_reporte_pdf(periodo):
                     f'Detalle de los {_n(len(sub["fichas_detalle"]))} proyectos del Plan de Compras {anho} de '
                     f'{nombre_display}, indicando con qué formulario(s) se ejecutó cada uno:', est['Cuerpo'],
                 ))
-                story.append(_pdf_tabla_fichas_ejecucion_detalle(sub['fichas_detalle']))
+                story.extend(_pdf_tabla_fichas_ejecucion_detalle(sub['fichas_detalle']))
         else:
             story.append(Paragraph('Sin fichas del Plan de Compras registradas para esta subdirección.', est['Cuerpo']))
         story.append(PageBreak())
@@ -2196,6 +2229,37 @@ def _ppt_tabla_ranking(slide, filas, top, limite=5):
         tabla.cell(r, 2).text = f"{f['score']:.0f}"
         tabla.cell(r, 3).text = f"{f['pct_dentro']}%"
     _ppt_estilizar_tabla(tabla, tamano_fuente=12)
+    if len(filas) > limite:
+        _ppt_parrafo(
+            slide, f'… y {len(filas) - limite} departamento(s) adicional(es) — ver el ranking completo en el informe Word/PDF.',
+            top=top + PptxInches(0.42 * n_filas) + PptxInches(0.1), tamano=10, height=PptxInches(0.4),
+        )
+
+
+def _ppt_tabla_ranking_formulario(slide, filas, top, limite=5):
+    """Ranking de formularios individuales — versión slide de `_tabla_ranking_formulario`
+    (Word). Ausente del PPT hasta la revisión de código 2026-07-27: el PPT solo mostraba
+    el ranking por departamento, omitiendo por completo la dimensión por formulario que
+    Word/PDF sí incluyen."""
+    filas_datos = filas[:limite]
+    n_filas = len(filas_datos) + 1
+    tabla_shape = slide.shapes.add_table(n_filas, 5, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.42 * n_filas))
+    tabla = tabla_shape.table
+    _ppt_fijar_anchos_columnas(tabla, [1.47, 4.55, 1.47, 2.27, 2.54])
+    for i, h in enumerate(['Folio/Año', 'Unidad Requirente', 'Dentro/Fuera', 'Monto', 'Score']):
+        tabla.cell(0, i).text = h
+    for r, f in enumerate(filas_datos, start=1):
+        tabla.cell(r, 0).text = f"{f['folio']}/{f['anho']}"
+        tabla.cell(r, 1).text = _truncar(f['unidad_requirente'], 45)
+        tabla.cell(r, 2).text = 'Dentro' if f['dentro_fuera_pac'] == 'DENTRO' else 'Fuera'
+        tabla.cell(r, 3).text = _money(f['monto_estimado'])
+        tabla.cell(r, 4).text = f"{f['score']:.0f}"
+    _ppt_estilizar_tabla(tabla, tamano_fuente=12)
+    if len(filas) > limite:
+        _ppt_parrafo(
+            slide, f'… y {len(filas) - limite} formulario(s) adicional(es) — ver el ranking completo en el informe Word/PDF.',
+            top=top + PptxInches(0.42 * n_filas) + PptxInches(0.1), tamano=10, height=PptxInches(0.4),
+        )
 
 
 def _ppt_fijar_anchos_columnas(tabla, anchos_pulgadas):
@@ -2635,6 +2699,22 @@ def generar_presentacion_ppt(periodo):
     _ppt_titulo(slide, 'Ranking Institucional — Mayor Oportunidad de Mejora')
     if d['rankings_depto']['peores']:
         _ppt_tabla_ranking(slide, d['rankings_depto']['peores'], top=PptxInches(1.2), limite=5)
+    else:
+        _ppt_parrafo(slide, 'Sin datos suficientes para generar el ranking en este período.', top=PptxInches(1.2))
+
+    # --- Ranking por Formulario (ausente hasta la revisión de código 2026-07-27 —
+    # Word/PDF ya incluían esta dimensión, el PPT solo mostraba departamentos) -----
+    slide = _ppt_slide_en_blanco(prs)
+    _ppt_titulo(slide, 'Ranking de Formularios — Mejor Desempeño')
+    if d['rankings_formulario']['mejores']:
+        _ppt_tabla_ranking_formulario(slide, d['rankings_formulario']['mejores'], top=PptxInches(1.2), limite=5)
+    else:
+        _ppt_parrafo(slide, 'Sin datos suficientes para generar el ranking en este período.', top=PptxInches(1.2))
+
+    slide = _ppt_slide_en_blanco(prs)
+    _ppt_titulo(slide, 'Ranking de Formularios — Mayor Oportunidad de Mejora')
+    if d['rankings_formulario']['peores']:
+        _ppt_tabla_ranking_formulario(slide, d['rankings_formulario']['peores'], top=PptxInches(1.2), limite=5)
     else:
         _ppt_parrafo(slide, 'Sin datos suficientes para generar el ranking en este período.', top=PptxInches(1.2))
 

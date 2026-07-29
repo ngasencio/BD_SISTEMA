@@ -84,17 +84,26 @@ def parrafo_cumplimiento_temporal(periodo_label, kpis_temporal):
     )
 
 
-def parrafo_capitulo_subdireccion(nombre_sub, kpis_sub, ranking_mejor=None, ranking_peor=None):
+def parrafo_capitulo_subdireccion(nombre_display, kpis_sub, ranking_mejor=None, ranking_peor=None):
     """Párrafo introductorio del capítulo de una subdirección.
 
-    'DIRECTOR' es la única de las 4 ramas institucionales que no empieza con
-    'SUBDIRECCION' — es masculina ('El Director'), las otras 3 son femeninas
+    `nombre_display` debe venir YA formateado para lectura (ej.
+    `_nombre_subdireccion_display()` de `services_reportes.py` — "Subdirección de
+    Gestión Asistencial", con tildes), NO el nombre crudo de origen (mayúsculas sin
+    tildes, "SUBDIRECCION DE GESTION ASISTENCIAL"). Antes ambos call sites (Word y
+    PDF) pasaban el nombre crudo y esta función le aplicaba `.title()`, produciendo
+    "Subdireccion De Gestion Asistencial" en el párrafo justo debajo de un título de
+    capítulo que sí mostraba las tildes correctas (bug real, revisión de código
+    2026-07-27) — se corrige recibiendo el nombre ya resuelto, sin recalcularlo acá.
+
+    'DIRECTOR'/'Director' es la única de las 4 ramas institucionales que no empieza
+    con 'Subdirección' — es masculina ('El Director'), las otras 3 son femeninas
     ('La Subdirección de...'). Sin este chequeo el texto queda "La Director...".
     """
     pct = kpis_sub['pct_dentro']
-    articulo = 'El' if nombre_sub.upper().startswith('DIRECTOR') else 'La'
+    articulo = 'El' if nombre_display.strip().upper().startswith('DIRECTOR') else 'La'
     base = (
-        f'{articulo} {nombre_sub.title()} gestionó {_n(kpis_sub["total"])} formularios en el período, con un '
+        f'{articulo} {nombre_display} gestionó {_n(kpis_sub["total"])} formularios en el período, con un '
         f'{pct:.1f}% de ellos verificados dentro del Plan Anual de Compras — {_nivel(pct)} respecto '
         f'al estándar institucional. El monto gestionado dentro del PAC alcanzó '
         f'{_money(kpis_sub["monto_dentro"])}, frente a {_money(kpis_sub["monto_fuera"])} fuera de planificación.'

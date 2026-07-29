@@ -7,17 +7,9 @@ import TemporalidadMensual from './resumen/TemporalidadMensual';
 import PorSubdireccion from './resumen/PorSubdireccion';
 import ComparativaAnualMejorada from './resumen/ComparativaAnualMejorada';
 import TablaFormulariosPac from '../shared/TablaFormulariosPac';
+import { fmtN, fmtCompacto } from '../../utils/format';
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
-
-const fmt = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
-const fmtB = (n) => {
-    if (n == null) return '—';
-    if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
-    if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-    return fmt(n);
-};
-const fmtN = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
 
 const cardStyle = { background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px', boxShadow: '0 1px 2px rgba(15,23,42,.04)' };
 
@@ -93,8 +85,8 @@ export default function ResumenTab({ dentroFuera, temporalidadMensual, resumenSu
                 <KpiCard label="Total formularios evaluados" value={fmtN(kpis.total)} color="#0ea5e9" sub="con proyecto PAC declarado" />
                 <KpiCard label="% Dentro del PAC" value={`${kpis.pct_dentro}%`} color={kpis.pct_dentro >= 70 ? '#16a34a' : kpis.pct_dentro >= 40 ? '#f59e0b' : '#dc2626'} sub={`${fmtN(kpis.dentro)} de ${fmtN(kpis.total)}`} />
                 <KpiCard label="⛔ Fuera del PAC" value={fmtN(kpis.fuera)} color="#dc2626" sub={`${Math.round((100 - kpis.pct_dentro) * 10) / 10}% del total`} />
-                <KpiCard label="💰 Monto Dentro PAC" value={fmtB(kpis.monto_dentro)} color="#16a34a" />
-                <KpiCard label="💸 Monto Fuera PAC" value={fmtB(kpis.monto_fuera)} color="#dc2626" />
+                <KpiCard label="💰 Monto Dentro PAC" value={fmtCompacto(kpis.monto_dentro)} color="#16a34a" />
+                <KpiCard label="💸 Monto Fuera PAC" value={fmtCompacto(kpis.monto_fuera)} color="#dc2626" />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16 }}>
