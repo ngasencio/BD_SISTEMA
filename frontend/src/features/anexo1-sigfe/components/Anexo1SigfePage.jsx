@@ -75,12 +75,12 @@ export default function Anexo1SigfePage() {
         }, 3000);
     }, [refresh]);
 
-    const handleConfirmarActualizar = async ({ usuario, password, fechaDesde, fechaHasta }) => {
+    const handleConfirmarActualizar = async ({ usuario, password, fechaDesde, fechaHasta, visible }) => {
         setModalAbierto(false);
         if (iniciando) return;
         setIniciando(true);
         try {
-            const { data } = await iniciarActualizacionAnexo1({ usuario, password, fechaDesde, fechaHasta });
+            const { data } = await iniciarActualizacionAnexo1({ usuario, password, fechaDesde, fechaHasta, visible });
             setTarea({ status: 'iniciado', task_id: data.task_id, paso: 0, paso_desc: 'Iniciando...', progreso_pct: 0, logs_recientes: [] });
             iniciarPolling(data.task_id);
         } catch (err) {

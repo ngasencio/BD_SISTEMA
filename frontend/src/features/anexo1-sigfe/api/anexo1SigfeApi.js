@@ -53,11 +53,14 @@ export const descargarReporteAnexo1 = (params = {}) =>
 export const fetchConciliacionDevengoAnexo1 = (params = {}) =>
     apiClient.get('sigfe-anexo1/conciliacion-devengo/', { params });
 
-// ETL: descarga (Selenium headless, servidor) + consolidación desde SIGFE.
+// ETL: descarga (Selenium, servidor) + consolidación desde SIGFE.
 // Las credenciales SIGFE viajan solo en este POST — no se persisten.
-export const iniciarActualizacionAnexo1 = ({ usuario, password, fechaDesde, fechaHasta }) =>
+// visible=true corre Chrome con ventana visible en el escritorio del servidor
+// en vez de headless — solo útil para diagnosticar si el proceso corre en la
+// misma máquina física desde la que se está mirando.
+export const iniciarActualizacionAnexo1 = ({ usuario, password, fechaDesde, fechaHasta, visible }) =>
     apiClient.post('sigfe-anexo1/actualizar/', {
-        usuario, password, fecha_desde: fechaDesde, fecha_hasta: fechaHasta,
+        usuario, password, fecha_desde: fechaDesde, fecha_hasta: fechaHasta, visible: !!visible,
     });
 
 export const estadoActualizacionAnexo1 = (taskId) =>

@@ -933,13 +933,21 @@ def _iso_a_ddmmaa(fecha_iso: str) -> str:
 def ejecutar_actualizacion_anexo1(usuario: str, password: str,
                                    fecha_desde_iso: str, fecha_hasta_iso: str,
                                    establecimientos: Optional[List[str]] = None,
-                                   progress_callback=None) -> dict:
+                                   progress_callback=None,
+                                   headless: bool = True) -> dict:
     """
     Punto de entrada PROGRAMÁTICO (sin input(), sin prompts) para disparar la
     descarga + consolidación desde el hilo de un backend web (Django). A
-    diferencia de main(): no bloquea esperando ENTER, corre Chrome headless
-    siempre, y garantiza driver.quit() pase lo que pase. Mismo patrón que
+    diferencia de main(): no bloquea esperando ENTER, y garantiza
+    driver.quit() pase lo que pase. Mismo patrón que
     api/data/data_devengo/sigfe_descarga_devengos_Completo.py.
+
+    headless=True (default) corre Chrome sin ventana. Pasar headless=False
+    (botón "👁 Ver navegador" del modal de actualización) abre una ventana de
+    Chrome real en el escritorio donde corre el proceso de Django — solo
+    tiene sentido si el backend corre en la misma máquina física desde la
+    que se está mirando, y sirve para diagnosticar visualmente en qué paso
+    falla la automatización.
 
     El 'Ejercicio Fiscal' que exige SIGFE se deriva del año de fecha_desde_iso
     -- misma limitación que el uso manual por CLI (que también pide un único
@@ -965,7 +973,7 @@ def ejecutar_actualizacion_anexo1(usuario: str, password: str,
         establecimientos=establecimientos,
     )
 
-    driver = crear_driver(headless=True)
+    driver = crear_driver(headless=headless)
     scraper = SigfeEjecucionPresupuestariaScraper(driver, config, progress_callback=progress_callback)
 
     try:

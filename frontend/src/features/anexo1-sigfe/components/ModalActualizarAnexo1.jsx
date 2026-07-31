@@ -15,6 +15,7 @@ export default function ModalActualizarAnexo1({ onConfirmar, onCerrar }) {
     const [password, setPassword] = useState('');
     const [fechaDesde, setFechaDesde] = useState(primerDiaMesActualISO());
     const [fechaHasta, setFechaHasta] = useState(hoyISO());
+    const [visible, setVisible] = useState(false);
 
     const fechasValidas = fechaDesde && fechaHasta && fechaDesde <= fechaHasta;
     const cruzaAnho = fechaDesde && fechaHasta && fechaDesde.slice(0, 4) !== fechaHasta.slice(0, 4);
@@ -75,13 +76,23 @@ export default function ModalActualizarAnexo1({ onConfirmar, onCerrar }) {
                             Actualiza cada año por separado.
                         </div>
                     )}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#374151' }}>
+                        <input type="checkbox" checked={visible} onChange={e => setVisible(e.target.checked)} />
+                        👁 Ver navegador (modo visible, para diagnóstico)
+                    </label>
+                    {visible && (
+                        <div style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 8px' }}>
+                            Se abrirá una ventana de Chrome en el escritorio del servidor. Solo sirve si el
+                            servidor Django corre en la máquina que estás mirando ahora mismo.
+                        </div>
+                    )}
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 18, justifyContent: 'flex-end' }}>
                     <button onClick={onCerrar} style={{ padding: '8px 14px', background: '#f3f4f6', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
                         Cancelar
                     </button>
                     <button
-                        onClick={() => onConfirmar({ usuario, password, fechaDesde, fechaHasta })}
+                        onClick={() => onConfirmar({ usuario, password, fechaDesde, fechaHasta, visible })}
                         disabled={!puedeConfirmar}
                         style={{
                             padding: '8px 14px', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 6,

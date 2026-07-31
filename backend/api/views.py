@@ -623,10 +623,13 @@ _PATRON_FECHA_ISO_ANEXO1 = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
 def _ejecutar_actualizacion_anexo1(task_id: str, usuario: str, password: str,
-                                    fecha_desde: str, fecha_hasta: str):
-    """Descarga (Selenium headless) + consolida Anexo N°1 por establecimiento,
+                                    fecha_desde: str, fecha_hasta: str,
+                                    headless: bool = True):
+    """Descarga (Selenium) + consolida Anexo N°1 por establecimiento,
     delegando en Sigfe_Descargas_Estado_ejecucion_presupuestaria. Mismo
-    patrón que _ejecutar_actualizacion_sigfe (Anexo N°3)."""
+    patrón que _ejecutar_actualizacion_sigfe (Anexo N°3). headless=False abre
+    una ventana de Chrome visible en el escritorio del servidor (botón "👁 Ver
+    navegador" del modal) para diagnosticar en qué paso falla."""
     _tareas_actualizacion_anexo1[task_id]["thread_id"] = threading.current_thread().ident
 
     ruta_modulo = str(_RUTA_DATA_ANEXO1)
@@ -664,6 +667,7 @@ def _ejecutar_actualizacion_anexo1(task_id: str, usuario: str, password: str,
 
         resultado = anexo1_etl.ejecutar_actualizacion_anexo1(
             usuario, password, fecha_desde, fecha_hasta, progress_callback=_cb,
+            headless=headless,
         )
 
         consolidacion = resultado["consolidacion"]
@@ -707,7 +711,8 @@ def _ejecutar_actualizacion_anexo1(task_id: str, usuario: str, password: str,
 @permission_classes([IsAuthenticated])
 def iniciar_actualizacion_anexo1(request):
     """Inicia la descarga + consolidación de Anexo N°1 por establecimiento.
-    Body: {usuario, password, fecha_desde, fecha_hasta} (fechas YYYY-MM-DD)."""
+    Body: {usuario, password, fecha_desde, fecha_hasta, visible} (fechas YYYY-MM-DD;
+    visible=true abre Chrome con ventana visible en vez de headless, para diagnóstico)."""
     for tarea in _tareas_actualizacion_anexo1.values():
         if tarea.get("status") in ("iniciado", "en_proceso"):
             return Response({"error": "Ya hay una actualización de Anexo N°1 en curso."}, status=409)
@@ -716,6 +721,7 @@ def iniciar_actualizacion_anexo1(request):
     password = str(request.data.get("password", "")).strip()
     fecha_desde = str(request.data.get("fecha_desde", "")).strip()
     fecha_hasta = str(request.data.get("fecha_hasta", "")).strip()
+    headless = not _bool_query(request.data.get("visible"), default=False)
 
     if not usuario or not password:
         return Response({"error": "Debe indicar usuario y contraseña de SIGFE."}, status=400)
@@ -737,6 +743,7 @@ def iniciar_actualizacion_anexo1(request):
     threading.Thread(
         target=_ejecutar_actualizacion_anexo1,
         args=(task_id, usuario, password, fecha_desde, fecha_hasta),
+        kwargs={"headless": headless},
         daemon=True,
     ).start()
     return Response({"task_id": task_id, "status": "iniciado"})
