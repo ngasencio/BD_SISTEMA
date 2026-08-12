@@ -1,0 +1,3983 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="menu" class="menu vertical dropDown fitable hidden" aria-hidden="true" role="menu" js-navtype="actionmenu" tabindex="-1" style="left: 7px; top: 55px; z-index: 99999;">
+    <div class="content">
+        <ul id="menuList" role="menubar" js-navtype="actionmenu">
+        <li id="menuList_simpleAction_25" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como PDF</p></li><li id="menuList_simpleAction_27" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como Excel (paginado)</p></li><li id="menuList_simpleAction_26" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como Excel</p></li><li id="menuList_simpleAction_28" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como CSV</p></li><li id="menuList_simpleAction_23" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como DOCX</p></li><li id="menuList_simpleAction_49" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como RTF</p></li><li id="menuList_simpleAction_7" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como ODT</p></li><li id="menuList_simpleAction_32" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como ODS</p></li><li id="menuList_simpleAction_47" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como XLSX (paginado)</p></li><li id="menuList_simpleAction_41" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como XLSX</p></li><li id="menuList_simpleAction_8" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here-->Como PPTX</p></li></ul>
+    </div>
+</div>
+
+<div id="commonMenu" class="hidden">
+    <div class="content">
+        <ul id="menuList_template" role="menubar" js-navtype="actionmenu">
+        </ul>
+    </div>
+</div>
+
+<ul class="hidden" aria-hidden="true" role="menubar" js-navtype="actionmenu">
+    
+    <li id="menuList_simpleAction" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here--></p></li>
+
+    
+    <li id="menuList_separator" class="leaf separator" role="separator" js-navtype="actionmenu"></li>
+
+    
+    <li id="menuList_flyout" class="node" role="menu" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here--></p></li>
+
+    
+    <li id="menuList_extraInput" class="leaf" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span><!--Item text goes here--></p></li>
+
+    
+    <li id="menuList_listItem" class="leaf" role="menuitem" js-navtype="actionmenu"><p class="wrap toggle button"><span class="icon"></span><!--Item text goes here--></p></li>
+
+    
+    
+    <li id="navigation_mutton" tabindex="-1" class="node mutton" role="menuitem" js-navtype="actionmenu"><p class="wrap button"><span class="icon"></span></p></li>
+</ul>
+
+
+
+<div id="listTemplateHolder" style="display:none">
+
+<!-- default template for flat lists-->
+<ul id="defaultListTemplate" class="list" tabindex="0" js-navtype="dynamiclist">
+    <!-- default template for items of flat lists -->
+    <li js-navtype="dynamiclist" id="dynamicListItemTemplate" class="leaf"><p class="wrap button "></p></li>
+
+</ul>
+
+<!-- Template used for filter path in search -->
+<ul id="list_control_path" class="list control path" tabindex="0" js-navtype="dynamiclist">
+    <!-- Template for label of the path
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * selected - if item is selected in the list
+    -->
+    <li js-navtype="dynamiclist" id="list_control_path:label" class="label"><p class="wrap button "></p></li>
+    <!-- Template for items of the path
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * selected - if item is selected in the list
+    -->
+    <li js-navtype="dynamiclist" id="list_control_path:step" class="step"><p class="wrap button "></p></li>
+</ul>
+
+<!-- Template used for sorters in search -->
+<!-- TODO FIXME: Keyboard support is temporarily disabled here due to a race condition in the sorter that CAN happen without the accessibility extensions,
+using only the mouse, but happens really easily using the keyboard. -->
+<ul id="tabSet_control_horizontal_responsive" class="list tabSet text control horizontal" tabindex="-1" js-navtype="none" js-stdnav="false">
+    <!--
+        Template of resource item in the list
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * selected - if item is selected in the list
+    -->
+    <li js-navtype="dynamiclist" id="tabSet_control_horizontal_responsive:label" class="label"><p class="wrap"></p></li>
+    <!-- Template for sort option
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * selected - if item is selected in the list
+    -->
+    <li js-navtype="dynamiclist" id="tabSet_control_horizontal_responsive:tab" class="tab"><p class="wrap button "></p></li>
+</ul>
+
+<!-- Template used for list of resources in search -->
+<ul id="tabular_fourColumn_resources" class="list collapsible tabular resources fourColumn" tabindex="0" js-navtype="dynamiclist">
+    <!--
+        Template of resource item in the list
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * leaf - default item.
+            * node - if has children resources (e.g. Report Options).
+            * open - if resource has children and they showed
+            * closed - if resource has children and they hidden
+            * selected - if item is selected in the list
+            * scheduled - if resource is scheduled
+    -->
+    <li js-navtype="dynamiclist" id="tabular_fourColumn_resources:leaf" class="resources">
+        <div class="wrap button draggable">
+            <div class="column one">
+                <div class="scheduled icon button"></div>
+                <div class="separator"></div>
+                <div class="disclosure icon button"></div>
+            </div>
+            <div class="column two">
+                <p class="resourceName"><a></a></p>
+                <p class="resourceDescription"></p>
+            </div>
+            <div class="column three resourceType"></div>
+            <div class="column four">
+                <p class="createdDate"></p>
+                <p class="modifiedDate"></p>
+            </div>
+        </div>
+    </li>
+</ul>
+
+<!-- Template used for list of resources in search -->
+<ul id="tabular_fourColumn_resources_sublist" class="list collapsible tabular resources fourColumn sublist" tabindex="0" js-navtype="dynamiclist">
+    <!--
+        Template of resource item in the list
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * leaf - default item.
+            * node - if has children resources (e.g. Report Options).
+            * open - if resource has children and they showed
+            * closed - if resource has children and they hidden
+            * selected - if item is selected in the list
+            * scheduled - if resource is scheduled
+    -->
+    <li js-navtype="dynamiclist" id="tabular_fourColumn_resources_sublist:leaf" class="resources">
+        <div class="wrap button draggable">
+            <div class="column one">
+                <div class="scheduled icon button">&nbsp;</div>
+                <div class="separator"></div>
+                <div class="disclosure icon button">&nbsp;</div>
+            </div>
+            <div class="column two">
+                <p class="resourceName"><a></a></p>
+                <p class="resourceDescription"></p>
+            </div>
+            <div class="column three resourceType"></div>
+            <div class="column four">
+                <p class="createdDate"></p>
+                <p class="modifiedDate"></p>
+            </div>
+        </div>
+    </li>
+</ul>
+
+<!-- Template used for list of users in user management -->
+<ol id="tabular_threeColumn" class="list tabular collapsible threeColumn" tabindex="0" js-navtype="dynamiclist">
+    <!--
+        Template of resource item in the list
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * selected - if item is selected in the list
+    -->
+    <li js-navtype="dynamiclist" id="tabular_threeColumn:leaf" class="leaf">
+        <div class="wrap button ">
+            <div class="column one">
+                <p class="ID"><a></a></p>
+            </div>
+            <div class="column two">
+                <p class="name"></p>
+            </div>
+            <div class="column three">
+                <p class="organization"></p>
+            </div>
+        </div>
+    </li>
+</ol>
+
+<!-- Template used for list of users in user management -->
+<ol id="tabular_twoColumn" class="list tabular collapsible twoColumn" tabindex="0" js-navtype="dynamiclist">
+    <!--
+        Template of resource item in the list
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * selected - if item is selected in the list
+    -->
+    <li js-navtype="dynamiclist" id="tabular_twoColumn:leaf" class="leaf">
+        <div class="wrap button ">
+            <div class="column one">
+                <p class="ID"><a></a></p>
+            </div>
+            <div class="column two">
+                <p class="name"></p>
+            </div>
+        </div>
+    </li>
+</ol>
+
+<!-- Template used for list of dependet reports in ad hoc designer -->
+<ol id="tabular_oneColumn" class="list tabular oneColumn" tabindex="0" js-navtype="dynamiclist">
+    <!--
+        Template of resource item in the list
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * selected - if item is selected in the list
+    -->
+    <li js-navtype="dynamiclist" id="tabular_oneColumn:leaf" class="leaf">
+        <div class="wrap">
+            <div class="column one">
+                <p class="uri"></p>
+            </div>
+        </div>
+    </li>
+</ol>
+
+<!-- Template used for list of role in role management -->
+<ol id="tabular_twoColumn:roles" class="list tabular twoColumn" tabindex="0" js-navtype="dynamiclist">
+    <!--
+        Template of resource item in the list
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * selected - if item is selected in the list
+    -->
+    <li js-navtype="dynamiclist" id="tabular_twoColumn:roles:leaf" class="leaf">
+        <div class="wrap button ">
+            <div class="column one">
+                <p class="ID"></p>
+            </div>
+            <div class="column two">
+                <p class="organization"></p>
+            </div>
+        </div>
+    </li>
+</ol>
+
+<!-- Template used for list of role in role management -->
+<ol id="tabular_oneColumn:roles" class="list tabular collapsible oneColumn" tabindex="0" js-navtype="dynamiclist">
+    <!--
+        Template of resource item in the list
+        States (possible class name changes) :
+            * first - if item is first in the list
+            * last - if item is last in the list
+            * selected - if item is selected in the list
+    -->
+    <li js-navtype="dynamiclist" id="tabular_oneColumn:roles:leaf" class="leaf">
+        <div class="wrap button ">
+            <div class="column one">
+                <p class="ID"></p>
+            </div>
+        </div>
+    </li>
+</ol>
+
+<!-- Template used for list of resource children list in search (e.g Report Options)-->
+<ol id="tabular_twoColumn_resources" class="list tabular resources twoColumn" tabindex="0" js-navtype="dynamiclist">
+    <!--
+        Template of resource child item in the list
+        States (possible class name changes) :
+            * selected - if item is selected in the list
+            * scheduled - if resource is scheduled
+    -->
+    <li js-navtype="dynamiclist" id="tabular_twoColumn_resources:leaf" class="resources leaf">
+        <div class="wrap button ">
+            <div class="column one">
+                <div class="scheduled icon button"></div>
+            </div>
+            <div class="column two">
+                <p class="resourceName"><a></a></p>
+                <p class="resourceDescription"></p>
+            </div>
+        </div>
+    </li>
+</ol>
+
+
+<!-- Template used for list of permissions for resource-->
+<ul id="tabular_twoColumn_setLeft" class="list setLeft tabular twoColumn" tabindex="0" js-navtype="dynamiclist">
+<!--
+    Template of permission item for user or role
+    -->
+    <li js-navtype="dynamiclist" id="tabular_twoColumn_setLeft:leaf" class="leaf">
+        <div class="wrap"><b class="icon"></b>
+            <p class="column one"><a class="launcher"></a></p>
+            <p class="column two">
+                <select>
+                </select>
+            </p>
+        </div>
+    </li>
+    <li js-navtype="dynamiclist" id="tabular_twoColumn_setLeft:loading" class="leaf loading">
+        <div class="wrap"><b class="icon"></b>
+            <p class="column one"><a class="launcher"></a></p>
+            <p class="column two">
+            </p>
+        </div>
+    </li>
+</ul>
+
+
+<ul id="inputControls_option_list" class="list setLeft tabular twoColumn" tabindex="0" js-navtype="dynamiclist">
+    <li js-navtype="dynamiclist" id="inputControls_option_list:header" class="leaf">
+        <div class="wrap header">
+            <b class="icon" title=""></b>
+            <p class="column one">
+                <span class="label">Control de entrada</span>
+            </p>
+            <p class="column two">
+                <span class="label">Nombre de parámetro de URL</span>
+            </p>
+        </div>
+    </li>
+
+    
+    <li js-navtype="dynamiclist" id="inputControls_option_list:control" class="leaf">
+        <div class="wrap"><b class="icon" title=""></b>
+            <div class="column one">
+                <div class="control checkBox">
+                    <label id="label_for_param_1" class="wrap" for="parameter_1"></label>
+                    <input id="parameter_1" type="checkbox" value="">
+                </div>
+            </div>
+            <div class="column two">
+                <label id="label_for_param_1_value" class="control input text" for="parameter_1_value">
+                    <input id="parameter_1_value" type="text" value="Country">
+                </label>
+            </div>
+        </div>
+    </li>
+</ul>
+
+<ul id="list_responsive_filters" class="list filters" tabindex="0" js-navtype="dynamiclist">
+    
+    <li js-navtype="dynamiclist" id="list_responsive_filters:leaf" class="leaf">
+        <p class="wrap button"><b class="icon"></b></p>
+    </li>
+
+    
+    <li js-navtype="dynamiclist" id="list_responsive_filters:node" class="node closed">
+        <p class="wrap button separator"><b class="icon"></b>
+            <a class="more launcher">Más opciones…</a>
+            <a class="fewer launcher">Menos opciones</a>
+        </p>
+    </li>
+
+    
+    <li js-navtype="dynamiclist" id="list_responsive_filters:separator" class="leaf">
+        <p class="wrap button"><b class="icon"></b></p>
+    </li>
+</ul>
+
+<ul id="list_domain_bundles" tabindex="0" js-navtype="dynamiclist">
+    <li js-navtype="dynamiclist" id="list_domain_bundles:leaf" class="leaf">
+        <div class="wrap button "><b class="icon" title=""></b>
+            <p class="column one"><a class="emphasis"></a></p>
+            <p class="column two"><a class="launcher"></a> | <a class="launcher"></a></p>
+        </div>
+    </li>
+</ul>
+
+<ul id="list_fourColumn_type_message" class="list tabular type_messages fourColumn" tabindex="0" js-navtype="dynamiclist">
+    <li js-navtype="dynamiclist" id="list_fourColumn_type_message:header" class="leaf">
+        <div class="wrap header type_messages">
+            <div class="column one">
+                <p class="subject" title="Asunto del mensaje">Asunto</p>
+            </div>
+            <div class="column two">
+                <p class="date" title="Fecha del evento">Fecha</p>
+            </div>
+            <div class="column three">
+                <p class="type" title="Tipo de evento">Tipo</p>
+            </div>
+            <div class="column four">
+                <p class="component" title="Componente afectado">Componente</p>
+            </div>
+        </div>
+    </li>
+    <li js-navtype="dynamiclist" id="list_fourColumn_type_message:unread" class="leaf">
+        <div class="wrap button type_messages unread">
+            <div class="column one">
+                <p class="subject" title="Asunto del mensaje"><a></a></p>
+            </div>
+            <div class="column two">
+                <p class="date" title=""></p>
+            </div>
+            <div class="column three">
+                <p class="type" title="Tipo de evento"></p>
+            </div>
+            <div class="column four">
+                <p class="component" title="Componente afectado"></p>
+            </div>
+        </div>
+    </li>
+    <li js-navtype="dynamiclist" id="list_fourColumn_type_message:read" class="leaf">
+        <div class="wrap button type_messages">
+            <div class="column one">
+                <p class="subject" title="Asunto del mensaje"><a></a></p>
+            </div>
+            <div class="column two">
+                <p class="date" title=""></p>
+            </div>
+            <div class="column three">
+                <p class="type" title="Tipo de evento"></p>
+            </div>
+            <div class="column four">
+                <p class="component" title="Componente afectado"></p>
+            </div>
+        </div>
+    </li>
+</ul>
+
+
+<ul id="list_responsive_fields" class="list fields" tabindex="0" js-navtype="dynamiclist">
+    <li js-navtype="dynamiclist" id="list_responsive_fields:leaf" class="leaf"><a href="list.jsp#" class="wrap button "><b class="icon"></b></a></li>
+</ul>
+
+<ul id="list_type_attributes" class="list type_attributes" js-stdnav="false" tabindex="-1">
+    <li js-navtype="dynamiclist" id="list_type_attributes:role" class="leaf"><a href="list.jsp#" class="wrap button launcher"></a><span class="separator">,</span></li>
+    <li js-navtype="dynamiclist" id="list_type_attributes:role:last" class="leaf"><a href="list.jsp#" class="wrap button launcher"></a></li>
+    <li js-navtype="dynamiclist" id="list_type_attributes:user" class="leaf"><a href="list.jsp#" class="wrap button launcher"></a>,&nbsp;</li>
+    <li js-navtype="dynamiclist" id="list_type_attributes:user:last" class="leaf"><a href="list.jsp#" class="wrap button launcher"></a></li>
+    <li js-navtype="dynamiclist" id="list_type_attributes:profileAttribute" class="leaf">,&nbsp;</li>
+    <li js-navtype="dynamiclist" id="list_type_attributes:profileAttribute:last" class="leaf"></li>
+</ul>
+
+<ul id="list_domain_chooser_filter" class="list tabular filters twoColumn" tabindex="0" js-navtype="dynamiclist">
+    <li js-navtype="dynamiclist" id="list_domain_chooser_filter:leaf" class="leaf">
+        <div class="wrap readonly">
+            <div class="column one condition">
+                <span class="fieldName"></span>
+                <span class="operation"></span>
+                <span class="value"></span>
+            </div>
+            <div class="column two">
+                <span class="lock"></span>
+                    <span class="actions">
+                        <a class="launcher button change">Cambiar</a> |
+                        <a class="launcher button remove">Quitar</a>
+                    </span>
+            </div>
+        </div>
+    </li>
+</ul>
+
+<ul id="list_domain_designer_joins" class="list tabular fourColumn" tabindex="0" js-navtype="dynamiclist">
+    <li js-navtype="dynamiclist" id="list_domain_designer_joins:leaf" class="leaf">
+        <div class="wrap"><b class="icon"></b>
+            <p class="column one"></p>
+            <p class="column two"></p>
+            <p class="column three">
+                <select>
+                    <option selected="selected" value="inner">Interna</option>
+                    <option value="leftOuter">Externa izquierda</option>
+                    <option value="rightOuter">Externa derecha</option>
+                    <option value="fullOuter">Externa completa</option>
+                </select>
+            </p>
+            <p class="column four"><a class="launcher button">Quitar</a></p>
+        </div>
+    </li>
+</ul>
+
+
+<ul id="list_fields_hideRoot_column_simple" class="list collapsible fields hideRoot column simple" tabindex="0" js-navtype="dynamiclist">
+    <!--
+        Template of sort fild
+        States (possible class name changes) :
+            * ascending - asc sorting by this filed
+            * descending - desc sorting by this field
+    -->
+    <li js-navtype="dynamiclist" id="list_fields_hideRoot_column_simple:leaf" class="leaf ascending">
+        <div class="wrap button draggable"><b class="icon button"></b></div>
+    </li>
+</ul>
+
+</div>
+
+
+<div id="treeTemplateHolder" style="display:none">
+
+    <!-- FIXME: StdNav: implement dynamictree plugin and switch navtypes to that -->
+    <ul id="list_responsive_collapsible" class="list collapsible" tabindex="0" js-navtype="dynamiclist">
+        
+        <li js-navtype="dynamiclist" id="list_responsive_collapsible:leaf" class="leaf">
+            <p class="wrap button draggable"><b class="icon"></b></p>
+        </li>
+
+        
+        <li js-navtype="dynamiclist" id="list_responsive_collapsible:loading" class="node loading">
+            <p class="wrap button draggable"><b class="icon"></b></p>
+        </li>
+    </ul>
+
+    <ul id="list_responsive_collapsible_folders" class="list collapsible folders" tabindex="0" js-navtype="dynamiclist">
+        <li js-navtype="dynamiclist" id="list_responsive_collapsible_folders:folders" class="folders">
+            <p class="wrap button draggable"><b class="icon"></b></p>
+        </li>
+
+    </ul>
+
+    
+    <ul id="list_responsive_collapsible_folders_specialContent" class="list collapsible folders" tabindex="0" js-navtype="dynamiclist">
+        <li js-navtype="dynamiclist" id="list_responsive_collapsible_folders_specialContent:folders" class="node specialContent">
+            <p class="wrap button "><b class="icon"></b></p>
+        </li>
+
+        <li js-navtype="dynamiclist" id="list_responsive_collapsible_folders_specialContent:leaf" class="leaf">
+            <p class="wrap button draggable"><b class="icon"></b></p>
+        </li>
+    </ul>
+
+    
+    <ul id="list_responsive_collapsible_fields" class="list collapsible fields" tabindex="0" js-navtype="dynamiclist">
+        <li js-navtype="dynamiclist" id="list_responsive_collapsible_fields:fields" class="fields">
+            <p class="wrap button draggable"><span class="icon button"></span></p>
+        </li>
+    </ul>
+
+    
+    <ul id="list_responsive_collapsible_type_tables" class="list collapsible type_tables" tabindex="0" js-navtype="dynamiclist">
+        <li js-navtype="dynamiclist" id="list_responsive_collapsible_type_tables:tables" class="type_tables">
+            <p class="wrap button draggable"><span class="icon button"></span></p>
+        </li>
+
+        
+        <li js-navtype="dynamiclist" id="list_responsive_collapsible_type_tables:fields" class="type_tables">
+            <p class="wrap"><span class="icon noBubble"></span></p>
+        </li>
+    </ul>
+
+    
+    <ul id="list_responsive_collapsible_type_sets" class="list collapsible type_sets column simple" tabindex="0" js-navtype="dynamiclist">
+        <li js-navtype="dynamiclist" id="list_responsive_collapsible_type_sets:sets" class="set">
+            <p class="wrap button draggable"><span class="icon button"></span></p>
+        </li>
+    </ul>
+
+    
+    <ul id="list_responsive" class="list collapsible" tabindex="0" js-navtype="dynamiclist">
+        <li js-navtype="dynamiclist" id="list_responsive:twoColumn">
+            <div class="wrap button"><span class="icon button"></span><p class="column one"></p><p class="column two"></p></div>
+        </li>
+    </ul>
+
+    
+    <input id="list_responsive_collapsible:input" type="text" value="">
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="jsTooltip" class="panel info tooltip hidden">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <p class="message"></p>
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="orgTooltip" class="panel info tooltip hidden">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <p class="message label">Organización</p>
+        <p class="message"></p>
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="fullNameTooltip" class="panel info tooltip hidden">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <p class="message label">Nombre completo</p>
+        <p class="message"></p>
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="fullNameAndOrgTooltip" class="panel info tooltip hidden">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <p class="message label">Nombre completo</p>
+        <p class="message"></p>
+        <p class="message label">Organización</p>
+        <p class="message"></p>
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="resourceNameTooltip" class="panel info tooltip hidden">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <p class="message label">Nombre: </p>
+        <p class="message"></p>
+        <p class="message label">Ruta: </p>
+        <p class="message"></p>
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+
+
+
+<div style="display:none;">
+
+    <div id="column_two" class="column two">
+        <h3 id="column_two:resourceName" class="resourceName" item="item"><a></a></h3>
+    </div>
+
+</div>
+
+
+<!-- save as dialog -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="saveAs" class="panel dialog overlay saveAs sizeable moveable hidden centered_vert centered_horz" style="margin-left: -75px; left: 50%; margin-top: -75px; top: 50%;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	<div class="sizer diagonal"></div>
+    
+        <div class="content hasFooter ">
+    
+    
+		<div class="header mover">
+            <div class="title">
+                Guardar como
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+            <label class="control input text" accesskey="o" for="saveAsInputName" title="Este será el nombre visible del recurso y se puede cambiar.">
+                <span class="wrap">Nombre (obligatorio):</span>
+                <input class="" id="saveAsInputName" type="text" value="">
+                <span class="message warning"></span>
+            </label>
+            <label class="control textArea" for="saveAsInputDescription">
+                <span class="wrap">Descripción:</span>
+                <textarea id="saveAsInputDescription" type="text"> </textarea>
+                <span class="message warning"></span>
+            </label>
+
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="control groupBox">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <ul class="responsive collapsible folders hideRoot" id="saveAsFoldersTree"></ul>
+     
+            
+        </div>
+        
+	</div>
+</div>
+
+
+
+    
+            
+        </div>
+        
+		<div class="footer ">
+			
+         <button id="saveAsBtnSave" class="button action primary up">
+            <span class="wrap">
+                Guardar
+                <span class="icon"></span>
+            </span>
+         </button>
+         <button id="saveAsBtnCancel" class="button action up">
+            <span class="wrap">
+                Cancelar
+                <span class="icon"></span>
+            </span>
+         </button>
+    
+		</div>
+        
+	</div>
+</div>
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="repositorySelectionDialog" class="panel dialog overlay repositorySelectionDialog sizeable moveable hidden centered_vert centered_horz" style="margin-left: -225px; left: 50%; margin-top: -250px; top: 50%;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	<div class="sizer diagonal"></div>
+    
+        <div class="content hasFooter ">
+    
+    
+		<div class="header mover">
+            <div class="title">
+                Crear informe
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+			 <span class="wrap">Para comenzar a crear un informe, seleccione una vista ad hoc.</span>
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="control groupBox">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+                        <ul class="responsive collapsible repositoryTree hideRoot"></ul>
+                    
+            
+        </div>
+        
+	</div>
+</div>
+
+    
+            
+        </div>
+        
+		<div class="footer ">
+			
+         <button class="button action primary up okButton"><span class="wrap">Aceptar</span><span class="icon"></span></button>
+         <button class="button action up cancelButton"><span class="wrap">Cancelar</span><span class="icon"></span></button>
+    
+		</div>
+        
+	</div>
+</div>
+
+
+    <form id="reportGeneratorForm" action="/jasperserver-pro/reportGenerator.html" method="get" style="display:none">
+        <input type="hidden" name="action" value="displayTempReportUnit">
+        <input type="hidden" name="advUri" value="">
+        <input type="hidden" name="template" value="">
+        <input type="hidden" name="generator" value="">
+        <input type="hidden" name="exportFormat" value="html">
+    </form>
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="reportGeneratorProperties" class="panel dialog overlay moveable sizeable centered_horz centered_vert hidden" style="margin-left: -200px; left: 50%; margin-top: -150px; top: 50%;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	<div class="sizer diagonal"></div>
+    
+        <div class="content hasFooter ">
+    
+    
+		<div class="header mover">
+            <div class="title">
+                Crear informe
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <div id="advTreePanel" class="hidden">
+            <span class="wrap">Para comenzar a crear un informe, seleccione una vista ad hoc.</span>
+
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="control groupBox">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+                    <ul class="responsive collapsible folders hideRoot" id="advLocationTree"></ul>
+                
+            
+        </div>
+        
+	</div>
+</div>
+
+        </div>
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="commonGeneratorSelect" class="control generatorSelect">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <fieldset class="group locationSelector">
+            <legend class=""><span>Generar informe con:</span></legend>
+            <ul class="list locations">
+                <li class="leaf">
+                    <div class="control radio">
+                        <label class="wrap" for="commonGeneratorSelectDefaultTemplateRadio" title="La plantilla predeterminada se usará para crear un informe">
+                            Plantilla de informe predeterminada
+                        </label>
+                        <input id="commonGeneratorSelectDefaultTemplateRadio" type="radio" name="commonGeneratorSelect" checked="checked">
+                        <span class="message warning">error message here</span>
+                    </div>
+                </li>
+                <li class="leaf">
+                    <div class="control radio complex">
+                        <label class="wrap" for="commonGeneratorSelectReportTemplateRadio" title="Seleccionar plantilla del repositorio">
+                            Plantilla de informe personalizado
+                        </label>
+                        <!-- ID of radio should match to ID of input to without "Radio" prefix -->
+                        <input id="commonGeneratorSelectReportTemplateRadio" type="radio" name="commonGeneratorSelect">
+                        <span class="message warning">error message here</span>
+                    </div>
+                    <div id="browseTemplate" class="control input file" for="filePath" title="Seleccionar plantilla del repositorio">
+                        <label class="control browser" for="commonGeneratorSelectReportTemplate" title="Define a path in the repository">
+                            <span class="wrap"></span>
+                            <!-- ID of input should match to ID of radio without "Radio" prefix -->
+                            <input class="" id="commonGeneratorSelectReportTemplate" type="text" value="">
+                            <button class="button action" id="customTemplateBrowser" type="button">
+                                <span class="wrap">Examinar…</span>
+                                <span class="icon"></span>
+                            </button>
+                            <span class="message warning">error message here</span>
+                            <ul id="commonGeneratorSelectDefaultTemplateRadio" class="responsive collapsible folders hideRoot"></ul>
+                        </label>
+                    </div>
+                </li>
+                <li class="leaf">
+                    <div class="control radio">
+                        <label class="wrap" for="commonGeneratorSelectReportGeneratorRadio" title="Seleccione el generador de informes disponible">
+                            Generador de informes
+                        </label>
+                        <!-- ID of radio should match to ID of select without "Radio" prefix -->
+                        <input id="commonGeneratorSelectReportGeneratorRadio" type="radio" name="commonGeneratorSelect" data-innput-control="">
+                        <span class="message warning">error message here</span>
+                    </div>
+                    <div id="selectGeneratorControl" class="control input">
+                        <label class="control browser" for="commonGeneratorSelectReportGenerator" title="Seleccione el generador de informes disponible">
+                            <span class="wrap"></span>
+                            <!-- ID of select should match to ID of radio without "Radio" prefix -->
+                            <select id="commonGeneratorSelectReportGenerator"></select>
+                            <span class="message warning">error message here</span>
+                        </label>
+                    </div>
+                </li>
+            </ul>
+        </fieldset>
+
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="commonGeneratorSelectTemplateDialog" class="panel dialog overlay detail centered_horz centered_vert moveable hidden sizeable" style="">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	<div class="sizer diagonal"></div>
+    
+        <div class="content hasFooter ">
+    
+    
+		<div class="header mover">
+            <div class="title">
+                
+        <span>Seleccionar plantilla</span>
+    
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="control groupBox">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+                <ul class="responsive collapsible folders hideRoot" id="commonGeneratorSelectTemplateDialogTree"></ul>
+            
+            
+        </div>
+        
+	</div>
+</div>
+
+    
+            
+        </div>
+        
+		<div class="footer ">
+			
+        <button id="commonGeneratorSelectTemplateDialogOkTemplate" class="button action primary up"><span class="wrap">Aceptar</span><span class="icon"></span></button>
+        <button id="commonGeneratorSelectTemplateDialogCloseTemplate" class="button action primary up"><span class="wrap">Cerrar</span><span class="icon"></span></button>
+    
+		</div>
+        
+	</div>
+</div>
+
+
+    
+            
+        </div>
+        
+		<div class="footer ">
+			
+        <button id="reportGeneratorPropertiesBtnOk" class="button action primary up"><span class="wrap">Aceptar</span><span class="icon"></span></button>
+        <button id="reportGeneratorPropertiesBtnCancel" class="button action up"><span class="wrap">Cancelar</span><span class="icon"></span></button>
+    
+		</div>
+        
+	</div>
+</div>
+
+
+
+
+<!-- dimmer - for modal dialogs -->
+<div id="pageDimmer" class="dimmer hidden" style="z-index: 900;"></div>
+
+<!-- loading cue -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="loading" class="panel dialog loading overlay moveable centered_horz centered_vert cancellable hidden" tabindex="0" style="margin-left: -136px; left: 50%; margin-top: -52.5px; top: 50%; z-index: 5000;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header mover">
+            <div class="title">
+                Espere
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <p class="message" role="alert" aria-live="assertive">Cargando…</p>
+        <button id="cancel" class="button action up"><span class="wrap">Cancelar</span><span class="icon"></span></button>
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+
+
+<!-- ajax alert popup dialog -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="standardAlert" class="panel dialog overlay standardAlert moveable centered_horz centered_vert sizeable hidden" style="margin-left: -75px; left: 50%; margin-top: -75px; top: 50%;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	<div class="sizer diagonal"></div>
+    
+        <div class="content hasFooter ">
+    
+    
+		<div class="header mover">
+            <div class="title">
+                Detalles del error
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        
+        <div id="errorPopupContents"></div>
+    
+    
+            
+        </div>
+        
+		<div class="footer ">
+			    
+        <button id="" class="button action primary up"><span class="wrap">Cerrar</span><span class="icon"></span></button>
+    
+		</div>
+        
+	</div>
+</div>
+
+
+
+
+
+<iframe id="ajax-download-iframe" style="visibility:hidden"></iframe>
+
+
+<iframe id="ajax-upload-iframe" style="visibility:hidden" src="about:blank"></iframe>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="heartbeatOptin" class="panel dialog overlay heartbeatOptin moveable centered_horz centered_vert hidden" style="margin-left: 0px; left: 50%; margin-top: 0px; top: 50%;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+        <div class="content hasFooter ">
+    
+    
+		<div class="header mover">
+            <div class="title">
+                Recopilación de datos del programa Heartbeat.
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        <p class="message">Ayúdenos a crear mejores productos al participar en el programa Heartbeat.</p><p class="message">Al permitir que Heartbeat recopile datos, confirma su consentimiento, donde sea necesario, de todos los usuarios de su organización.</p><p class="message">El programa Heartbeat permite que TIBCO Jaspersoft recopile información de sistema anónima y se puede desactivar en cualquier momento. Los datos de Heartbeat se utilizan con los propósitos establecidos en la página web de Heartbeat de TIBCO JasperReports Server en <a target="_blank" href="http://www.jaspersoft.com/heartbeat">www.jaspersoft.com/heartbeat</a>.</p><p class="message"> Nuestra política de privacidad se encuentra en <a target="_blank" href="http://www.jaspersoft.com/privacy">www.jaspersoft.com/privacy</a>.</p>
+        <div class="control checkBox">
+            <label class="wrap" for="heartbeatCheck" title="Participar en la recopilación de datos Heartbeat">
+                Participar en Heartbeat de JasperReports Server
+            </label>
+            <input class="" id="heartbeatCheck" type="checkbox" checked="checked">
+        </div>
+    
+            
+        </div>
+        
+		<div class="footer ">
+			    
+        <button id="" class="button action primary up"><span class="wrap">Aceptar</span><span class="icon"></span></button>
+    
+		</div>
+        
+	</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="aboutBox" class="panel dialog aboutBox overlay moveable centered_horz centered_vert hidden centered_vert centered_horz" style="margin-left: 0px; left: 50%; margin-top: 0px; top: 50%;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+        <div class="content hasFooter ">
+    
+    
+		<div class="header mover">
+            <div class="title">
+                Acerca de TIBCO JasperReports Server
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="control groupBox fillParent">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+        
+            <p class="message">Edición de productos:&nbsp;<span class="emphasis">Professional</span></p>
+            
+            <p class="message">Funciones: <span class="emphasis">EXP Fusion AHD DB </span></p>
+            
+            <p class="message">Versión del producto: <span class="emphasis">6.4.3</span></p>
+            <p class="message">Compilación: <span class="emphasis">20180326_2305</span></p>
+            
+            <p class="message">Tipo de licencia: <span class="emphasis">Comercial</span></p>
+            <p class="message">Caducidad: <span class="emphasis">23-09-2028 19:59:00</span></p>
+        
+
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+    
+            
+        </div>
+        
+		<div class="footer ">
+			
+        <button class="button action primary up"><span class="wrap">Cerrar</span><span class="icon"></span></button>
+    
+		</div>
+        
+	</div>
+</div>
+
+
+
+	
+
+
+<div id="frame">
+
+    
+
+    <!-- START decorated page content-->
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+<div id="display" class="body oneColumn">
+    <a name="maincontent" id="maincontent"></a>
+    
+
+        <!-- ========== INPUT CONTROLS ON-PAGE FORM: BEGIN =========== -->
+        
+
+        <!-- ========== INPUT CONTROLS ON-PAGE FORM: END =========== -->
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="reportViewFrame" class="column decorated primary showingToolBar">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+
+                <div id="dataTimestampMessage">Datos actualizados el 12-08-2026 a las 12:12:52</div>
+                <ul id="asyncIndicator" class="list buttonSet hidden">
+                    <li class="leaf"><button id="asyncCancel" class="button capsule text up" disabled="disabled"><span class="wrap">Cancelar carga de datos<span class="icon"></span></span></button></li>
+                </ul>
+                <ul class="list buttonSet">
+                    <li class="leaf" role="application"><button id="dataRefreshButton" type="submit" aria-label="Actualizar informe con los datos más recientes." data-title="true" class="button capsule up"><span class="wrap"><span class="icon"></span></span></button></li>
+                </ul>
+
+                <div id="reportPartsController" style="display: none">
+                    <div id="reportPartsContainer">
+                    </div>
+                    <div id="reportPartsNavigation" class="control search">
+                        <button id="part_prev" aria-label="Anterior" data-title="true" class="button action square move searchPrevious up" disabled="disabled">
+                            <span class="wrap"><span class="icon"></span></span>
+                        </button>
+                        <button id="part_next" aria-label="Siguiente" data-title="true" class="button action square move searchNext up" disabled="disabled">
+                            <span class="wrap"><span class="icon"></span></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ========== VIEWER TOOLBAR =========== -->
+                <div id="viewerToolbar" class="toolbar">
+
+                    
+
+                    
+                    
+                    
+                        
+                            
+                        
+                        
+                    
+
+                    
+                    
+                    
+
+                    
+                    
+                    
+                        
+                            
+                        
+                        
+                    
+
+                    <!-- ========== LEFT BUTTON SET =========== -->
+                    <ul class="list buttonSet">
+
+                        <li class="node">
+                            <ul class="list buttonSet">
+
+                                <li class="leaf"><button id="export" class="button capsule mutton up last" aria-label="Exportar" data-title="true" title="Exportar"><span class="wrap"><span class="icon"></span><span class="indicator"></span></span></button></li>
+                            </ul>
+                        </li>
+
+                        <li class="node conditional first">
+                            <ul class="list buttonSet">
+                                <li id="controls" class="leaf ">
+                                    <button id="ICDialog" class="button capsule toggle down" aria-label="Opciones" data-title="true" title="Opciones">
+                                        <span class="wrap">
+                                            <span class="icon"></span>
+                                        </span>
+                                    </button>
+                                    <span class="divider"></span>
+                                </li>
+                            </ul>
+                        </li>
+                        <li class="node conditional second">
+                            <ul class="list buttonSet">
+                                <li class="leaf">
+                                    <button id="bookmarksDialog" style="display: none;" class="button capsule up" aria-label="Marcadores" data-title="true">
+                                        <span class="wrap">
+                                            <span class="icon"></span>
+                                        </span>
+                                    </button>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                    <!-- ========== END LEFT BUTTON SET =========== -->
+
+                    <!-- ========== RIGHT BUTTON SET =========== -->
+                    <div id="reportToolsRight" class="control toolsRight">
+                        <!-- ========== ZOOM =========== -->
+                        <div id="reportZoom" class="control zoom">
+                            <span class="divider first"></span>
+                            <button id="zoom_out" aria-label="Alejar" data-title="true" class="button action square move zoomOut up"><span class="wrap"><span class="icon"></span></span></button>
+                            <button id="zoom_in" aria-label="Acercar" data-title="true" class="button action square move zoomIn up"><span class="wrap"><span class="icon"></span></span></button>
+                            <label for="zoom_value" class="control input textPlus inline">
+                                <input id="zoom_value" type="text" value="100%" name="zoom_value" aria-label="Opciones de zoom">
+                                <button id="zoom_value_button" class="button disclosure" aria-label="Opciones de zoom" data-title="true">
+                                    <span class="icon"></span>
+                                </button>
+                            </label>
+                            <!-- <span class="divider last"></span> -->
+                        </div>
+                        <script type="application/json" id="reportZoomText">
+                            [
+                                {"key": "0.1", "value": "10%"}, {"key": "0.25", "value": "25%"}, {"key": "0.5", "value": "50%"}, {"key": "0.75", "value": "75%"},
+                                {"key": "1", "value": "100%"}, {"key": "1.25", "value": "125%"}, {"key": "2", "value": "200%"}, {"key": "4", "value": "400%"},
+                                {"key": "8", "value": "800%"}, {"key": "16", "value": "1600%"}, {"key": "24", "value": "2400%"}, {"key": "32", "value": "3200%"},
+                                {"key": "64", "value": "6400%"},
+                                {"key": "fit_actual", "value": "Tama&ntilde;o real"},
+                                {"key": "fit_width", "value": "Ajustar a anchura"},
+                                {"key": "fit_height", "value": "Ajustar a altura"},
+                                {"key": "fit_page", "value": "Ajustar a la p&aacute;gina"}
+                            ]
+                        </script>
+
+                        <!-- ========== REPORT SEARCH =========== -->
+                        <div id="reportSearch" class="control search">
+                            <span class="divider first"></span>
+                            <label for="search_report" class="control input textPlus inline">
+                                <input id="search_report" type="text" placeholder="informe de búsqueda" aria-label="Informe de búsqueda" name="search_report">
+                                <button id="search_report_button" class="button search" aria-label="Informe de búsqueda" data-title="true">
+                                    <span class="icon"></span>
+                                </button>
+                                <button id="search_options" class="button disclosure" aria-label="Opciones de búsqueda" data-title="true">
+                                    <span class="icon"></span>
+                                </button>
+                            </label>
+                            <button id="search_previous" aria-label="Buscar anterior" data-title="true" class="button action square move searchPrevious up" disabled="disabled"><span class="wrap"><span class="icon"></span></span></button>
+                            <button id="search_next" aria-label="Buscar siguiente" data-title="true" class="button action square move searchNext up" disabled="disabled"><span class="wrap"><span class="icon"></span></span></button>
+                            <span class="divider last"></span>
+                        </div>
+                        <script type="application/json" id="reportSearchText">
+                            [
+                                {"key": "caseSensitive", "value": "Distinguir mayúsculas de minúsculas"},
+                                {"key": "wholeWordsOnly", "value": "Solo palabras completas"}
+                            ]
+                        </script>
+
+                        <!-- ========== PAGINATION =========== -->
+                        <div id="pagination" class="control paging hidden" role="application">
+                            <button id="page_first" type="submit" aria-label="Primero" data-title="true" class="button action square move toLeft up" disabled="disabled"><span class="wrap"><span class="icon"></span></span></button>
+                            <button id="page_prev" type="submit" aria-label="Anterior" data-title="true" class="button action square move left up" disabled="disabled"><span class="wrap"><span class="icon"></span></span></button>
+                            <label class="control input text inline" for="page_current" aria-label="Página actual">
+                                <span class="wrap">Página</span>
+                                <input class="" id="page_current" type="text" name="currentPage" value="">
+                                <span class="wrap" id="page_total">de &nbsp;1</span>
+                            </label>
+                            <button id="page_next" type="submit" aria-label="Siguiente" data-title="true" class="button action square move right up" disabled="disabled"><span class="wrap"><span class="icon"></span></span></button>
+                            <button id="page_last" type="submit" aria-label="Último" data-title="true" class="button action square move toRight up" disabled="disabled"><span class="wrap"><span class="icon"></span></span></button>
+                        </div>
+                    </div>
+                    <!-- ========== END RIGHT BUTTON SET =========== -->
+
+                </div>
+                <!-- ========== END VIEWER TOOLBAR =========== -->
+
+                
+                <div id="ajaxbuffer" style="display: none;"></div>
+
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+
+                <!-- ========== INPUT CONTROLS TOP-OF-PAGE FORM: BEGIN =========== -->
+                
+                    
+                
+                <!-- ========== INPUT CONTROLS TOP-OF-PAGE FORM: END =========== -->
+
+                <div style="position: relative">
+                    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="nothingToDisplay" class="panel info nothingToDisplay centered_vert centered_horz hidden " style="position: absolute; width: 700px; height: 120px; margin-left: 0px; left: 50%;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+		
+                            <p class="message">Debe aplicar valores de entrada antes de que el informe se pueda visualizar.</p>
+                        
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+                </div>
+
+                
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="emptyReportID" class="panel info nothingToDisplay centered_vert centered_horz hidden" style="position: absolute; inset: 50% 25% 33% 50%; min-width: 100px; margin-left: -50px; margin-top: 0px;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+    
+        <div class="content ">
+    
+		<div class="header ">
+            <div class="title">
+                
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+		
+                        <p class="message"><b>SA_EstadoEjecucionPresupuestaria</b></p>
+                        <p class="message">
+                            
+                        </p>
+                    
+    
+            
+        </div>
+        
+	</div>
+</div>
+
+
+                
+                <div id="reportContainer" class="_jr_report_container_" style="position:relative;">
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="topOfPage" id="inputControlsForm">
+                        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="panel pane inputControls">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+        <div class="content hasFooter ">
+    
+    
+		<div class="header hidden">
+            <div class="title">
+                
+			</div>
+            
+                            
+                                <div class="sub header hidden"></div>
+                            
+                            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+                                
+
+
+<script id="bool" type="template/mustache">
+    <div id="{{id}}" class="leaf">
+        <label class="control input checkBox" for="{{uuid}}" title="{{description}}">
+            <span class="wrap">{{#mandatory}}* {{/mandatory}}{{label}}</span>
+            <input  type="checkbox" {{#readOnly}}disabled{{/readOnly}} />
+        </label>
+    </div>
+</script>
+
+<script id="singleValueText" type="template/mustache">
+    <div id="{{id}}" class="leaf">
+        <label class="control input text"  title="{{description}}">
+            <span class="wrap">{{#mandatory}}* {{/mandatory}}{{label}}</span>
+            <input class=""  type="text" value="" {{#readOnly}}disabled{{/readOnly}} />
+            <span class="warning">{{message}}</span>
+        </label>
+    </div>
+</script>
+
+<script id="singleValueNumber" type="template/mustache">
+    <div id="{{id}}" class="leaf">
+        <label class="control input text"  title="{{description}}">
+            <span class="wrap">{{#mandatory}}* {{/mandatory}}{{label}}</span>
+            <input class=""  type="text" value="" {{#readOnly}}disabled{{/readOnly}} />
+            <span class="warning">{{message}}</span>
+        </label>
+    </div>
+</script>
+
+<script id="singleValueDate" type="template/mustache">
+    <div id="{{id}}" class="leaf">
+        <label class="control picker"
+               title="{{label}}. &#10;Si el parámetro admite expresiones de fecha relativas, puede introducir expresiones como \'WEEK+1\' en este control de entrada">
+            <span class="wrap">{{#mandatory}}* {{/mandatory}}{{label}}</span>
+            <input class="date"  type="text" value="" {{#readOnly}}disabled{{/readOnly}} />
+            <div class="warning">{{message}}</div>
+        </label>
+    </div>
+</script>
+
+<script id="singleValueDatetime" type="template/mustache">
+    <div id="{{id}}" class="leaf">
+        <label class="control picker"
+               title="{{label}}. &#10;Si el parámetro admite expresiones de fecha relativas, puede introducir expresiones como \'WEEK+1\' en este control de entrada">
+            <span class="wrap">{{#mandatory}}* {{/mandatory}}{{label}}</span>
+            <input class="date" type="text" value="" {{#readOnly}}disabled{{/readOnly}} />
+            <div class="warning">{{message}}</div>
+        </label>
+    </div>
+</script>
+
+<script id="singleValueTime" type="template/mustache">
+    <div id="{{id}}" class="leaf">
+        <label class="control picker"
+               title="{{label}}. &#10;Si el parámetro admite expresiones de fecha relativas, puede introducir expresiones como \'WEEK+1\' en este control de entrada">
+            <span class="wrap">{{#mandatory}}* {{/mandatory}}{{label}}</span>
+            <input class="date" type="text" value="" {{#readOnly}}disabled{{/readOnly}} />
+            <div class="warning">{{message}}</div>
+        </label>
+    </div>
+</script>
+
+<script id="singleSelect" type="template/mustache">
+    <div id="{{id}}" class="leaf visibleOverflow">
+        <label class="control select"  title="{{description}}">
+            <span class="wrap">{{#mandatory}}* {{/mandatory}}{{label}}</span>
+            <div class="ssPlaceholder jr jr-mInput {{#readOnly}} jr-isDisabled{{/readOnly}}" {{#readOnly}}disabled="disabled"{{/readOnly}}></div>
+            <span class="warning">{{message}}</span>
+        </label>
+    </div>
+</script>
+
+<script id="multiSelect" type="template/mustache">
+    <div class="leaf visibleOverflow" id="{{id}}">
+        <div class="control select multiple"  title="{{description}}">
+            <span class="wrap">{{#mandatory}}* {{/mandatory}}{{label}}</span>
+            <div class="msPlaceholder jr {{#readOnly}} jr-mInput jr-isDisabled {{/readOnly}}" {{#readOnly}}disabled="disabled"{{/readOnly}}></div>
+            <span class="warning">{{message}}</span>
+            <div class="resizeOverlay hidden"></div>
+        </div>
+    </div>
+</script>
+
+<script id="singleSelectRadio" type="template/mustache">
+    <div id="{{id}}" class="leaf">
+        <fieldset class="control select multiple radio" title="{{description}}">
+            <legend>{{#mandatory}}* {{/mandatory}}{{label}}</legend>
+            <ul class="list inputSet">
+                {{#data}}
+                <li>
+                    <div class="control radio">
+                        <input {{#selected}}checked="checked"{{/selected}} class="" id="{{uuid}}" type="radio" name="{{name}}" {{#readOnly}}disabled="disabled"{{/readOnly}} value="{{value}}"/>
+                        <label class="wrap" for="{{uuid}}" title="{{description}}">
+                            {{label}}&nbsp;
+                        </label>
+                    </div>
+                </li>
+                {{/data}}
+            </ul>
+        </fieldset>
+        <span class="warning">{{message}}</span>
+        <div class="resizeOverlay hidden"></div>
+        <div class="jr-mSizer jr-mSizerVertical jr hidden"><span class="ui-icon ui-icon-grip-solid-horizontal"></span></div>
+    </div>
+</script>
+
+<script id="multiSelectCheckbox" type="template/mustache">
+    <div id="{{id}}" class="leaf visibleOverflow">
+        <fieldset class="control select checkbox" title="{{description}}">
+            <legend>{{#mandatory}}* {{/mandatory}}{{label}}</legend>
+            <ul class="list inputSet">
+                {{#data}}
+                    <li>
+                        <div class="control checkBox">
+                            <label class="wrap" for="{{uuid}}" title="{{description}}">
+                                {{label}}&nbsp;
+                            </label>
+                            <input {{#selected}}checked="checked"{{/selected}} class="" id="{{uuid}}" type="checkbox" {{#readOnly}}disabled="disabled"{{/readOnly}} value="{{value}}"/>
+                        </div>
+                    </li>
+                {{/data}}
+            </ul>
+	        <div class="{{#readOnly}}hidden{{/readOnly}}">
+                <a href="#" name="multiSelectAll">Todo</a>
+                <a href="#" name="multiSelectNone">Ninguno</a>
+                <a href="#" name="multiSelectInverse">Inverso</a>
+            </div>
+        </fieldset>
+        <span class="warning">{{message}}</span>
+        <div class="resizeOverlay hidden"></div>
+        <div class="jr-mSizer jr-mSizerVertical jr hidden"><span class="ui-icon ui-icon-grip-solid-horizontal"></span></div>
+    </div>
+</script>
+
+<script id="reportOptions" type="template/mustache">
+    <div>
+        <label class="control select" for="reportOptionsSelect" title="{{title}}">
+            <span class="wrap">{{label}}</span>
+            <select id="reportOptionsSelect">
+                {{#data}}
+                    <option value="{{id}}" {{#selected}}selected="selected"{{/selected}}>{{label}}</option>
+                {{/data}}
+            </select>
+        </label>
+    </div>
+</script>
+
+<!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+
+
+
+
+<ul class="list inputControls ui-sortable" id="inputControlsContainer"><div id="nivel_concepto" class="leaf visibleOverflow">
+        <label class="control select" title="">
+            <span class="wrap">* Catálogo Base</span>
+            <div class="ssPlaceholder jr jr-mInput "><div><div class="jr-mSingleselect jr">
+    <a class="jr-mSingleselect-input jr" title="Nivel 1">
+        <span class="jr-mSingleselect-input-placeholder jr jr-isHidden">Click to select item...</span>
+        <span class="jr-mSingleselect-input-selection jr">Nivel 1</span>
+        <div class="jr-mSingleselect-input-expander jr"></div>
+    </a>
+    <div class="jr-mSingleselect-search jr">
+        <input type="text" placeholder="Search list..." class="jr-mInput-search jr" value="" role="form">
+    </div>
+</div></div></div>
+            <span class="warning"></span>
+        </label>
+    </div><div id="nivel_concepto_cruce" class="leaf visibleOverflow">
+        <label class="control select" title="">
+            <span class="wrap">* Catálogo de Cruce</span>
+            <div class="ssPlaceholder jr jr-mInput "><div><div class="jr-mSingleselect jr">
+    <a class="jr-mSingleselect-input jr" title="Nivel 1">
+        <span class="jr-mSingleselect-input-placeholder jr jr-isHidden">Click to select item...</span>
+        <span class="jr-mSingleselect-input-selection jr">Nivel 1</span>
+        <div class="jr-mSingleselect-input-expander jr"></div>
+    </a>
+    <div class="jr-mSingleselect-search jr">
+        <input type="text" placeholder="Search list..." class="jr-mInput-search jr" value="">
+    </div>
+</div></div></div>
+            <span class="warning"></span>
+        </label>
+    </div></ul>
+                            
+            
+        </div>
+        
+		<div class="footer ">
+			
+                                <button id="apply" class="button action primary up"><span class="wrap">Aplicar<span class="icon"></span></span></button>
+                                <button id="reset" class="button action up"><span class="wrap">Restablecer<span class="icon"></span></span></button>
+                                
+                                    
+  				
+                           
+		</div>
+        
+	</div>
+</div>
+
+                    </div>
+
+
+
+<script type="text/json" id="toolbarText">
+
+    {"toolbar_export":[{"type": "simpleAction","text": "Como PDF","action": "Report.exportReport","actionArgs": ["pdf", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.pdf"]},{"type": "simpleAction","text": "Como Excel (paginado)","action": "Report.exportReport","actionArgs": ["xls", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.xls"]},{"type": "simpleAction","text": "Como Excel","action": "Report.exportReport","actionArgs": ["xlsNoPag", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.xls"]},{"type": "simpleAction","text": "Como CSV","action": "Report.exportReport","actionArgs": ["csv", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.csv"]},{"type": "simpleAction","text": "Como DOCX","action": "Report.exportReport","actionArgs": ["docx", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.docx"]},{"type": "simpleAction","text": "Como RTF","action": "Report.exportReport","actionArgs": ["rtf", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.rtf"]},{"type": "simpleAction","text": "Como ODT","action": "Report.exportReport","actionArgs": ["odt", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.odt"]},{"type": "simpleAction","text": "Como ODS","action": "Report.exportReport","actionArgs": ["ods", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.ods"]},{"type": "simpleAction","text": "Como XLSX (paginado)","action": "Report.exportReport","actionArgs": ["xlsx", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.xlsx"]},{"type": "simpleAction","text": "Como XLSX","action": "Report.exportReport","actionArgs": ["xlsxNoPag", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.xlsx"]},{"type": "simpleAction","text": "Como PPTX","action": "Report.exportReport","actionArgs": ["pptx", "/jasperserver-pro/flow.html/flowFile/SA_EstadoEjecucionPresupuestaria.pptx"]}], "toolbar_fileOptions":[{"type": "simpleAction","clientTest": "Report.canSaveReport","text": "Guardar","action": "Report.save"},{"type": "simpleAction","text": "Guardar como...","action": "Report.saveAs"}]}
+
+</script>
+
+
+
+    
+    
+
+
+    
+
+    
+        
+        
+        <a name="JR_PAGE_ANCHOR_0_1"></a>
+<table class="jrPage superfocus" cellpadding="0" cellspacing="0" border="0" style="empty-cells: show; width: 1080px; border-collapse: collapse; background-color: white; margin-left: auto; margin-right: auto;" tabindex="-1" role="application" aria-label="Table of 181 cells." js-suspended-tabindex="0">
+<tbody><tr valign="top" style="height:0" role="row">
+<td style="width:10px" role="gridcell"></td>
+<td style="width:39px" role="gridcell"></td>
+<td style="width:120px" role="gridcell"></td>
+<td style="width:39px" role="gridcell"></td>
+<td style="width:120px" role="gridcell"></td>
+<td style="width:76px" role="gridcell"></td>
+<td style="width:48px" role="gridcell"></td>
+<td style="width:32px" role="gridcell"></td>
+<td style="width:48px" role="gridcell"></td>
+<td style="width:27px" role="gridcell"></td>
+<td style="width:13px" role="gridcell"></td>
+<td style="width:75px" role="gridcell"></td>
+<td style="width:88px" role="gridcell"></td>
+<td style="width:335px" role="gridcell"></td>
+<td style="width:10px" role="gridcell"></td>
+</tr>
+<tr valign="top" style="height:10px" role="row">
+<td colspan="15" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:80px" role="row">
+<td role="gridcell">
+</td>
+<td colspan="13" role="gridcell">
+<div style="width: 100%; height: 100%; position: relative;">
+<div style="position: absolute; overflow: hidden; width: 100%; height: 100%; ">
+<table cellpadding="0" cellspacing="0" border="0" style="empty-cells: show; width: 100%; border-collapse: collapse;">
+<tbody><tr valign="top" style="height:0" role="row">
+<td style="width:283px" role="gridcell"></td>
+<td style="width:777px" role="gridcell"></td>
+</tr>
+<tr valign="top" style="height:80px" role="row">
+<td style="pointer-events: auto; " role="gridcell">
+<img src="/jasperserver-pro/reportimage?jrprint=275345597_1786551175838_85149&amp;image=img_0_0_0.png" style="width: 283px" alt=""></td>
+<td role="gridcell">
+</td>
+</tr>
+</tbody></table>
+</div>
+<div style="position: relative; width: 100%; height: 100%; pointer-events: none; ">
+<table cellpadding="0" cellspacing="0" border="0" style="empty-cells: show; width: 100%; border-collapse: collapse;">
+<tbody><tr valign="top" style="height:0" role="row">
+<td style="width:1060px" role="gridcell"></td>
+</tr>
+<tr valign="top" style="height:20px" role="row">
+<td style="pointer-events: auto; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif; color: #3492D9; font-size: 10px; line-height: 1.1635742; font-weight: bold;">Estado de Ejecución Presupuestaria</span></td>
+</tr>
+<tr valign="top" style="height:20px" role="row">
+<td style="pointer-events: auto; white-space: nowrap; text-indent: 0px;  vertical-align: bottom;text-align: center;" role="gridcell">
+<span style="font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif; color: #3492D9; font-size: 9px; line-height: 1; *line-height: normal;">1638002 Hospital de Osorno</span></td>
+</tr>
+<tr valign="top" style="height:20px" role="row">
+<td style="pointer-events: auto; white-space: nowrap; text-indent: 0px;  vertical-align: bottom;text-align: center;" role="gridcell">
+<span style="font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif; color: #3492D9; font-size: 9px; line-height: 1.1635742;">01 julio 2026 al 31 julio 2026</span></td>
+</tr>
+<tr valign="top" style="height:20px" role="row">
+<td style="pointer-events: auto; white-space: nowrap; text-indent: 0px;  vertical-align: bottom;text-align: center;" role="gridcell">
+<span style="font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif; color: #3492D9; font-size: 9px; line-height: 1.1635742;">Nacional - Unidad</span></td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</td>
+<td role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:20px" role="row">
+<td role="gridcell">
+</td>
+<td colspan="13" style="white-space: nowrap; text-indent: 0px;  vertical-align: bottom;text-align: center;" role="gridcell">
+<span style="font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif; color: #3492D9; font-size: 9px; line-height: 1.1635742;">miércoles 12 agosto 2026 12:12:52</span></td>
+<td role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:4px" role="row">
+<td colspan="15" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:20px" role="row">
+<td role="gridcell">
+</td>
+<td colspan="13" style="white-space: nowrap; text-indent: 0px;  vertical-align: bottom;text-align: center;" role="gridcell">
+<span style="font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif; color: #3492D9; font-size: 9px; line-height: 1.1635742;">&nbsp;Catalogo Cruce &nbsp;</span></td>
+<td role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:20px" role="row">
+<td colspan="15" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:30px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcolHeader interactiveElement" data-coluuid="72130dac-bf27-4791-9e45-4d722e9f31e7" data-cellid="NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" data-colidx="0" style="background-color: #2F82C4; border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-bottom: 1px solid #FFFFFF; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 10px; line-height: 1.1635742;">Nivel</span></td>
+<td class="jrcolHeader" data-coluuid="992a72ae-9ebc-4ca8-8d36-da3c81bad847" data-cellid="1_1156813511" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" data-colidx="1" style="background-color: #2F82C4; border-top: 1px solid #CCCCCC; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #FFFFFF; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 10px; line-height: 1.1635742;">Concepto <br>Presupuestario</span></td>
+<td class="jrcolHeader interactiveElement" data-coluuid="ca287e75-1f42-4c70-8d6c-53ec26e15380" data-cellid="NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" data-colidx="2" style="background-color: #2F82C4; border-top: 1px solid #CCCCCC; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #FFFFFF; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 10px; line-height: 1.1635742;">Nivel <br>Cruce</span></td>
+<td class="jrcolHeader interactiveElement" data-coluuid="76b7b314-ce2c-4464-afb4-5271e5034123" data-cellid="c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" data-colidx="3" style="background-color: #2F82C4; border-top: 1px solid #CCCCCC; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #FFFFFF; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 10px; line-height: 1.1635742;">&nbsp;Catalogo Cruce</span></td>
+<td class="jrcolHeader" data-coluuid="61352d4b-9041-4de5-ab22-c77854e15dac" data-cellid="4_930826050" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" data-colidx="4" style="background-color: #2F82C4; border-top: 1px solid #CCCCCC; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #FFFFFF; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 10px; line-height: 1.1635742;">Ley de <br>Presupuestos </span></td>
+<td colspan="2" class="jrcolHeader" data-coluuid="4b6ce678-d932-41e9-9d54-506d0eba68be" data-cellid="5_1875287744" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" data-colidx="5" style="background-color: #2F82C4; border-top: 1px solid #CCCCCC; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #FFFFFF; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 10px; line-height: 1.1635742;">Requerimiento</span></td>
+<td colspan="2" class="jrcolHeader" data-coluuid="ae08dec6-dc86-41e5-9db3-261c34322aae" data-cellid="7_535994023" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" data-colidx="7" style="background-color: #2F82C4; border-top: 1px solid #CCCCCC; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #FFFFFF; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 10px; line-height: 1.1635742;">Compromiso</span></td>
+<td colspan="2" class="jrcolHeader" data-coluuid="48f44685-42b0-4a04-93cb-4923f9838cfb" data-cellid="9_144975048" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" data-colidx="9" style="background-color: #2F82C4; border-top: 1px solid #CCCCCC; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #FFFFFF; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 10px; line-height: 1.1635742;">Devengado</span></td>
+<td class="jrcolHeader" data-coluuid="6e004122-dc51-4371-b527-6cf2ee923c75" data-cellid="11_1703420873" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" data-colidx="11" style="background-color: #2F82C4; border-top: 1px solid #CCCCCC; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #FFFFFF; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 10px; line-height: 1.1635742;">Efectivo</span></td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:2px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:25px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">1</span></td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell" tabindex="0" class="subfocus">
+<span class="_jrHyperLink Reference" data-id="387960181" style="cursor: pointer;"><span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1.1635742; text-decoration: underline;">21 GASTOS EN PERSONAL</span></span></td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">0</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">5.749.465.800</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">5.749.465.800</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">5.749.465.800</span></td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">5.749.465.800</span></td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:3px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:2px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:25px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">1</span></td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell">
+<span class="_jrHyperLink Reference" data-id="1096974832" style="cursor: pointer;"><span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1.401123; text-decoration: underline;">22 BIENES Y SERVICIOS DE <br>CONSUMO</span></span></td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">0</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">2.167.176.191</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">2.536.343.328</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">3.504.343.404</span></td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">4.466.949.518</span></td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:3px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:2px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-top: 1px solid #CCCCCC; border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:25px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: center;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">1</span></td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell">
+<span class="_jrHyperLink Reference" data-id="60837492" style="cursor: pointer;"><span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1.401123; text-decoration: underline;">29 ADQUISICION DE ACTIVOS <br>NO FINANCIEROS</span></span></td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">0</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">0</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">13.538.066</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">25.318.389</span></td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #666666; font-size: 8px; line-height: 1; *line-height: normal;">4.796.909</span></td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:3px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; " role="gridcell">
+</td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:30px" role="row">
+<td role="gridcell">
+</td>
+<td class="jrcel cel_NIVEL_BASE_945106732_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="background-color: #2F82C4; border-top: 1px solid #FFFFFF; border-left: 1px solid #CCCCCC; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #FFFFFF; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="background-color: #2F82C4; border-top: 1px solid #FFFFFF; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: left;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 8px; line-height: 1.1635742;">Total</span></td>
+<td class="jrcel cel_NIVEL_CAT_CRUCE_663419350_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="background-color: #2F82C4; border-top: 1px solid #FFFFFF; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #FFFFFF; " role="gridcell">
+</td>
+<td class="jrcel cel_c3_642134249_0" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="background-color: #2F82C4; border-top: 1px solid #FFFFFF; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #FFFFFF; " role="gridcell">
+</td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="background-color: #2F82C4; border-top: 1px solid #FFFFFF; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 8px; line-height: 1; *line-height: normal;">0</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="background-color: #2F82C4; border-top: 1px solid #FFFFFF; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 8px; line-height: 1; *line-height: normal;">7.916.641.991</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="background-color: #2F82C4; border-top: 1px solid #FFFFFF; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 8px; line-height: 1; *line-height: normal;">8.299.347.194</span></td>
+<td colspan="2" data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="background-color: #2F82C4; border-top: 1px solid #FFFFFF; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #FFFFFF; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 8px; line-height: 1; *line-height: normal;">9.279.127.593</span></td>
+<td data-tableuuid="1daaf082-451a-46a5-9fc2-c1aca170c975" style="background-color: #2F82C4; border-top: 1px solid #FFFFFF; border-left: 1px solid #FFFFFF; border-bottom: 1px solid #CCCCCC; border-right: 1px solid #CCCCCC; white-space: nowrap; text-indent: 0px;  vertical-align: middle;text-align: right;" role="gridcell">
+<span style="font-family: Trebuchet MS; color: #FFFFFF; font-size: 8px; line-height: 1; *line-height: normal;">10.221.212.227</span></td>
+<td colspan="2" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:273px" role="row">
+<td colspan="15" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:20px" role="row">
+<td colspan="7" role="gridcell">
+</td>
+<td colspan="2" style="white-space: nowrap; text-indent: 0px; text-align: right;" role="gridcell">
+<span style="font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif; color: #666666; font-size: 10px; line-height: 1.1635742;">Página 1 de</span></td>
+<td colspan="2" style="white-space: nowrap; text-indent: 0px; text-align: left;" role="gridcell">
+<span style="font-family: 'DejaVu Sans', Arial, Helvetica, sans-serif; color: #666666; font-size: 10px; line-height: 1.1635742;">&nbsp;1</span></td>
+<td colspan="4" role="gridcell">
+</td>
+</tr>
+<tr valign="top" style="height:15px" role="row">
+<td colspan="15" role="gridcell">
+</td>
+</tr>
+</tbody></table>
+
+
+
+        <div id="paginationIndexHolder" class="hidden" data-lastpageindex="0"></div>
+    
+    
+</div>
+                
+
+            
+            
+        </div>
+        
+	</div>
+</div>
+
+
+        <!-- ========== INPUT CONTROLS DIALOG =========== -->
+        
+
+        <!-- ========== SAVE REPORT OPTIONS DIALOG =========== -->
+        
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div id="saveValues" class="panel dialog saveValues overlay moveable centered_horz centered_vert hidden" style="margin-left: 0px; left: 50%; margin-top: 0px; top: 50%;">
+
+    <!-- nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove -->
+
+    
+	
+    
+        <div class="content hasFooter ">
+    
+    
+		<div class="header mover">
+            <div class="title">
+                Guardar valores
+			</div>
+            
+            
+		</div>
+        
+		<div class="body  ">
+            
+			    
+
+            <label class="control input text" accesskey="o" for="savedValuesName" title="Este es el nombre que se muestra del recurso. Se puede cambiar en cualquier momento.">
+                <span class="wrap">
+                    Nombre para los valores guardados (obligatorio):
+                </span>
+                <input class="" id="savedValuesName" type="text" value="">
+                <span class="message warning"></span>
+            </label>
+
+    
+            
+        </div>
+        
+		<div class="footer ">
+			
+         <button id="saveAsBtnSave" class="button action primary up"><span class="wrap">Guardar<span class="icon"></span></span></button>
+         <button id="saveAsBtnCancel" class="button action up"><span class="wrap">Cancelar<span class="icon"></span></span></button>
+    
+		</div>
+        
+	</div>
+</div>
+
+
+        
+
+        
+        <form id="exportActionForm" action="flow.html" method="post">
+            <input type="hidden" name="_flowExecutionKey" value="">
+            <input type="hidden" name="_eventId" value="">
+            <input type="hidden" name="output">
+        <input type="hidden" name="OWASP_CSRFTOKEN" value="DQJN-ZHOW-FF0Q-0HVQ-P4LD-59EU-W8Y3-50OZ"></form>
+
+    
+</div><!-- /#display -->
+    <!-- END decorated page content -->
+</div>
+
+<div id="systemMessageConsole" style="display:none;">
+    <p id="systemMessage"></p>
+</div>
+    
+    
+
+
+
+<script type="text/javascript">
+    // nonce-ND66-SQBB-PEE8-O7NB-D92G-F8UM-IJN5-YPP9 do not remove
+
+    //common URL context
+    var urlContext = "/jasperserver-pro";
+
+    
+    var defaultSearchText = "";
+    var serverIsNotResponding = "El servidor está tardando o no responde. Confirme que desea continuar.";
+
+    var commonReportGeneratorsMetadata = [];
+</script>
+
+
+<script type="text/json" id="navigationActionModel">
+    {"main_home_mutton":[],"main_library_mutton":[],"main_view_mutton":[{"type": "selectAction","text": "Ver","children": [{"type": "optionAction","text": "Resultados de la búsqueda","action": "primaryNavModule.navigationOption","actionArgs": ["search"]},{"type": "optionAction","text": "Repositorio","action": "primaryNavModule.navigationOption","actionArgs": ["browse"]},{"type": "optionAction","text": "Programar","action": "primaryNavModule.navigationOption","actionArgs": ["jobs"]},{"type": "optionAction","text": "Mensajes","action": "primaryNavModule.navigationOption","actionArgs": ["event"]}]}],"main_create_mutton":[{"type": "selectAction","text": "Crear","children": [{"type": "optionAction","text": "Vista ad hoc","action": "primaryNavModule.navigationOption","actionArgs": ["designer"]},{"type": "optionAction","text": "Informe","action": "JRS.CreateReport.selectADV","actionArgs": ["createReport"]},{"type": "optionAction","text": "Panel","action": "primaryNavModule.navigationOption","actionArgs": ["dashboard"]}]}]}
+</script>
+
+
+
+    
+    
+<div class="jr-mSingleselect-dropdown jr" style="display: none; top: 144.995px; left: 20px; width: 99px;"><div class="jr-mScalablelist jr" draggable="false" ondragstart="return false" unselectable="on" onselectstart="return false">
+<div class="jr-jViewPortChunk" style="height: 198px"><ul class="jr-mSelectlist jr" style="top: 0px;">
+    
+    <li class="jr-mSelectlist-item jr-isSelected jr" title="Nivel 1" data-index="0">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 1</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 2" data-index="1">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 2</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 3" data-index="2">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 3</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 4" data-index="3">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 4</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 5" data-index="4">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 5</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 6" data-index="5">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 6</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 7" data-index="6">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 7</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 8" data-index="7">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 8</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 9" data-index="8">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 9</a>
+        </div>
+    </li>
+    
+</ul></div>
+
+</div></div><div class="jr-mSingleselect-dropdown jr" style="display: none;"><div class="jr-mScalablelist jr" draggable="false" ondragstart="return false" unselectable="on" onselectstart="return false">
+<div class="jr-jViewPortChunk" style="height: 189px"><ul class="jr-mSelectlist jr" style="top: 0px;">
+    
+    <li class="jr-mSelectlist-item jr-isSelected jr" title="Nivel 1" data-index="0">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 1</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 2" data-index="1">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 2</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 3" data-index="2">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 3</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 4" data-index="3">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 4</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 5" data-index="4">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 5</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 6" data-index="5">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 6</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 7" data-index="6">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 7</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 8" data-index="7">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 8</a>
+        </div>
+    </li>
+    
+    <li class="jr-mSelectlist-item  jr" title="Nivel 9" data-index="8">
+        <div class="jr-mSelectlist-item-wrapper jr">
+            <a class="jr-mSelectlist-item-text jr">Nivel 9</a>
+        </div>
+    </li>
+    
+</ul></div>
+
+</div></div><div id="jive_components"><div id="jive_overlay" style="display:none;">
+    <div></div>
+</div>
+
+
+<div id="jive_marker" style="display:none;">
+    <div id="jive_marker_icon">&nbsp;</div>
+    <div style="position:absolute;top:0;right:6px;bottom:0;left:-6px;"></div>
+</div>
+
+
+<div class="jive_drag_label" style="background:#eee;border:solid 1px #555;padding:8px;display:none;"></div>
+
+
+<div id="jive_foobar" class="" style="display:none;"></div>
+
+
+<div id="jive_menus"></div>
+
+
+<div id="jive_dropdown"></div>
+
+
+<div id="jive_forms"></div>
+
+
+<div id="jive_dialog" class="jive_dialog" style="display:none;">
+    <div class="dialogContent">
+        <div class="dialogHeader">
+            <div class="tabContainer"></div>
+            <h2><span class="dialogTitle"></span></h2>
+        </div>
+        <div class="applytoWrapper">
+            <div class="applytoTitle"><span>Aplicar a:</span></div>
+            <div class="applytoSelector"><select id="applyTo"></select></div>
+        </div>
+        <div class="dialogBody" style="text-align:left;">
+
+        </div>
+        <div class="dialogFooter">
+            <button id="colprev" class="colnav"><span class="wrap">&lt; Columna anterior</span></button>
+            <button id="colnext" class="colnav"><span class="wrap">Columna siguiente &gt;</span></button>
+            <button id="dialogCancel" class="button action up"><span class="wrap">Cancelar<span class="icon"></span></span></button>
+            <button id="dialogOk" class="button action primary up"><span class="wrap">Aceptar<span class="icon"></span></span></button>
+        </div>
+    </div>
+</div>
+
+
+<div id="jive_colorpicker" class="jive_dialog" style="display:none;">
+    <div class="dialogContent">
+        <div class="dialogHeader">
+            <h2>Pick a color</h2>
+        </div>
+        <div class="dialogBody" style="text-align:left;">
+            <table>
+                <tbody>
+                <tr class="transparent_pick" data-mode="Transparent"><td colspan="10"><div class="pick" hexcolor="keep_existing">Transparent</div></td></tr>
+                <tr class="reset_pick" data-mode="null"><td colspan="10"><div class="pick" hexcolor="null">None</div></td></tr>
+                <tr data-mode="Opaque">
+                    <td><div class="pick" hexcolor="RGB (152, 0, 0)" style="background-color: rgb(152, 0, 0);  " title="RGB (152, 0, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (255, 0, 0)" style="background-color: rgb(255, 0, 0);  " title="RGB (255, 0, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (255, 153, 0)" style="background-color: rgb(255, 153, 0);  " title="RGB (255, 153, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (255, 255, 0)" style="background-color: rgb(255, 255, 0);  " title="RGB (255, 255, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (0, 255, 0)" style="background-color: rgb(0, 255, 0);  " title="RGB (0, 255, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (0, 255, 255)" style="background-color: rgb(0, 255, 255);  " title="RGB (0, 255, 255)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (74, 134, 232)" style="background-color: rgb(74, 134, 232);  " title="RGB (74, 134, 232)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (0, 0, 255)" style="background-color: rgb(0, 0, 255);  " title="RGB (0, 0, 255)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (153, 0, 255)" style="background-color: rgb(153, 0, 255);  " title="RGB (153, 0, 255)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (255, 0, 255)" style="background-color: rgb(255, 0, 255);  " title="RGB (255, 0, 255)"></div></td>
+                </tr>
+                <tr data-mode="Opaque">
+                    <td><div class="pick" hexcolor="RGB (0, 0, 0)" style="background-color: rgb(0, 0, 0);  " title="RGB (0, 0, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (67, 67, 67)" style="background-color: rgb(67, 67, 67); " title="RGB (67, 67, 67)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (102, 102, 102)" style="background-color: rgb(102, 102, 102); " title="RGB (102, 102, 102)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (153, 153, 153)" style="background-color: rgb(153, 153, 153);  " title="RGB (153, 153, 153)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (183, 183, 183)" style="background-color: rgb(183, 183, 183);  " title="RGB (183, 183, 183)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (204, 204, 204)" style="background-color: rgb(204, 204, 204);  " title="RGB (204, 204, 204)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (217, 217, 217)" style="background-color: rgb(217, 217, 217);  " title="RGB (217, 217, 217)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (239, 239, 239)" style="background-color: rgb(239, 239, 239);  " title="RGB (239, 239, 239)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (243, 243, 243)" style="background-color: rgb(243, 243, 243);  " title="RGB (243, 243, 243)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (255, 255, 255)" style="background-color: rgb(255, 255, 255);  " title="RGB (255, 255, 255)"></div></td>
+                </tr>
+                <tr data-mode="Opaque">
+                    <td><div class="pick" hexcolor="RGB (230, 184, 175)" style="background-color: rgb(230, 184, 175);  " title="RGB (230, 184, 175)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (244, 204, 204)" style="background-color: rgb(244, 204, 204);  " title="RGB (244, 204, 204)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (252, 229, 205)" style="background-color: rgb(252, 229, 205);  " title="RGB (252, 229, 205)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (255, 242, 204)" style="background-color: rgb(255, 242, 204);  " title="RGB (255, 242, 204)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (217, 234, 211)" style="background-color: rgb(217, 234, 211);  " title="RGB (217, 234, 211)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (208, 224, 227)" style="background-color: rgb(208, 224, 227);  " title="RGB (208, 224, 227)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (201, 218, 248)" style="background-color: rgb(201, 218, 248);  " title="RGB (201, 218, 248)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (207, 226, 243)" style="background-color: rgb(207, 226, 243);  " title="RGB (207, 226, 243)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (217, 210, 233)" style="background-color: rgb(217, 210, 233);  " title="RGB (217, 210, 233)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (234, 209, 220)" style="background-color: rgb(234, 209, 220);  " title="RGB (234, 209, 220)"></div></td>
+                </tr>
+                <tr data-mode="Opaque">
+                    <td><div class="pick" hexcolor="RGB (221, 126, 107)" style="background-color: rgb(221, 126, 107);  " title="RGB (221, 126, 107)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (234, 153, 153)" style="background-color: rgb(234, 153, 153);  " title="RGB (234, 153, 153)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (249, 203, 156)" style="background-color: rgb(249, 203, 156);  " title="RGB (249, 203, 156)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (255, 229, 153)" style="background-color: rgb(255, 229, 153);  " title="RGB (255, 229, 153)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (182, 215, 168)" style="background-color: rgb(182, 215, 168);  " title="RGB (182, 215, 168)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (162, 196, 201)" style="background-color: rgb(162, 196, 201);  " title="RGB (162, 196, 201)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (164, 194, 244)" style="background-color: rgb(164, 194, 244);  " title="RGB (164, 194, 244)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (159, 197, 232)" style="background-color: rgb(159, 197, 232);  " title="RGB (159, 197, 232)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (180, 167, 214)" style="background-color: rgb(180, 167, 214);  " title="RGB (180, 167, 214)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (213, 166, 189)" style="background-color: rgb(213, 166, 189);  " title="RGB (213, 166, 189)"></div></td>
+                </tr>
+                <tr data-mode="Opaque">
+                    <td><div class="pick" hexcolor="RGB (204, 65, 37)" style="background-color: rgb(204, 65, 37);  " title="RGB (204, 65, 37)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (224, 102, 102)" style="background-color: rgb(224, 102, 102);  " title="RGB (224, 102, 102)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (246, 178, 107)" style="background-color: rgb(246, 178, 107);  " title="RGB (246, 178, 107)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (255, 217, 102)" style="background-color: rgb(255, 217, 102);  " title="RGB (255, 217, 102)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (147, 196, 125)" style="background-color: rgb(147, 196, 125);  " title="RGB (147, 196, 125)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (118, 165, 175)" style="background-color: rgb(118, 165, 175);  " title="RGB (118, 165, 175)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (109, 158, 235)" style="background-color: rgb(109, 158, 235);  " title="RGB (109, 158, 235)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (111, 168, 220)" style="background-color: rgb(111, 168, 220);  " title="RGB (111, 168, 220)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (142, 124, 195)" style="background-color: rgb(142, 124, 195);  " title="RGB (142, 124, 195)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (194, 123, 160)" style="background-color: rgb(194, 123, 160);  " title="RGB (194, 123, 160)"></div></td>
+                </tr>
+                <tr data-mode="Opaque">
+                    <td><div class="pick" hexcolor="RGB (166, 28, 0)" style="background-color: rgb(166, 28, 0);  " title="RGB (166, 28, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (204, 0, 0)" style="background-color: rgb(204, 0, 0);  " title="RGB (204, 0, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (230, 145, 56)" style="background-color: rgb(230, 145, 56);  " title="RGB (230, 145, 56)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (241, 194, 50)" style="background-color: rgb(241, 194, 50);  " title="RGB (241, 194, 50)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (106, 168, 79)" style="background-color: rgb(106, 168, 79);  " title="RGB (106, 168, 79)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (69, 129, 142)" style="background-color: rgb(69, 129, 142);  " title="RGB (69, 129, 142)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (60, 120, 216)" style="background-color: rgb(60, 120, 216);  " title="RGB (60, 120, 216)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (61, 133, 198)" style="background-color: rgb(61, 133, 198);  " title="RGB (61, 133, 198)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (103, 78, 167)" style="background-color: rgb(103, 78, 167);  " title="RGB (103, 78, 167)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (166, 77, 121)" style="background-color: rgb(166, 77, 121);  " title="RGB (166, 77, 121)"></div></td>
+                </tr>
+                <tr data-mode="Opaque">
+                    <td><div class="pick" hexcolor="RGB (133, 32, 12)" style="background-color: rgb(133, 32, 12);  " title="RGB (133, 32, 12)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (153, 0, 0)" style="background-color: rgb(153, 0, 0);  " title="RGB (153, 0, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (180, 95, 6)" style="background-color: rgb(180, 95, 6);  " title="RGB (180, 95, 6)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (191, 144, 0)" style="background-color: rgb(191, 144, 0);  " title="RGB (191, 144, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (56, 118, 29)" style="background-color: rgb(56, 118, 29);  " title="RGB (56, 118, 29)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (19, 79, 92)" style="background-color: rgb(19, 79, 92);  " title="RGB (19, 79, 92)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (17, 85, 204)" style="background-color: rgb(17, 85, 204);  " title="RGB (17, 85, 204)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (11, 83, 148)" style="background-color: rgb(11, 83, 148);  " title="RGB (11, 83, 148)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (53, 28, 117)" style="background-color: rgb(53, 28, 117);  " title="RGB (53, 28, 117)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (116, 27, 71)" style="background-color: rgb(116, 27, 71);  " title="RGB (116, 27, 71)"></div></td>
+                </tr>
+                <tr data-mode="Opaque">
+                    <td><div class="pick" hexcolor="RGB (91, 15, 0)" style="background-color: rgb(91, 15, 0);  " title="RGB (91, 15, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (102, 0, 0)" style="background-color: rgb(102, 0, 0);  " title="RGB (102, 0, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (120, 63, 4)" style="background-color: rgb(120, 63, 4);  " title="RGB (120, 63, 4)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (127, 96, 0)" style="background-color: rgb(127, 96, 0);  " title="RGB (127, 96, 0)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (39, 78, 19)" style="background-color: rgb(39, 78, 19);  " title="RGB (39, 78, 19)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (12, 52, 61)" style="background-color: rgb(12, 52, 61);  " title="RGB (12, 52, 61)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (28, 69, 135)" style="background-color: rgb(28, 69, 135);  " title="RGB (28, 69, 135)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (7, 55, 99)" style="background-color: rgb(7, 55, 99);  " title="RGB (7, 55, 99)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (32, 18, 77)" style="background-color: rgb(32, 18, 77);  " title="RGB (32, 18, 77)"></div></td>
+                    <td><div class="pick" hexcolor="RGB (76, 17, 48)" style="background-color: rgb(76, 17, 48);  " title="RGB (76, 17, 48)"></div></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="dialogFooter">
+        </div>
+    </div>
+</div>
+</div>
