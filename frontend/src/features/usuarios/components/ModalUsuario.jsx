@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
-
-const ROLES = [
-    { value: 'viewer',         label: 'Visualizador',    color: '#64748b' },
-    { value: 'abastecimiento', label: 'Abastecimiento',  color: '#2563eb' },
-    { value: 'finanzas',       label: 'Finanzas',        color: '#059669' },
-    { value: 'admin',          label: 'Administrador',   color: '#7c3aed' },
-];
+import { ROLES, getRol } from '../constants/roles';
+import LeyendaRoles from './LeyendaRoles';
 
 const AVATAR_COLORS = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#0891b2','#db2777'];
 
@@ -54,7 +49,7 @@ export default function ModalUsuario({ usuario, establecimientos = [], onSave, o
         ? form.first_name[0].toUpperCase()
         : (form.username?.[0] || '?').toUpperCase();
     const avatarBg = getAvatarColor(form.username);
-    const rolActual = ROLES.find(r => r.value === form.perfil.role) || ROLES[0];
+    const rolActual = getRol(form.perfil.role);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -86,8 +81,9 @@ export default function ModalUsuario({ usuario, establecimientos = [], onSave, o
     };
 
     return (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="modal-box mu-modal">
+        <>
+            <div className="drawer-backdrop" onClick={onClose} />
+            <div className="mu-drawer">
                 {/* Header con avatar */}
                 <div className="mu-header">
                     <div className="mu-header-avatar" style={{ background: avatarBg }}>
@@ -181,6 +177,7 @@ export default function ModalUsuario({ usuario, establecimientos = [], onSave, o
                                         <option key={r.value} value={r.value}>{r.label}</option>
                                     ))}
                                 </select>
+                                <LeyendaRoles variant="compact" rolActivo={form.perfil.role} />
                             </label>
                             <label className="form-field mu-field">
                                 <span>Establecimiento</span>
@@ -251,6 +248,6 @@ export default function ModalUsuario({ usuario, establecimientos = [], onSave, o
                     </div>
                 </form>
             </div>
-        </div>
+        </>
     );
 }

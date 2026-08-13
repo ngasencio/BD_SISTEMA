@@ -53,9 +53,9 @@ export default function MatrizEstadoBD({ data }) {
 
     return (
         <div className="card" style={{ padding: 0 }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
                 {Object.entries(ETIQUETA_ESTADO).map(([estado, etiqueta]) => (
-                    <div key={estado} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#475569' }}>
+                    <div key={estado} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--gob-gris5)' }}>
                         <span style={{
                             width: 12, height: 12, borderRadius: 3, display: 'inline-block',
                             background: COLOR_ESTADO[estado].bg, border: `1px solid ${COLOR_ESTADO[estado].border}`,
@@ -63,7 +63,7 @@ export default function MatrizEstadoBD({ data }) {
                         {etiqueta}
                     </div>
                 ))}
-                <div style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>
+                <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--gob-gris4)' }}>
                     El número en cada celda es la cantidad de filas cargadas para ese mes.
                 </div>
             </div>
@@ -73,16 +73,16 @@ export default function MatrizEstadoBD({ data }) {
                     <thead>
                         <tr>
                             <th style={{
-                                position: 'sticky', left: 0, background: '#f8fafc', zIndex: 1,
-                                textAlign: 'left', padding: '8px 12px', fontSize: 12.5, color: '#334155',
-                                borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap',
+                                position: 'sticky', left: 0, background: 'var(--gob-gris1)', zIndex: 1,
+                                textAlign: 'left', padding: '8px 12px', fontSize: 12.5, color: 'var(--gob-gris5)',
+                                borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap',
                             }}>
                                 Establecimiento
                             </th>
                             {periodos.map((p) => (
                                 <th key={p} style={{
-                                    padding: '8px 4px', fontSize: 11.5, color: '#64748b', fontWeight: 600,
-                                    borderBottom: '1px solid #e2e8f0', whiteSpace: 'nowrap',
+                                    padding: '8px 4px', fontSize: 11.5, color: 'var(--gob-gris4)', fontWeight: 600,
+                                    borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap',
                                 }}>
                                     {formatearPeriodo(p)}
                                 </th>
@@ -94,11 +94,11 @@ export default function MatrizEstadoBD({ data }) {
                             <tr key={est.codigo_ue}>
                                 <td style={{
                                     position: 'sticky', left: 0, background: '#fff', zIndex: 1,
-                                    padding: '8px 12px', fontSize: 13, color: '#1e293b', whiteSpace: 'nowrap',
-                                    borderBottom: '1px solid #f1f5f9',
+                                    padding: '8px 12px', fontSize: 13, color: 'var(--gob-gris5)', whiteSpace: 'nowrap',
+                                    borderBottom: '1px solid var(--gob-gris2)',
                                 }}>
                                     <div style={{ fontWeight: 600 }}>{est.nombre}</div>
-                                    <div style={{ fontSize: 11, color: '#94a3b8' }}>{est.codigo_ue}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--gob-gris4)' }}>{est.codigo_ue}</div>
                                 </td>
                                 {periodos.map((p) => (
                                     <Celda key={p} info={matriz[est.codigo_ue]?.[p] || { estado: 'rojo', n_filas: 0 }} />

@@ -47,7 +47,7 @@ from .models import (
     RevisionOCCorregible, GestionContrato,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
     PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
-    ConceptoJerarquia, SigfeAnexo1,
+    SigfeAnexo1,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
@@ -82,9 +82,39 @@ from .services import (
     calcular_compraagil_ahorro_stats,
     calcular_ahorro_licitaciones,
     calcular_gestion_licitaciones,
+    _construir_hier_lookup,
+    _resolver_hier,
 )
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Permisos por rol (PerfilUsuario.role)
+# =============================================================================
+
+def _tiene_rol(user, roles):
+    """True si el usuario es superuser o su PerfilUsuario.role está en `roles`."""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        return user.perfil.role in roles
+    except Exception:
+        return False
+
+
+class _IsAbastecimiento(BasePermission):
+    """Acceso al módulo Abastecimiento: admin, abastecimiento o general."""
+    def has_permission(self, request, view):
+        return _tiene_rol(request.user, {'admin', 'abastecimiento', 'general'})
+
+
+class _IsFinanzas(BasePermission):
+    """Acceso al módulo Finanzas: admin, finanzas o general."""
+    def has_permission(self, request, view):
+        return _tiene_rol(request.user, {'admin', 'finanzas', 'general'})
 
 
 # =============================================================================
@@ -222,7 +252,7 @@ class DevengoSigfeAnualViewSet(viewsets.ReadOnlyModelViewSet):
     (tabla api_sigfe_devengo_anual). Expone todos los campos del registro."""
     queryset = DevengoSigfeAnual.objects.all()
     serializer_class = DevengoSigfeAnualSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsFinanzas]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['codigo_ue', 'tipo_documento', 'concepto_presupuestario']
     search_fields = ['principal', 'concepto_presupuestario', 'tipo_documento', 'codigo_ue', 'numero_documento', 'titulo']
@@ -231,7 +261,7 @@ class DevengoSigfeAnualViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def devengo_sigfe_anual_raw_all(request):
     """Devuelve todo el histórico SIGFE sin paginación, para consumo del futuro
     reporte de Devengo (frontend). Filtros opcionales: ue, desde, hasta (fecha_documento)."""
@@ -260,7 +290,7 @@ def devengo_sigfe_anual_raw_all(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def devengo_sigfe_anual_stats(request):
     """KPIs agregados (deuda, top proveedores, por UE, por tipo doc, por
     concepto N1) sobre api_sigfe_devengo_anual — reemplazo directo de
@@ -294,7 +324,7 @@ class SigfeAnexo1ViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet de solo lectura sobre api_sigfe_anexo1."""
     queryset = SigfeAnexo1.objects.all()
     serializer_class = SigfeAnexo1Serializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsFinanzas]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['codigo_ue', 'anho', 'mes', 'concepto_presupuestario']
     search_fields = ['concepto_presupuestario', 'ruta_jerarquica', 'nombre_establecimiento']
@@ -303,7 +333,7 @@ class SigfeAnexo1ViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_estado_bd(request):
     """Matriz establecimiento x mes con semáforo verde/amarillo/rojo de
     cobertura de datos, para el tab 'Base de datos' de Anexo N°1."""
@@ -342,7 +372,7 @@ def _bool_query(valor, default=True):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_resumen(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -367,7 +397,7 @@ def sigfe_anexo1_resumen(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_alertas(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -386,7 +416,7 @@ def sigfe_anexo1_alertas(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_semaforo(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -404,7 +434,7 @@ def sigfe_anexo1_semaforo(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_burn_rate(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -423,7 +453,7 @@ def sigfe_anexo1_burn_rate(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_deuda_flotante(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -441,7 +471,7 @@ def sigfe_anexo1_deuda_flotante(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_tendencias(request):
     ue = request.GET.get('ue') or None
     subtitulo = request.GET.get('subtitulo') or None
@@ -461,7 +491,7 @@ def sigfe_anexo1_tendencias(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_financiero(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -483,7 +513,7 @@ def sigfe_anexo1_financiero(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_detallado(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -506,7 +536,7 @@ def sigfe_anexo1_detallado(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_detallado_pareto(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -529,7 +559,7 @@ def sigfe_anexo1_detallado_pareto(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_detallado_temporal(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -551,7 +581,7 @@ def sigfe_anexo1_detallado_temporal(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_detallado_control(request):
     ue = request.GET.get('ue') or None
     concepto = request.GET.get('concepto') or None
@@ -568,7 +598,7 @@ def sigfe_anexo1_detallado_control(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_reporte_pdf(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -589,7 +619,7 @@ def sigfe_anexo1_reporte_pdf(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_conciliacion_devengo(request):
     """Cruza Deuda Flotante (Anexo N°1, flujo del período) vs. Deuda
     Pendiente (Anexo N°3, stock actual) por Subtítulo — ver docstring de
@@ -708,7 +738,7 @@ def _ejecutar_actualizacion_anexo1(task_id: str, usuario: str, password: str,
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def iniciar_actualizacion_anexo1(request):
     """Inicia la descarga + consolidación de Anexo N°1 por establecimiento.
     Body: {usuario, password, fecha_desde, fecha_hasta, visible} (fechas YYYY-MM-DD;
@@ -750,7 +780,7 @@ def iniciar_actualizacion_anexo1(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def estado_actualizacion_anexo1(request, task_id):
     """Retorna el estado de una tarea de actualización de Anexo N°1."""
     tarea = _tareas_actualizacion_anexo1.get(task_id)
@@ -769,7 +799,7 @@ def estado_actualizacion_anexo1(request, task_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def cancelar_actualizacion_anexo1(request, task_id):
     """Cancela una tarea de actualización de Anexo N°1 en curso (mata el
     hilo real y, al desenrollar el try/finally del ETL, también cierra
@@ -777,37 +807,8 @@ def cancelar_actualizacion_anexo1(request, task_id):
     return _cancelar_tarea(_tareas_actualizacion_anexo1, task_id)
 
 
-_NIVELES_PREFIJO_HIER = (10, 7, 4, 2)
-
-
-def _construir_hier_lookup() -> dict:
-    """{codigo: [n1_desc, n2_desc, n3_desc, n4_desc, n5_desc, nivel]} — mismo
-    formato que el HIER_LOOKUP ya embebido en el HTML standalone, para poder
-    reutilizar exactamente la misma lógica de resolución (resolveHier)."""
-    lookup = {}
-    for c in ConceptoJerarquia.objects.all().values(
-        'codigo', 'n1_desc', 'n2_desc', 'n3_desc', 'n4_desc', 'n5_desc', 'nivel'
-    ):
-        lookup[c['codigo']] = [
-            c['n1_desc'], c['n2_desc'], c['n3_desc'], c['n4_desc'], c['n5_desc'], c['nivel'],
-        ]
-    return lookup
-
-
-def _resolver_hier(lookup: dict, codigo: str):
-    """Réplica de resolveHier() del HTML: match exacto, si no, prefijos
-    progresivos de largo 10/7/4/2 (N4→N1)."""
-    if codigo in lookup:
-        return lookup[codigo]
-    for largo in _NIVELES_PREFIJO_HIER:
-        prefijo = codigo[:largo]
-        if prefijo in lookup:
-            return lookup[prefijo]
-    return None
-
-
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def devengo_sigfe_anual_reporte_html(request):
     """Sirve el reporte HTML standalone (Anexo N°3 — árbol jerárquico +
     Chart.js) con D_SLIM pre-cargado desde api_sigfe_devengo_anual. Protegido
@@ -986,7 +987,7 @@ def _ejecutar_actualizacion_sigfe(task_id: str, usuario: str, password: str,
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def iniciar_actualizacion_sigfe(request):
     """Inicia la descarga + consolidación de devengos SIGFE por establecimiento.
     Body: {usuario, password, fecha_desde, fecha_hasta, visible} (fechas YYYY-MM-DD;
@@ -1028,7 +1029,7 @@ def iniciar_actualizacion_sigfe(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def estado_actualizacion_sigfe(request, task_id):
     """Retorna el estado de una tarea de actualización SIGFE."""
     tarea = _tareas_actualizacion_sigfe.get(task_id)
@@ -1047,7 +1048,7 @@ def estado_actualizacion_sigfe(request, task_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def cancelar_actualizacion_sigfe(request, task_id):
     """Cancela una tarea de actualización SIGFE en curso (mata el hilo real
     y, al desenrollar el try/finally del ETL, también cierra Chrome)."""
@@ -1200,7 +1201,7 @@ class ProveedorViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
     """Lista de proveedores para el dropdown del formulario de boletas."""
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
     filter_backends = [drf_filters.SearchFilter]
     search_fields = ['nombre', 'rut']
 
@@ -1209,7 +1210,7 @@ class CompradorViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
     """Lista de compradores para el dropdown del formulario de boletas."""
     queryset = Comprador.objects.all()
     serializer_class = CompradorSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
     filter_backends = [drf_filters.SearchFilter]
     search_fields = ['nombre']
 
@@ -1218,7 +1219,7 @@ class BoletaGarantiaViewSet(viewsets.ModelViewSet):
     """CRUD completo de Boletas de Garantía con auditoría en modificación y eliminación."""
     queryset = BoletaGarantia.objects.select_related('proveedor', 'comprador', 'creado_por').all()
     serializer_class = BoletaGarantiaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['tipo_documento', 'formato_documento', 'banco', 'proveedor', 'comprador']
@@ -1290,7 +1291,7 @@ class BoletaGarantiaAuditViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSe
     """Historial de auditoría de boletas (solo lectura)."""
     queryset = BoletaGarantiaAudit.objects.select_related('eliminado_por').all()
     serializer_class = BoletaGarantiaAuditSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
     filter_backends = [drf_filters.OrderingFilter]
     ordering_fields = ['eliminado_en', 'boleta_id']
     ordering = ['-eliminado_en']
@@ -1525,7 +1526,7 @@ class RevisionOCCorregibleViewSet(viewsets.ModelViewSet):
     """CRUD de revisiones de OC corregibles. revisado_por se asigna del JWT."""
     queryset = RevisionOCCorregible.objects.all()
     serializer_class = RevisionOCCorregibleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
     pagination_class = None
     filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
     filterset_fields = ['codigo_oc', 'resultado']
@@ -3019,7 +3020,7 @@ def _ejecutar_actualizacion_contratos(task_id: str):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def iniciar_actualizacion_contratos(request):
     """Inicia la descarga (Selenium) y carga de contratos SSO desde Mercado Público."""
     for tarea in _tareas_actualizacion_contratos.values():
@@ -3047,7 +3048,7 @@ def iniciar_actualizacion_contratos(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def estado_actualizacion_contratos(request, task_id):
     """Retorna el estado de una tarea de carga de contratos."""
     tarea = _tareas_actualizacion_contratos.get(task_id)
@@ -3068,14 +3069,14 @@ def estado_actualizacion_contratos(request, task_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def cancelar_actualizacion_contratos(request, task_id):
     """Cancela una tarea de carga de contratos en curso."""
     return _cancelar_tarea(_tareas_actualizacion_contratos, task_id)
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def contratos_stats_view(request):
     cache_key = 'contratos_stats_v1'
     if cached := cache.get(cache_key):
@@ -3158,7 +3159,7 @@ def contratos_stats_view(request):
 class GestionContratoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = GestionContrato.objects.all()
     serializer_class = GestionContratoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ["estado_contrato", "categoria_contrato", "tipo_contrato", "unidad_requirente"]
     search_fields = ["nombre_contrato", "numero_contrato", "nombre_organismo"]
@@ -3168,7 +3169,7 @@ class GestionContratoViewSet(viewsets.ReadOnlyModelViewSet):
 # ── Gestión Contratos — vistas analíticas ────────────────────────────────────
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def contratos_evaluaciones_view(request):
     from .services import calcular_contratos_evaluaciones
     cache_key = "contratos_evaluaciones_v1"
@@ -3180,7 +3181,7 @@ def contratos_evaluaciones_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def contratos_financiero_view(request):
     from .services import calcular_contratos_financiero
     filtros = {
@@ -3199,7 +3200,7 @@ def contratos_financiero_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def contratos_oc_detalle_view(request):
     from .services import calcular_contratos_oc_detalle
     id_licitacion_oc = request.GET.get("id_licitacion_oc", "").strip()
@@ -3214,7 +3215,7 @@ def contratos_oc_detalle_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def contratos_plazos_view(request):
     from .services import calcular_contratos_plazos
     filtros = {
@@ -3231,7 +3232,7 @@ def contratos_plazos_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def contratos_pac_view(request):
     from .services import calcular_contratos_pac
     filtros = {
@@ -3248,7 +3249,7 @@ def contratos_pac_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def contratos_pac_detalle_oc_view(request):
     from .services import calcular_contratos_pac_detalle_oc
     filtros = {
@@ -3414,7 +3415,7 @@ def _ejecutar_actualizacion_formularios(task_id: str, rut: str, dv: str, clave: 
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def iniciar_actualizacion_formularios(request):
     """Inicia la descarga y carga de Formularios FSC desde el Panel SS Osorno."""
     for tarea in _tareas_actualizacion_formularios.values():
@@ -3446,7 +3447,7 @@ def iniciar_actualizacion_formularios(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def estado_actualizacion_formularios(request, task_id):
     """Retorna el estado de una tarea de actualización de Formularios FSC."""
     tarea = _tareas_actualizacion_formularios.get(task_id)
@@ -3466,14 +3467,14 @@ def estado_actualizacion_formularios(request, task_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def cancelar_actualizacion_formularios(request, task_id):
     """Cancela una tarea de actualización de Formularios FSC en curso."""
     return _cancelar_tarea(_tareas_actualizacion_formularios, task_id)
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def formularios_alertas_view(request):
     """Formularios FSC con alerta de demora — estados activos con días desde solicitud calculados."""
     from datetime import date, datetime
@@ -3528,7 +3529,7 @@ def formularios_alertas_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def formularios_unificacion_view(request):
     """Análisis de compras conjuntas: agrupa FSC en camino (ASDA→DC) por item_presupuestario."""
     anho = request.GET.get('anho', '').strip()
@@ -3543,7 +3544,7 @@ def formularios_unificacion_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def formularios_historial_view(request):
     """Historial de productos solicitados por unidad — excluye R y P."""
     from .services import calcular_formularios_historial
@@ -3560,7 +3561,7 @@ def formularios_historial_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def formularios_stats_view(request):
     from .services import calcular_formularios_stats
     anho = request.GET.get("anho", "").strip()
@@ -3574,7 +3575,7 @@ def formularios_stats_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def formularios_flujo_view(request):
     """Pipeline de bandejas de visación (P→AC) + rechazados, para el sub-tab 'Flujo de Visación'."""
     from .services import calcular_formularios_flujo
@@ -3605,7 +3606,7 @@ def _mapa_unidad_requirente_organigrama_cacheado():
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
 def formularios_organigrama_view(request):
     """Árbol Subdirección → Departamento para poblar el filtro en cascada de la
     tabla 'Solicitudes FSC' (ver calcular_formularios_organigrama en services.py)."""
@@ -3629,7 +3630,7 @@ class FormularioFSCFilter(django_filters.FilterSet):
 class FormularioFSCViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = FormularioFSC.objects.all()
     serializer_class = FormularioFSCSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_class = FormularioFSCFilter
     search_fields = [
@@ -3674,7 +3675,7 @@ class FormularioFSCViewSet(viewsets.ReadOnlyModelViewSet):
 class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = FormularioFSCDerivado.objects.select_related('sso_departamento')
     serializer_class = FormularioFSCDerivadoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ["estado_compra", "anho", "unidad_requirente", "comprador", "dentro_fuera_pac"]
     search_fields = [
@@ -3740,7 +3741,7 @@ class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
 class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = FormularioFSCProducto.objects.all()
     serializer_class = FormularioFSCProductoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ["anho", "folio", "categoria", "tipo_formulario"]
     search_fields = ["producto", "descripcion"]
@@ -3754,14 +3755,7 @@ class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):
 class _IsAdmin(BasePermission):
     """Solo usuarios con role='admin' o is_superuser pueden acceder."""
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if request.user.is_superuser:
-            return True
-        try:
-            return request.user.perfil.role == 'admin'
-        except Exception:
-            return False
+        return _tiene_rol(request.user, {'admin'})
 
 
 class UsuarioViewSet(viewsets.ModelViewSet):

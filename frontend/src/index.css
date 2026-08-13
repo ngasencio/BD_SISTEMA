@@ -553,81 +553,10 @@ button {
   width: 100%;
 }
 
-/* ── Page title ── */
-.page-header {
-  margin-bottom: 22px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid var(--gob-gris2);
-}
-
-.page-title {
-  font-size: 21px;
-  font-weight: 700;
-  color: var(--gob-gris5);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  letter-spacing: -0.025em;
-}
-
-.page-title .page-title-icon {
-  font-size: 20px;
-}
-
-.page-subtitle {
-  font-size: 12.5px;
-  color: var(--gob-gris4);
-  margin-top: 5px;
-}
-
-.page-meta-tags {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-
-/* ── TABS ── */
-.tabs-bar {
-  display: flex;
-  gap: 0;
-  border-bottom: 2px solid var(--gob-gris2);
-  margin-bottom: 24px;
-  overflow-x: auto;
-}
-
-.tabs-bar::-webkit-scrollbar {
-  height: 0;
-}
-
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 18px;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--gob-gris4);
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  cursor: pointer;
-  white-space: nowrap;
-  font-family: var(--font-body);
-  transition: all 0.15s;
-}
-
-.tab-btn:hover {
-  color: var(--gob-azul-light);
-  background: rgba(26, 61, 113, 0.04);
-}
-
-.tab-btn.active {
-  color: var(--gob-azul);
-  border-bottom-color: var(--gob-azul);
-  background: rgba(26, 61, 113, 0.03);
-}
+/* .page-header/.page-title/.page-subtitle/.page-meta-tags/.tabs-bar/.tab-btn
+   se definen una sola vez, más abajo, junto al resto de tokens "gob-*"
+   (kpi-grid, filter-zone, card) — antes había una segunda definición acá
+   arriba que quedaba muerta por orden de cascada (code review 2026-08-13). */
 
 .tab-view {
   display: none;
@@ -1226,52 +1155,10 @@ select.filter-input {
   margin-top: 2px;
 }
 
-/* ── PROGRESS ── */
-.progress-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.progress-label {
-  font-size: 12px;
-  color: var(--gob-gris5);
-  min-width: 170px;
-}
-
-.progress-track {
-  flex: 1;
-  height: 8px;
-  background: var(--gob-gris2);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: 4px;
-  background: var(--gob-azul);
-  transition: width 1s ease;
-}
-
-.progress-fill.celeste {
-  background: #1a8c96;
-}
-
-.progress-fill.amarillo {
-  background: var(--gob-amarillo);
-}
-
-.progress-val {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--gob-gris5);
-  min-width: 40px;
-  text-align: right;
-  font-weight: 600;
-}
-
+/* .progress-row/.progress-label/.progress-track/.progress-fill/.progress-val
+   se definen una sola vez, más abajo — antes había una segunda definición acá
+   arriba que quedaba muerta por orden de cascada (code review 2026-08-13,
+   mismo patrón que el bug de .page-header/.tab-btn). */
 /* ── CATEGORY TREE ── */
 .cat-l1 {
   margin-bottom: 12px;
@@ -1655,10 +1542,14 @@ canvas {
   transform: translateX(-50%);
   background: var(--gob-gris5);
   color: #fff;
-  border-radius: 4px;
-  padding: 5px 10px;
+  border-radius: 6px;
+  padding: 7px 11px;
   font-size: 11px;
-  white-space: nowrap;
+  line-height: 1.45;
+  white-space: normal;
+  width: max-content;
+  max-width: 240px;
+  text-align: center;
   z-index: 999;
   pointer-events: none;
   box-shadow: var(--shadow-md);
@@ -2059,6 +1950,17 @@ canvas {
   color: var(--gob-verde);
 }
 
+/* Variante de encabezado centrado — solo donde se pide explícitamente
+   (ej. tablas jerárquicas con columnas numéricas puras), no cambia el
+   default de .table-gob (alineado a la izquierda) usado en el resto. */
+.table-gob.th-center th {
+  text-align: center;
+}
+
+.table-gob.th-center th:first-child {
+  text-align: left;
+}
+
 /* Alerts */
 .alert {
   display: flex;
@@ -2124,6 +2026,178 @@ canvas {
 .alert-danger .alert-title {
   color: var(--gob-rojo);
   font-weight: 700;
+}
+
+/* ── HIERARCHY TREE (árbol jerárquico multinivel — Anexo N°1 Detallado) ── */
+.tree-node {
+  border-left: 2px solid var(--gob-gris2);
+}
+
+.tree-node.n1 { border-left-color: var(--gob-azul); margin-left: 0; }
+.tree-node.n2 { border-left-color: var(--gob-azul-light); margin-left: 16px; }
+.tree-node.n3 { border-left-color: var(--gob-amarillo); margin-left: 32px; }
+.tree-node.n4 { border-left-color: #e67e22; margin-left: 48px; }
+.tree-node.n5 { border-left-color: var(--gob-verde); margin-left: 64px; }
+
+.tree-hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  transition: background .12s;
+  user-select: none;
+}
+
+.tree-hd:hover {
+  background: var(--gob-celeste-lt);
+}
+
+.tree-hd.active {
+  background: var(--gob-celeste-lt);
+  border-right: 3px solid var(--gob-azul);
+}
+
+.tree-expand {
+  font-size: 10px;
+  color: var(--gob-gris4);
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  transition: transform .2s;
+  display: inline-block;
+}
+
+.tree-expand.open {
+  transform: rotate(90deg);
+  color: var(--gob-azul);
+}
+
+.tree-code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--gob-azul);
+  background: var(--gob-celeste-lt);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.tree-name {
+  font-size: 12px;
+  color: var(--gob-gris5);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-amt {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--gob-gris5);
+  flex-shrink: 0;
+  min-width: 100px;
+  text-align: right;
+}
+
+.tree-detail {
+  background: #fff;
+  border: 1px solid var(--gob-gris2);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin: 8px 0 8px 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.tree-mini-kpi {
+  text-align: center;
+  padding: 8px;
+  background: var(--gob-gris1);
+  border-radius: var(--radius);
+  border: 1px solid var(--gob-gris2);
+}
+
+.tree-mini-kpi .val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gob-gris5);
+}
+
+.tree-mini-kpi .lbl {
+  font-size: 9.5px;
+  color: var(--gob-gris4);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  margin-top: 2px;
+}
+
+/* ── BREADCRUMB (navegación del árbol) ── */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.breadcrumb-item {
+  font-size: 11.5px;
+  color: var(--gob-azul);
+  cursor: pointer;
+  padding: 3px 9px;
+  border-radius: var(--radius);
+  transition: background .12s;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+}
+
+.breadcrumb-item:hover {
+  background: var(--gob-celeste-lt);
+}
+
+.breadcrumb-item.active {
+  font-weight: 700;
+  color: var(--gob-gris5);
+  cursor: default;
+  background: var(--gob-gris1);
+}
+
+.breadcrumb-sep {
+  color: var(--gob-gris3);
+  font-size: 11px;
+}
+
+/* ── ANALYSIS CONTEXT (chip "Analizando: X" — drill-down de gráficos) ── */
+.analysis-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: var(--gob-celeste-lt);
+  border: 1px solid var(--gob-celeste);
+  color: var(--gob-azul-dark);
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.analysis-context button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--gob-azul);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
 }
 
 /* Empty state */
@@ -5795,6 +5869,33 @@ select.boleta-input {
   overflow: hidden;
 }
 
+/* Drawer lateral (reemplaza el modal centrado para editar/crear usuario) */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .12);
+  z-index: 1299;
+}
+.mu-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 680px;
+  max-width: 92vw;
+  z-index: 1300;
+  background: #fff;
+  box-shadow: -8px 0 40px rgba(0, 0, 0, .18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: mu-drawer-in .22s ease-out;
+}
+@keyframes mu-drawer-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
 /* Header */
 .mu-header {
   display: flex;
@@ -5849,7 +5950,50 @@ select.boleta-input {
 .mu-close:hover { background: rgba(255,255,255,0.3); }
 
 /* Body */
-.mu-body { padding: 20px 24px 4px; max-height: 65vh; overflow-y: auto; }
+.mu-body { padding: 20px 24px 4px; flex: 1; overflow-y: auto; }
+
+/* Leyenda de roles */
+.lr-compact {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-left: 3px solid #94a3b8;
+  border-radius: 6px;
+}
+.lr-compact-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+.lr-compact-label { font-size: 12.5px; font-weight: 700; }
+.lr-compact-desc { font-size: 12px; color: #64748b; margin-top: 2px; line-height: 1.4; }
+
+.lr-panel { padding: 18px 20px; margin-bottom: 16px; }
+.lr-panel-title { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 12px; }
+.lr-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.lr-card {
+  border: 1px solid #e2e8f0;
+  border-top: 3px solid #94a3b8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #fff;
+}
+.lr-card-header { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+.lr-card-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.lr-card-label { font-size: 13px; font-weight: 700; }
+.lr-card-desc { font-size: 11.5px; color: #64748b; line-height: 1.4; margin-bottom: 8px; }
+.lr-card-modulos { display: flex; flex-wrap: wrap; gap: 5px; }
+.lr-chip {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
 .mu-section-label {
   font-size: 11px;
   font-weight: 700;
@@ -5928,6 +6072,26 @@ select.boleta-input {
   transition: left 0.2s;
 }
 .mu-toggle-on .mu-toggle-thumb { left: 23px; }
+.mu-toggle-disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
+
+/* Toggle rápido de estado en la tabla de usuarios */
+.u-estado-toggle { display: flex; align-items: center; gap: 8px; }
+.u-estado-toggle .mu-toggle { width: 34px; height: 18px; border-radius: 9px; }
+.u-estado-toggle .mu-toggle-thumb { width: 12px; height: 12px; top: 3px; left: 3px; }
+.u-estado-toggle .mu-toggle-on .mu-toggle-thumb { left: 19px; }
+
+/* Barra de acción masiva (selección múltiple en Gestión de Usuarios) */
+.u-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  margin-bottom: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+.u-bulk-count { font-size: 13px; font-weight: 700; color: #1d4ed8; }
+.u-bulk-bar select { margin-left: auto; }
 
 /* Footer */
 .mu-footer {

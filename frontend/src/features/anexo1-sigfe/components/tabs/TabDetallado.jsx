@@ -24,7 +24,7 @@ export default function TabDetallado({ filtros, refreshKey }) {
 
     return (
         <div>
-            <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div className="tabs-bar" style={{ marginBottom: 16 }}>
                 {SUBTABS.map((t) => (
                     <button
                         key={t.id}
@@ -42,7 +42,8 @@ export default function TabDetallado({ filtros, refreshKey }) {
                         <input
                             type="text" placeholder="Buscar concepto…" value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: 12.5, width: 280 }}
+                            className="filter-input"
+                            style={{ width: 280 }}
                         />
                     </div>
                     {loading && !data && <div className="loading-spinner">Cargando Análisis Detallado…</div>}

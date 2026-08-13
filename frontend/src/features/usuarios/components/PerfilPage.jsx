@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../store/authStore';
 import { getMe, updateMe } from '../api/usuariosApi';
-
-const ROLE_LABELS = {
-    admin:          'Administrador',
-    abastecimiento: 'Abastecimiento',
-    finanzas:       'Finanzas',
-    viewer:         'Visualizador',
-};
+import { ROLE_LABELS } from '../constants/roles';
 
 export default function PerfilPage() {
     const { user: jwtUser } = useAuth();

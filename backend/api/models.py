@@ -1143,6 +1143,7 @@ class PerfilUsuario(models.Model):
         ('admin',           'Administrador'),
         ('abastecimiento',  'Abastecimiento'),
         ('finanzas',        'Finanzas'),
+        ('general',         'General (Todos los módulos)'),
         ('viewer',          'Visualizador'),
     ]
 

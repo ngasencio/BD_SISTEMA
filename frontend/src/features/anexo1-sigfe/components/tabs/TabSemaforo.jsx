@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { KpiCard } from '../../../abastecimiento/components/KpiCard';
 import { useAnexo1Fetch } from '../../hooks/useAnexo1Fetch';
@@ -14,6 +14,7 @@ const COLOR_ESTADO = { verde: '#16a34a', amarillo: '#ca8a04', rojo: '#dc2626' };
 const ICONO_ESTADO = { verde: '🟢', amarillo: '🟡', rojo: '🔴' };
 
 export default function TabSemaforo({ filtros, refreshKey }) {
+    const [seleccionado, setSeleccionado] = useState(null);
     const { data, loading, error } = useAnexo1Fetch(
         fetchSemaforoAnexo1, paramsBase(filtros), refreshKey, 'No se pudo cargar el Semáforo de Cierre.',
     );
@@ -42,22 +43,34 @@ export default function TabSemaforo({ filtros, refreshKey }) {
         return <div className="error-message">No hay datos cargados para el año seleccionado.</div>;
     }
 
+    const onClickBarra = (evt, els) => {
+        if (!els.length) return;
+        const codigo = data.subtitulos[els[0].index]?.codigo;
+        setSeleccionado((prev) => (prev === codigo ? null : codigo));
+    };
+    const cursorPointer = (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; };
+    const seleccionLabel = seleccionado
+        ? (() => { const s = data.subtitulos.find((x) => x.codigo === seleccionado); return s ? `${s.codigo} ${s.nombre}` : seleccionado; })()
+        : null;
+
     return (
         <div>
             <div className="kpi-grid" style={{ marginBottom: 20 }}>
-                <KpiCard title="En Ruta" value={data.contadores.en_ruta} icon="🟢" colorVar="--color-success" />
-                <KpiCard title="En Atención" value={data.contadores.en_atencion} icon="🟡" colorVar="--color-warning" />
-                <KpiCard title="En Riesgo" value={data.contadores.en_riesgo} icon="🔴" colorVar="--color-danger" />
-                <KpiCard title="Meses Restantes" value={data.meses_restantes} icon="📅" colorVar="--color-primary" />
+                <KpiCard title="En Ruta" value={data.contadores.en_ruta} icon="🟢" colorVar="--color-success" tip="Subtítulos con proyección de ejecución a diciembre ≥90% de la Ley." />
+                <KpiCard title="En Atención" value={data.contadores.en_atencion} icon="🟡" colorVar="--color-warning" tip="Subtítulos con proyección de ejecución entre 70% y 90% de la Ley." />
+                <KpiCard title="En Riesgo" value={data.contadores.en_riesgo} icon="🔴" colorVar="--color-danger" tip="Subtítulos con proyección de ejecución <70% de la Ley — riesgo de no ejecutar el presupuesto." />
+                <KpiCard title="Meses Restantes" value={data.meses_restantes} icon="📅" colorVar="--color-primary" tip="Meses que quedan del año calendario para ejecutar el saldo de la Ley." />
             </div>
 
             {chartData && (
                 <div className="card" style={{ padding: 16, height: 340, marginBottom: 20 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 10 }}>Ley vs. Proyección a Diciembre por Subtítulo</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gob-gris5)', marginBottom: 10 }} data-tip="Click en una barra para resaltar ese subtítulo en la tabla de abajo.">Ley vs. Proyección a Diciembre por Subtítulo</div>
                     <Bar
                         data={chartData}
                         options={{
                             responsive: true, maintainAspectRatio: false,
+                            onClick: onClickBarra,
+                            onHover: cursorPointer,
                             plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${fmtM(c.parsed.y * 1e6)}` } } },
                             scales: { x: { ticks: { font: { size: 10 }, maxRotation: 45 } }, y: { ticks: { callback: (v) => `M$${v}` } } },
                         }}
@@ -65,27 +78,40 @@ export default function TabSemaforo({ filtros, refreshKey }) {
                 </div>
             )}
 
+            {seleccionLabel && (
+                <div className="analysis-context">
+                    🔎 Analizando: {seleccionLabel}
+                    <button onClick={() => setSeleccionado(null)} title="Limpiar selección">✕</button>
+                </div>
+            )}
+
             <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <table className="table-gob">
                     <thead>
-                        <tr style={{ background: '#f8fafc' }}>
-                            {['', 'Subtítulo', 'Ley', 'Dev. Acumulado', '% Ejec. Actual', 'Proyección Dic.', '% Ejec. Proyectada', 'Brecha', 'Gasto Mensual Necesario'].map((h) => (
-                                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11.5, color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
-                            ))}
+                        <tr>
+                            <th></th>
+                            <th>Subtítulo</th>
+                            <th>Ley</th>
+                            <th>Dev. Acumulado</th>
+                            <th data-tip="Devengado acumulado sobre la Ley del año completo, a la fecha.">% Ejec. Actual</th>
+                            <th>Proyección Dic.</th>
+                            <th data-tip="Devengado proyectado a diciembre sobre la Ley — define el color del semáforo.">% Ejec. Proyectada</th>
+                            <th data-tip="Diferencia entre la Ley y la proyección a diciembre.">Brecha</th>
+                            <th data-tip="Gasto mensual promedio necesario en lo que resta del año para ejecutar el 100% de la Ley.">Gasto Mensual Necesario</th>
                         </tr>
                     </thead>
                     <tbody>
                         {data.subtitulos.map((s) => (
-                            <tr key={s.codigo} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <td style={{ padding: '9px 12px', fontSize: 14 }}>{ICONO_ESTADO[s.estado]}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5 }}>{s.codigo} {s.nombre}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right' }}>{fmtMoney(s.ley)}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right' }}>{fmtMoney(s.devengado_acumulado)}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right' }}>{fmtPct(s.pct_ejecucion_actual)}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right' }}>{fmtMoney(s.proyeccion_diciembre)}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right', fontWeight: 700, color: COLOR_ESTADO[s.estado] }}>{fmtPct(s.pct_ejecucion_proyectado)}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right' }}>{fmtMoney(s.brecha)}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right' }}>{s.gasto_mensual_necesario != null ? fmtMoney(s.gasto_mensual_necesario) : '—'}</td>
+                            <tr key={s.codigo} style={s.codigo === seleccionado ? { background: 'var(--gob-celeste-lt)' } : undefined}>
+                                <td style={{ fontSize: 14 }}>{ICONO_ESTADO[s.estado]}</td>
+                                <td>{s.codigo} {s.nombre}</td>
+                                <td className="td-monto">{fmtMoney(s.ley)}</td>
+                                <td className="td-monto">{fmtMoney(s.devengado_acumulado)}</td>
+                                <td className="td-monto">{fmtPct(s.pct_ejecucion_actual)}</td>
+                                <td className="td-monto">{fmtMoney(s.proyeccion_diciembre)}</td>
+                                <td className="td-monto" style={{ fontWeight: 700, color: COLOR_ESTADO[s.estado] }}>{fmtPct(s.pct_ejecucion_proyectado)}</td>
+                                <td className="td-monto">{fmtMoney(s.brecha)}</td>
+                                <td className="td-monto">{s.gasto_mensual_necesario != null ? fmtMoney(s.gasto_mensual_necesario) : '—'}</td>
                             </tr>
                         ))}
                     </tbody>

@@ -53,16 +53,16 @@ export default function SubTabTemporal({ filtros }) {
         <div>
             <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <div>
-                    <label style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Vista</label>
-                    <select value={vista} onChange={(e) => setVista(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: 12.5 }}>
+                    <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gob-gris4)', display: 'block', marginBottom: 4 }}>Vista</label>
+                    <select value={vista} onChange={(e) => setVista(e.target.value)} style={{ padding: '7px 10px', border: '1px solid var(--gob-gris3)', borderRadius: 7, fontSize: 12.5 }}>
                         <option value="apilado">Composición apilada (año)</option>
                         <option value="concepto">Por concepto (todos los años)</option>
                     </select>
                 </div>
                 {vista === 'concepto' && (
                     <div>
-                        <label style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Concepto</label>
-                        <select value={concepto} onChange={(e) => setConcepto(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: 12.5, minWidth: 260 }}>
+                        <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gob-gris4)', display: 'block', marginBottom: 4 }}>Concepto</label>
+                        <select value={concepto} onChange={(e) => setConcepto(e.target.value)} style={{ padding: '7px 10px', border: '1px solid var(--gob-gris3)', borderRadius: 7, fontSize: 12.5, minWidth: 260 }}>
                             <option value="">Seleccionar concepto…</option>
                             {data.conceptos_disponibles.map((c) => (
                                 <option key={c.concepto} value={c.concepto}>{c.codigo} {c.nombre}</option>
@@ -74,7 +74,7 @@ export default function SubTabTemporal({ filtros }) {
 
             {chartApilado && (
                 <div className="card" style={{ padding: 16, height: 400 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 10 }}>Composición del Devengado por Subtítulo — {data.anho}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gob-gris5)', marginBottom: 10 }} data-tip="Barras apiladas: cuánto aportó cada subtítulo al Devengado total mes a mes, dentro del año seleccionado.">Composición del Devengado por Subtítulo — {data.anho}</div>
                     <Bar
                         data={chartApilado}
                         options={{
@@ -87,12 +87,12 @@ export default function SubTabTemporal({ filtros }) {
             )}
 
             {vista === 'concepto' && !concepto && (
-                <div className="card" style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Selecciona un concepto para ver su evolución histórica.</div>
+                <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--gob-gris4)' }}>Selecciona un concepto para ver su evolución histórica.</div>
             )}
 
             {chartConcepto && (
                 <div className="card" style={{ padding: 16, height: 400 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 10 }}>Evolución Mensual — comparación interanual</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gob-gris5)', marginBottom: 10 }} data-tip="Evolución mensual de un concepto específico, comparando todos los años con datos disponibles.">Evolución Mensual — comparación interanual</div>
                     <Line
                         data={chartConcepto}
                         options={{

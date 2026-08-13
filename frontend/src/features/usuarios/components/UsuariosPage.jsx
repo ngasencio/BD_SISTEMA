@@ -1,19 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useUsuarios } from '../hooks/useUsuarios';
+import { useAuth } from '../../../store/authStore';
+import { ROLES, ROLE_LABELS, ROLE_COLORS } from '../constants/roles';
 import ModalUsuario from './ModalUsuario';
+import LeyendaRoles from './LeyendaRoles';
 
-const ROLE_LABELS = {
-    admin:          'Administrador',
-    abastecimiento: 'Abastecimiento',
-    finanzas:       'Finanzas',
-    viewer:         'Visualizador',
-};
-const ROLE_COLORS = {
-    admin:          { bg: '#ede9fe', text: '#6d28d9', dot: '#7c3aed' },
-    abastecimiento: { bg: '#dbeafe', text: '#1d4ed8', dot: '#2563eb' },
-    finanzas:       { bg: '#d1fae5', text: '#065f46', dot: '#059669' },
-    viewer:         { bg: '#f1f5f9', text: '#475569', dot: '#94a3b8' },
-};
 const AVATAR_COLORS = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#0891b2','#7c3aed','#db2777'];
 
 const PAGE_SIZE = 20;
@@ -51,22 +42,59 @@ function KpiCard({ icon, label, value, color }) {
 }
 
 export default function UsuariosPage() {
+    const { user: usuarioActual } = useAuth();
     const [filtros, setFiltros]         = useState({ search: '', role: '', activo: '' });
     const [page, setPage]               = useState(1);
     const [modal, setModal]             = useState(null);
     const [confirmar, setConfirmar]     = useState(null);
     const [errorAccion, setErrorAccion] = useState(null);
     const [deletingId, setDeletingId]   = useState(null);
+    const [seleccionados, setSeleccionados] = useState(() => new Set());
+    const [rolMasivo, setRolMasivo]         = useState('');
+    const [aplicandoMasivo, setAplicandoMasivo] = useState(false);
+    const [resultadoMasivo, setResultadoMasivo] = useState(null);
 
     const params = useMemo(
         () => Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== '')),
         [filtros]
     );
-    const { usuarios, establecimientos, loading, error, crear, actualizar, eliminar } =
+    const { usuarios, establecimientos, loading, error, crear, actualizar, eliminar, actualizarRolMasivo } =
         useUsuarios(params);
 
     // Reset página cuando cambian filtros
     const setFiltro = (k, v) => { setFiltros(f => ({ ...f, [k]: v })); setPage(1); };
+
+    const toggleSeleccionado = (id) => {
+        setSeleccionados(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    };
+    const todosSeleccionados = usuarios.length > 0 && seleccionados.size === usuarios.length;
+    const toggleSeleccionarTodo = () => {
+        setSeleccionados(todosSeleccionados ? new Set() : new Set(usuarios.map(u => u.id)));
+    };
+    const limpiarSeleccion = () => { setSeleccionados(new Set()); setRolMasivo(''); setResultadoMasivo(null); };
+
+    const handleAplicarRolMasivo = async () => {
+        if (!rolMasivo || seleccionados.size === 0) return;
+        setAplicandoMasivo(true);
+        setResultadoMasivo(null);
+        try {
+            const { ok, fallidos } = await actualizarRolMasivo([...seleccionados], rolMasivo);
+            setResultadoMasivo({ ok, fallidos });
+            setSeleccionados(new Set());
+            setRolMasivo('');
+        } finally {
+            setAplicandoMasivo(false);
+        }
+    };
+
+    const handleToggleActivo = async (u) => {
+        if (u.id === usuarioActual?.user_id) return;
+        await actualizar(u.id, { is_active: !u.is_active });
+    };
 
     // KPIs calculados sobre todos los usuarios cargados
     const kpis = useMemo(() => ({
@@ -129,6 +157,33 @@ export default function UsuariosPage() {
                 <KpiCard icon="👁" label="Visualizadores"  value={kpis.viewers} color="#64748b" />
             </div>
 
+            {/* Leyenda de roles */}
+            <LeyendaRoles variant="panel" />
+
+            {/* Barra de acción masiva */}
+            {seleccionados.size > 0 && (
+                <div className="u-bulk-bar card">
+                    <span className="u-bulk-count">{seleccionados.size} usuario{seleccionados.size !== 1 ? 's' : ''} seleccionado{seleccionados.size !== 1 ? 's' : ''}</span>
+                    <select value={rolMasivo} onChange={e => setRolMasivo(e.target.value)}>
+                        <option value="">Asignar rol…</option>
+                        {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                    <button className="btn-primary" disabled={!rolMasivo || aplicandoMasivo} onClick={handleAplicarRolMasivo}>
+                        {aplicandoMasivo ? 'Aplicando…' : 'Aplicar'}
+                    </button>
+                    <button className="btn-secondary" disabled={aplicandoMasivo} onClick={limpiarSeleccion}>
+                        Cancelar selección
+                    </button>
+                </div>
+            )}
+            {resultadoMasivo && (
+                <div className={`error-message`} style={{ background: resultadoMasivo.fallidos ? '#fef2f2' : '#f0fdf4', color: resultadoMasivo.fallidos ? '#dc2626' : '#16a34a', marginBottom: 12 }}>
+                    {resultadoMasivo.ok} usuario{resultadoMasivo.ok !== 1 ? 's' : ''} actualizado{resultadoMasivo.ok !== 1 ? 's' : ''}
+                    {resultadoMasivo.fallidos ? ` — ${resultadoMasivo.fallidos} con error` : ''}.
+                    <button onClick={() => setResultadoMasivo(null)} style={{ marginLeft: 10, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', color: 'inherit' }}>cerrar</button>
+                </div>
+            )}
+
             {/* Toolbar */}
             <div className="u-toolbar card">
                 <div className="u-toolbar-search">
@@ -179,6 +234,14 @@ export default function UsuariosPage() {
                             <table className="u-table">
                                 <thead>
                                     <tr>
+                                        <th style={{ width: 36 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={todosSeleccionados}
+                                                onChange={toggleSeleccionarTodo}
+                                                title="Seleccionar todos los usuarios filtrados"
+                                            />
+                                        </th>
                                         <th>Usuario</th>
                                         <th>Nombre</th>
                                         <th>Rol</th>
@@ -191,6 +254,13 @@ export default function UsuariosPage() {
                                 <tbody>
                                     {paginated.map(u => (
                                         <tr key={u.id} className={!u.is_active ? 'u-row-inactive' : ''}>
+                                            <td>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={seleccionados.has(u.id)}
+                                                    onChange={() => toggleSeleccionado(u.id)}
+                                                />
+                                            </td>
                                             <td>
                                                 <div className="u-user-cell">
                                                     <div
@@ -222,10 +292,22 @@ export default function UsuariosPage() {
                                                     : <span className="u-nd">—</span>}
                                             </td>
                                             <td>
-                                                <span className={`u-status-badge ${u.is_active ? 'u-active' : 'u-inactive'}`}>
-                                                    <span className="u-status-dot" />
-                                                    {u.is_active ? 'Activo' : 'Inactivo'}
-                                                </span>
+                                                <div
+                                                    className="u-estado-toggle"
+                                                    title={u.id === usuarioActual?.user_id ? 'No puedes desactivar tu propia cuenta' : (u.is_active ? 'Clic para desactivar' : 'Clic para activar')}
+                                                >
+                                                    <div
+                                                        className={`mu-toggle ${u.is_active ? 'mu-toggle-on' : ''} ${u.id === usuarioActual?.user_id ? 'mu-toggle-disabled' : ''}`}
+                                                        onClick={() => handleToggleActivo(u)}
+                                                        role="switch"
+                                                        aria-checked={u.is_active}
+                                                    >
+                                                        <div className="mu-toggle-thumb" />
+                                                    </div>
+                                                    <span className={`u-status-badge ${u.is_active ? 'u-active' : 'u-inactive'}`}>
+                                                        {u.is_active ? 'Activo' : 'Inactivo'}
+                                                    </span>
+                                                </div>
                                             </td>
                                             <td className="u-td-actions">
                                                 <button

@@ -117,9 +117,9 @@ export default function Anexo1SigfePage() {
                         onClick={refresh}
                         disabled={loading}
                         style={{
-                            padding: '9px 14px', background: '#fff', color: '#334155',
-                            border: '1px solid #cbd5e1', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
-                            fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+                            padding: '9px 14px', background: 'var(--gob-blanco)', color: 'var(--gob-gris5)',
+                            border: '1px solid var(--gob-gris3)', borderRadius: 'var(--radius)', cursor: loading ? 'not-allowed' : 'pointer',
+                            fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', fontFamily: 'var(--font-body)',
                         }}
                     >
                         {loading ? '⏳ Cargando...' : '🔄 Refrescar'}
@@ -128,9 +128,9 @@ export default function Anexo1SigfePage() {
                         onClick={() => setModalAbierto(true)}
                         disabled={iniciando || enProceso}
                         style={{
-                            padding: '9px 16px', background: enProceso ? '#94a3b8' : '#0ea5e9', color: '#fff',
-                            border: 'none', borderRadius: 8, cursor: (iniciando || enProceso) ? 'not-allowed' : 'pointer',
-                            fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+                            padding: '9px 16px', background: enProceso ? 'var(--gob-gris3)' : 'var(--gob-azul)', color: '#fff',
+                            border: 'none', borderRadius: 'var(--radius)', cursor: (iniciando || enProceso) ? 'not-allowed' : 'pointer',
+                            fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', fontFamily: 'var(--font-body)',
                         }}
                     >
                         {enProceso ? '⚙️ Actualizando...' : '📥 Actualizar desde SIGFE'}
@@ -138,7 +138,7 @@ export default function Anexo1SigfePage() {
                 </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 16 }}>
+            <div className="tabs-bar">
                 {TABS.map((t) => (
                     <button
                         key={t.id}

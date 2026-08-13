@@ -50,5 +50,24 @@ export function useUsuarios(filtros = {}) {
         await fetchUsuarios();
     };
 
-    return { usuarios, establecimientos, loading, error, total, refresh: fetchUsuarios, crear, actualizar, eliminar };
+    // Asigna `role` a varios usuarios a la vez. Se envía en lotes (no todo de una)
+    // para no saturar al backend cuando la selección son cientos de usuarios.
+    const actualizarRolMasivo = async (ids, role, loteSize = 20) => {
+        let ok = 0;
+        let fallidos = 0;
+        for (let i = 0; i < ids.length; i += loteSize) {
+            const lote = ids.slice(i, i + loteSize);
+            const resultados = await Promise.allSettled(
+                lote.map(id => updateUsuario(id, { perfil: { role } }))
+            );
+            resultados.forEach(r => { r.status === 'fulfilled' ? ok++ : fallidos++; });
+        }
+        await fetchUsuarios();
+        return { ok, fallidos };
+    };
+
+    return {
+        usuarios, establecimientos, loading, error, total,
+        refresh: fetchUsuarios, crear, actualizar, eliminar, actualizarRolMasivo,
+    };
 }

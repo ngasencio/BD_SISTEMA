@@ -12,10 +12,10 @@ const COLOR_CLASS = {
     '--color-accent':   'kpi-celeste',
 };
 
-export const KpiCard = ({ title, value, subtitle, icon, colorVar = '--color-primary', trend }) => {
+export const KpiCard = ({ title, value, subtitle, icon, colorVar = '--color-primary', trend, tip }) => {
     const colorClass = COLOR_CLASS[colorVar] ?? 'kpi-azul';
     return (
-        <div className={`kpi-card ${colorClass}`}>
+        <div className={`kpi-card ${colorClass}`} {...(tip ? { 'data-tip': tip } : {})}>
             {icon && <span className="kpi-icon">{icon}</span>}
             <div className="kpi-body">
                 <p className="kpi-title">{title}</p>

@@ -692,7 +692,55 @@ class SigfeEjecucionPresupuestariaScraper:
         'Aplicar'. Si algo de esto no calza con el DOM real, se guarda un
         dump de debug del panel completo - pégamelo si esto falla, es
         virtualmente seguro que va a necesitar un ajuste con HTML real.
+
+        intentos_max/espera_entre_intentos existían en la firma pero nunca se
+        usaban (bug preexistente: un solo click fallido en el dropdown
+        virtualizado de SIGFE - que hace hit-testing por coordenadas reales
+        del mouse - abortaba todo el establecimiento sin reintentar). Ahora sí
+        reintentan el ciclo completo (Buscar -> Opciones -> Nivel 9 x2 ->
+        Aplicar) hasta intentos_max veces antes de rendirse. La recarga entre
+        intentos (self.buscar_reporte()) tiene su propio try/except: si ESA
+        recarga falla, no debe tirar abajo todo el retry-loop - simplemente
+        se cuenta como intento perdido y se sigue con el próximo.
         """
+        ultimo_error = None
+        for intento in range(1, intentos_max + 1):
+            if intento > 1:
+                log.info(
+                    f"[Nivel 9 - intento {intento}/{intentos_max}] Recargando el reporte "
+                    "con 'Buscar' antes de reabrir 'Opciones'..."
+                )
+                try:
+                    self.driver.switch_to.default_content()
+                    self.buscar_reporte()
+                except Exception as e:
+                    ultimo_error = e
+                    log.warning(
+                        f"[Nivel 9 - intento {intento}/{intentos_max}] No se pudo recargar "
+                        f"el reporte para reintentar: {e}"
+                    )
+                    time.sleep(espera_entre_intentos)
+                    continue
+
+            try:
+                self._configurar_niveles_un_intento()
+                return
+            except (TimeoutException, NoSuchElementException) as e:
+                ultimo_error = e
+                log.warning(
+                    f"[Nivel 9 - intento {intento}/{intentos_max}] Falló: {e}"
+                )
+                if intento < intentos_max:
+                    self.driver.switch_to.default_content()
+                    time.sleep(espera_entre_intentos)
+
+        self.driver.switch_to.default_content()
+        raise ultimo_error
+
+    def _configurar_niveles_un_intento(self):
+        """Un solo intento del ciclo Opciones -> Nivel 9 x2 -> Aplicar.
+        Separado de configurar_niveles_export() para que el retry-loop pueda
+        repetirlo entero sin duplicar la lógica."""
         self.driver.switch_to.default_content()
         iframe = self.driver.find_element(By.ID, "idPgTpl:if1")
         self.driver.switch_to.frame(iframe)

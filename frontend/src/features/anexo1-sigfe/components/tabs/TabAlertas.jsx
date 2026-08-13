@@ -22,31 +22,33 @@ export default function TabAlertas({ filtros, refreshKey }) {
     return (
         <div>
             <div className="kpi-grid" style={{ marginBottom: 20 }}>
-                <KpiCard title="Críticas" value={data.contadores.criticas} icon="🔴" colorVar="--color-danger" />
-                <KpiCard title="Advertencias" value={data.contadores.advertencias} icon="🟡" colorVar="--color-warning" />
-                <KpiCard title="Informativas" value={data.contadores.informativas} icon="ℹ️" colorVar="--color-accent" />
+                <KpiCard title="Críticas" value={data.contadores.criticas} icon="🔴" colorVar="--color-danger" tip="Deuda flotante superior a $100.000.000 en el concepto." />
+                <KpiCard title="Advertencias" value={data.contadores.advertencias} icon="🟡" colorVar="--color-warning" tip="Deuda flotante superior a $1.000.000 en el concepto." />
+                <KpiCard title="Informativas" value={data.contadores.informativas} icon="ℹ️" colorVar="--color-accent" tip="Anomalías detectadas sin implicar necesariamente un riesgo (ej. gasto sin Ley asociada)." />
             </div>
 
             <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <table className="table-gob">
                     <thead>
-                        <tr style={{ background: '#f8fafc' }}>
-                            {['Severidad', 'Concepto', 'Tipo', 'Valor', 'Observación'].map((h) => (
-                                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11.5, color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
-                            ))}
+                        <tr>
+                            <th>Severidad</th>
+                            <th>Concepto</th>
+                            <th>Tipo</th>
+                            <th>Valor</th>
+                            <th>Observación</th>
                         </tr>
                     </thead>
                     <tbody>
                         {data.alertas.length === 0 && (
-                            <tr><td colSpan={5} style={{ padding: 20, textAlign: 'center', color: '#94a3b8' }}>Sin alertas para el período seleccionado.</td></tr>
+                            <tr><td colSpan={5} style={{ padding: 20, textAlign: 'center', color: 'var(--gob-gris4)' }}>Sin alertas para el período seleccionado.</td></tr>
                         )}
                         {data.alertas.map((a, i) => (
-                            <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <td style={{ padding: '9px 12px' }}><span className={`badge ${BADGE[a.severidad]}`}>{ETIQUETA[a.severidad]}</span></td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5 }}>{a.concepto}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5 }}>{a.tipo}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12.5, fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtMoney(a.valor)}</td>
-                                <td style={{ padding: '9px 12px', fontSize: 12, color: '#64748b' }}>{a.observacion}</td>
+                            <tr key={i}>
+                                <td><span className={`badge ${BADGE[a.severidad]}`}>{ETIQUETA[a.severidad]}</span></td>
+                                <td>{a.concepto}</td>
+                                <td>{a.tipo}</td>
+                                <td className="td-monto" style={{ fontWeight: 600 }}>{fmtMoney(a.valor)}</td>
+                                <td style={{ fontSize: 12, color: 'var(--gob-gris4)' }}>{a.observacion}</td>
                             </tr>
                         ))}
                     </tbody>

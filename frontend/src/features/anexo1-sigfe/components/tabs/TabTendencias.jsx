@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Line } from 'react-chartjs-2';
 import { useAnexo1Fetch } from '../../hooks/useAnexo1Fetch';
 import { fetchTendenciasAnexo1 } from '../../api/anexo1SigfeApi';
+import { buildTree, nombreSinCodigo } from './detallado/buildTree';
 
 const fmtMoney = (n) =>
     new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
@@ -9,10 +10,56 @@ const fmtPct = (n) => (n == null ? '—' : `${n.toFixed(1)}%`);
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const PALETTE = ['#1B3FD8', '#0FAB5C', '#C47820', '#9333EA', '#D0202F', '#0891B2'];
 
+// Fila del árbol de proyección — misma indentación/flecha que Nodo/Fila en
+// TablaJerarquica.jsx, pero como <tr> (no tarjeta) para mantener las 5
+// columnas numéricas alineadas en tabla, como pidió el usuario.
+function FilaProyeccion({ nodo, profundidad, expandidos, toggleExpand, seleccionado, onSeleccionar }) {
+    const tieneHijos = nodo.hijos.length > 0;
+    const expandido = expandidos.has(nodo.codigo);
+    const activo = nodo.concepto === seleccionado;
+    const nombre = nombreSinCodigo(nodo[`n${nodo.nivel}_desc`], nodo.codigo) || nodo.nombre;
+
+    return (
+        <>
+            <tr
+                onClick={() => onSeleccionar(nodo)}
+                style={{ cursor: 'pointer', background: activo ? 'var(--gob-celeste-lt)' : undefined }}
+                data-tip="Click para ver este ítem en el gráfico de Evolución Mensual de arriba."
+            >
+                <td style={{ paddingLeft: 12 + profundidad * 18, whiteSpace: 'nowrap' }}>
+                    {tieneHijos ? (
+                        <span
+                            className={`tree-expand ${expandido ? 'open' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); toggleExpand(nodo.codigo); }}
+                        >
+                            ▶
+                        </span>
+                    ) : <span style={{ display: 'inline-block', width: 14 }} />}
+                    <span className="tree-code">{nodo.codigo}</span> {nombre}
+                </td>
+                <td className="td-monto">{fmtMoney(nodo.acumulado_real)}</td>
+                <td className="td-monto">{fmtMoney(nodo.proyeccion_diciembre)}</td>
+                <td className="td-monto">{fmtMoney(nodo.cierre_anio_anterior)}</td>
+                <td className="td-monto" style={{ color: nodo.delta >= 0 ? 'var(--gob-verde)' : 'var(--gob-rojo)' }}>{fmtMoney(nodo.delta)}</td>
+                <td className="td-monto" style={{ fontWeight: 700, color: nodo.delta >= 0 ? 'var(--gob-verde)' : 'var(--gob-rojo)' }}>{fmtPct(nodo.delta_pct)}</td>
+            </tr>
+            {expandido && nodo.hijos.map((h) => (
+                <FilaProyeccion
+                    key={h.codigo} nodo={h} profundidad={profundidad + 1}
+                    expandidos={expandidos} toggleExpand={toggleExpand}
+                    seleccionado={seleccionado} onSeleccionar={onSeleccionar}
+                />
+            ))}
+        </>
+    );
+}
+
 export default function TabTendencias({ filtros, refreshKey }) {
     const [subtitulo, setSubtitulo] = useState('');
     const [anhosSeleccionados, setAnhosSeleccionados] = useState(null);
     const [metrica, setMetrica] = useState('devengado');
+    const [puntoSeleccionado, setPuntoSeleccionado] = useState(null);
+    const [expandidos, setExpandidos] = useState(() => new Set());
 
     const { data, loading, error } = useAnexo1Fetch(
         fetchTendenciasAnexo1,
@@ -65,49 +112,93 @@ export default function TabTendencias({ filtros, refreshKey }) {
         return { labels: MESES, datasets };
     }, [data, metrica]);
 
+    const arbolProyeccion = useMemo(() => buildTree(data?.arbol_proyeccion || []), [data]);
+
     if (loading && !data) return <div className="loading-spinner">Cargando Histórico y Tendencias…</div>;
     if (error) return <div className="error-message">{error}</div>;
     if (!data || !data.anhos_disponibles.length) return <div className="error-message">No hay datos históricos cargados.</div>;
 
     const anhosMostrados = anhosSeleccionados || data.anhos_disponibles;
 
+    const toggleExpand = (codigo) => {
+        setExpandidos((prev) => {
+            const next = new Set(prev);
+            next.has(codigo) ? next.delete(codigo) : next.add(codigo);
+            return next;
+        });
+    };
+
+    const seleccionarConcepto = (nodo) => setSubtitulo((prev) => (prev === nodo.concepto ? '' : nodo.concepto));
+
+    const onClickPunto = (evt, els) => {
+        if (!els.length || !chartData) return;
+        const { datasetIndex, index } = els[0];
+        const ds = chartData.datasets[datasetIndex];
+        const mes = MESES[index];
+        setPuntoSeleccionado((prev) => (
+            prev?.label === ds.label && prev?.mes === mes ? null : { label: ds.label, mes, valor: ds.data[index] * 1e6 }
+        ));
+    };
+    const cursorPointer = (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; };
+
     return (
         <div>
             <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <div>
-                    <label style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Subtítulo</label>
-                    <select value={subtitulo} onChange={(e) => setSubtitulo(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: 12.5 }}>
+                <div className="filter-group">
+                    <label className="filter-label">Subtítulo</label>
+                    <select
+                        className="filter-input" value={subtitulo} onChange={(e) => setSubtitulo(e.target.value)}
+                        data-tip="También podés elegir un ítem desde la tabla de abajo, en cualquier nivel de la jerarquía."
+                    >
                         <option value="">Todos (consolidado)</option>
+                        {/* Si la selección viene de un click en la tabla (Ítem/Asignación/etc.,
+                            no está en este listado de solo Subtítulos), se agrega como opción
+                            sintética para que el select no se vea vacío/inconsistente. */}
+                        {subtitulo && !data.subtitulos_disponibles.some((s) => s.concepto === subtitulo) && (
+                            <option value={subtitulo}>{subtitulo}</option>
+                        )}
                         {data.subtitulos_disponibles.map((s) => (
                             <option key={s.codigo} value={s.concepto}>{s.codigo} {s.nombre}</option>
                         ))}
                     </select>
                 </div>
-                <div>
-                    <label style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Métrica</label>
-                    <select value={metrica} onChange={(e) => setMetrica(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: 12.5 }}>
+                <div className="filter-group">
+                    <label className="filter-label">Métrica</label>
+                    <select className="filter-input" value={metrica} onChange={(e) => setMetrica(e.target.value)}>
                         <option value="devengado">Devengado</option>
                         <option value="efectivo">Efectivo</option>
                     </select>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {data.anhos_disponibles.map((a) => (
-                        <label key={a} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: 20, cursor: 'pointer', background: anhosMostrados.includes(a) ? '#eff6ff' : '#fff' }}>
+                        <label key={a} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, padding: '6px 10px', border: '1px solid var(--gob-gris3)', borderRadius: 20, cursor: 'pointer', background: anhosMostrados.includes(a) ? 'var(--gob-celeste-lt)' : '#fff' }}>
                             <input type="checkbox" checked={anhosMostrados.includes(a)} onChange={() => toggleAnho(a)} /> {a}
                         </label>
                     ))}
                 </div>
             </div>
 
+            {subtitulo && (
+                <div className="analysis-context">
+                    🔎 Analizando: {subtitulo}
+                    <button onClick={() => setSubtitulo('')} title="Limpiar selección">✕</button>
+                </div>
+            )}
+
             {chartData && (
                 <div className="card" style={{ padding: 16, height: 380, marginBottom: 20 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 10 }}>
+                    <div
+                        style={{ fontSize: 13, fontWeight: 700, color: 'var(--gob-gris5)', marginBottom: 10 }}
+                        data-tip="Compara mes a mes el gasto de cada año seleccionado. La línea punteada gris es la proyección del año en curso, extrapolada del año anterior."
+                    >
                         Evolución Mensual ({metrica === 'devengado' ? 'Devengado' : 'Efectivo'}) — comparación interanual
                     </div>
                     <Line
                         data={chartData}
                         options={{
                             responsive: true, maintainAspectRatio: false,
+                            onClick: onClickPunto,
+                            onHover: cursorPointer,
                             plugins: { legend: { position: 'bottom' } },
                             scales: { y: { ticks: { callback: (v) => `M$${v}` } } },
                         }}
@@ -115,32 +206,41 @@ export default function TabTendencias({ filtros, refreshKey }) {
                 </div>
             )}
 
-            {data.tabla_subtitulos.length > 0 && (
-                <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-                    <div style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#334155', borderBottom: '1px solid #e2e8f0' }}>
-                        Proyección {data.anho_base} vs. Cierre {data.anho_base - 1} por Subtítulo
+            {puntoSeleccionado && (
+                <div className="analysis-context">
+                    🔎 Analizando: {puntoSeleccionado.mes} {puntoSeleccionado.label} — {fmtMoney(puntoSeleccionado.valor)}
+                    <button onClick={() => setPuntoSeleccionado(null)} title="Limpiar selección">✕</button>
+                </div>
+            )}
+
+            {arbolProyeccion.length > 0 && (
+                <div className="card" style={{ padding: 0 }}>
+                    <div style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: 'var(--gob-gris5)', borderBottom: '1px solid var(--color-border)' }}>
+                        Proyección {data.anho_base} vs. Cierre {data.anho_base - 1} por Subtítulo — desglosado por jerarquía presupuestaria
                     </div>
-                    <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <div style={{ maxHeight: 480, overflowY: 'auto', overflowX: 'auto' }}>
+                    <table className="table-gob th-center">
                         <thead>
-                            <tr style={{ background: '#f8fafc' }}>
-                                {['Subtítulo', 'Acumulado Real', 'Proyección Dic.', 'Cierre Año Anterior', 'Δ', 'Δ%'].map((h) => (
-                                    <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11.5, color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
-                                ))}
+                            <tr>
+                                <th style={{ textAlign: 'left' }} data-tip="Subtítulo → Ítem → Asignación → Sub-asignación → Detalle. Click en ▶ para desglosar, click en la fila para verla en el gráfico.">Concepto</th>
+                                <th data-tip="Suma del Devengado de los meses ya transcurridos del año en curso.">Acumulado Real</th>
+                                <th data-tip="Acumulado real + gasto mensual promedio × meses restantes del año.">Proyección Dic.</th>
+                                <th data-tip="Devengado total del mismo concepto en el año anterior completo.">Cierre Año Anterior</th>
+                                <th data-tip="Proyección a diciembre menos Cierre del año anterior.">Δ</th>
+                                <th data-tip="Variación porcentual de la proyección respecto al cierre del año anterior.">Δ%</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {data.tabla_subtitulos.map((s) => (
-                                <tr key={s.codigo} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                    <td style={{ padding: '9px 12px', fontSize: 12.5 }}>{s.codigo} {s.nombre}</td>
-                                    <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right' }}>{fmtMoney(s.acumulado_real)}</td>
-                                    <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right' }}>{fmtMoney(s.proyeccion_diciembre)}</td>
-                                    <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right' }}>{fmtMoney(s.cierre_anio_anterior)}</td>
-                                    <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right', color: s.delta >= 0 ? '#16a34a' : '#dc2626' }}>{fmtMoney(s.delta)}</td>
-                                    <td style={{ padding: '9px 12px', fontSize: 12.5, textAlign: 'right', fontWeight: 700, color: s.delta >= 0 ? '#16a34a' : '#dc2626' }}>{fmtPct(s.delta_pct)}</td>
-                                </tr>
+                            {arbolProyeccion.map((n) => (
+                                <FilaProyeccion
+                                    key={n.codigo} nodo={n} profundidad={0}
+                                    expandidos={expandidos} toggleExpand={toggleExpand}
+                                    seleccionado={subtitulo} onSeleccionar={seleccionarConcepto}
+                                />
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             )}
         </div>

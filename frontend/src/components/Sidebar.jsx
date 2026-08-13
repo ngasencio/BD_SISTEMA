@@ -6,6 +6,7 @@ export default function Sidebar() {
     const navigate = useNavigate();
     const location = useLocation();
     const path = location.pathname;
+    const puede = (...roles) => roles.includes(role);
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
@@ -86,18 +87,21 @@ export default function Sidebar() {
                                     <span>⚡</span>
                                     <span className="nav-item-text">Compra Ágil</span>
                                 </div>
-                                <div
-                                    className={`nav-item ${isActive('/abastecimiento/contratos') ? 'active' : ''}`}
-                                    onClick={() => goTo('/abastecimiento/contratos', 'abast', 'mp')}
-                                >
-                                    <span>📋</span>
-                                    <span className="nav-item-text">Contratos SSO</span>
-                                </div>
+                                {puede('admin', 'abastecimiento', 'general') && (
+                                    <div
+                                        className={`nav-item ${isActive('/abastecimiento/contratos') ? 'active' : ''}`}
+                                        onClick={() => goTo('/abastecimiento/contratos', 'abast', 'mp')}
+                                    >
+                                        <span>📋</span>
+                                        <span className="nav-item-text">Contratos SSO</span>
+                                    </div>
+                                )}
 
                             </div>
                         </div>
 
                         {/* Formularios */}
+                        {puede('admin', 'abastecimiento', 'general') && (
                         <div className={`nav-mod ${openMods.formularios ? 'open' : ''}`}>
                             <div className="nav-mod-title" onClick={() => toggleMod('formularios')}>
                                 <span style={{ fontSize: 14 }}>🗂️</span>
@@ -114,6 +118,7 @@ export default function Sidebar() {
                                 </div>
                             </div>
                         </div>
+                        )}
 
                         {/* PAC 2026 */}
                         <div className={`nav-mod ${openMods.pac ? 'open' : ''}`}>
@@ -156,6 +161,7 @@ export default function Sidebar() {
                         </div>
 
                         {/* Garantías */}
+                        {puede('admin', 'abastecimiento', 'general') && (
                         <div className={`nav-mod ${openMods.garantias ? 'open' : ''}`}>
                             <div className="nav-mod-title" onClick={() => toggleMod('garantias')}>
                                 <span style={{ fontSize: 14 }}>🛡️</span>
@@ -171,10 +177,12 @@ export default function Sidebar() {
                                 </div>
                             </div>
                         </div>
+                        )}
                     </div>
                 </div>
 
                 {/* ── FINANZAS ──────────────────────── */}
+                {puede('admin', 'finanzas', 'general') && (
                 <div className={`nav-group ${openGroups.finanzas ? 'open' : ''}`}>
                     <div className="nav-group-title" onClick={() => toggleGroup('finanzas')}>
                         <span className="nav-group-title-icon">💵</span>
@@ -205,6 +213,7 @@ export default function Sidebar() {
                         </div>
                     </div>
                 </div>
+                )}
 
                 {/* ── ADMINISTRACIÓN (solo admin) ─── */}
                 {role === 'admin' && (

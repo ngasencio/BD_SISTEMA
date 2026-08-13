@@ -22,6 +22,13 @@ from collections import defaultdict
 from django.db.models import Max, Sum
 
 from .models import SigfeAnexo1, DevengoSigfeAnual
+from .services import _construir_hier_lookup, _resolver_hier
+
+# Largos de código por nivel (N1=Subtítulo..N5=Detalle), mismo criterio
+# documentado en el modelo ConceptoJerarquia — los códigos SIGFE son
+# jerárquicos por prefijo, así que el código de un nivel es siempre el
+# prefijo de ese largo del código completo.
+_LARGOS_NIVEL_HIER = (2, 4, 7, 10, 12)
 
 # =============================================================================
 # Umbrales de negocio — preservados tal cual el dashboard original por vista
@@ -158,6 +165,32 @@ def _clasificar_pct(valor, rojo=BANDA_PCT_ROJO, amarillo=BANDA_PCT_AMARILLO):
     if valor >= rojo:
         return 'amarillo'
     return 'rojo'
+
+
+def _enriquecer_jerarquia(filas):
+    """Agrega a cada fila (dict con 'codigo'/'nivel') los códigos/descripciones
+    reales N1-N5 desde `ConceptoJerarquia` (misma tabla que usa el árbol de
+    Anexo N°3), en vez de dejar que el frontend adivine la jerarquía por
+    substring de código. Los códigos de nivel son prefijos del propio código
+    de la fila (ver `_LARGOS_NIVEL_HIER`); las descripciones se resuelven vía
+    `_resolver_hier()` (match exacto o prefijo progresivo 10/7/4/2) — cuando
+    no hay match para un nivel, la descripción queda vacía mientras el código
+    de ese nivel sigue disponible (mejor un nodo "sin nombre" que perderlo)."""
+    lookup = _construir_hier_lookup()
+    for f in filas:
+        codigo = f['codigo']
+        hier = _resolver_hier(lookup, codigo)
+        descs = hier[:5] if hier else ['', '', '', '', '']
+        propio_nivel = f.get('nivel') or len(_LARGOS_NIVEL_HIER)
+        for i, largo in enumerate(_LARGOS_NIVEL_HIER):
+            n = i + 1
+            if n <= propio_nivel and len(codigo) >= largo:
+                f[f'n{n}_codigo'] = codigo[:largo]
+                f[f'n{n}_desc'] = descs[i] or ''
+            else:
+                f[f'n{n}_codigo'] = ''
+                f[f'n{n}_desc'] = ''
+    return filas
 
 
 def _mes_mayor_gasto(codigo_ue, anho, subtitulo=None, excluir_34_35=True):
@@ -539,19 +572,25 @@ def calcular_anexo1_deuda_flotante(codigo_ue=None, anho=None, excluir_34_35=True
 # =============================================================================
 
 def calcular_anexo1_tendencias(codigo_ue=None, subtitulo=None, anhos=None, excluir_34_35=True):
-    qs_base = SigfeAnexo1.objects.filter(nivel=1)
+    qs_todos = SigfeAnexo1.objects.all()
     if codigo_ue and codigo_ue != 'todas':
-        qs_base = qs_base.filter(codigo_ue=codigo_ue)
+        qs_todos = qs_todos.filter(codigo_ue=codigo_ue)
     if excluir_34_35:
-        qs_base = qs_base.exclude(concepto_presupuestario__startswith='34').exclude(concepto_presupuestario__startswith='35')
+        qs_todos = qs_todos.exclude(concepto_presupuestario__startswith='34').exclude(concepto_presupuestario__startswith='35')
+    qs_base = qs_todos.filter(nivel=1)
 
     anhos_disponibles = sorted(set(qs_base.values_list('anho', flat=True)))
     if not anhos_disponibles:
-        return {'anhos_disponibles': [], 'anhos_usados': [], 'series_por_anho': {}, 'tabla_subtitulos': [], 'subtitulos_disponibles': []}
+        return {'anhos_disponibles': [], 'anhos_usados': [], 'series_por_anho': {}, 'arbol_proyeccion': [], 'subtitulos_disponibles': []}
 
     anhos_usar = sorted(a for a in anhos if a in anhos_disponibles) if anhos else anhos_disponibles
 
-    qs_serie = qs_base.filter(concepto_presupuestario=subtitulo) if subtitulo else qs_base
+    # `subtitulo` puede ser un concepto de CUALQUIER nivel (no solo Subtítulo)
+    # cuando viene de un click en el árbol de la tabla de proyección — por eso
+    # se filtra sobre `qs_todos`, no sobre `qs_base` (que solo tiene nivel=1).
+    # Sin selección, se usa `qs_base` (nivel=1) para no inflar el consolidado
+    # sumando niveles anidados entre sí.
+    qs_serie = qs_todos.filter(concepto_presupuestario=subtitulo) if subtitulo else qs_base
     series_por_anho = {}
     for anho in anhos_usar:
         serie = _serie_mensual(qs_serie.filter(anho=anho))
@@ -575,13 +614,18 @@ def calcular_anexo1_tendencias(codigo_ue=None, subtitulo=None, anhos=None, exclu
                 for i in range(12)
             ]
 
-    # Tabla de proyección por subtítulo: siempre todos los subtítulos (no
-    # respeta el filtro `subtitulo`, que solo acota el gráfico principal) —
-    # compara año base vs. cierre del año anterior, igual que rPrj.
-    tabla_subtitulos = []
+    # Árbol de proyección: TODOS los niveles (no solo Subtítulo) — no respeta
+    # el filtro `subtitulo`, que solo acota el gráfico principal — compara año
+    # base vs. cierre del año anterior, igual que rPrj, pero ahora desglosado
+    # por Subtítulo→Ítem→Asignación→Sub-asignación→Detalle vía
+    # `_enriquecer_jerarquia()` (misma función que usa el tab Detallado).
+    arbol_proyeccion = []
     if ultimo_mes_real and anho_prev in anhos_disponibles:
-        por_concepto_base = _serie_mensual_por_concepto(qs_base.filter(anho=anho_base))
-        por_concepto_prev = _serie_mensual_por_concepto(qs_base.filter(anho=anho_prev))
+        nivel_por_concepto = dict(
+            qs_todos.filter(anho=anho_base).values_list('concepto_presupuestario', 'nivel').distinct()
+        )
+        por_concepto_base = _serie_mensual_por_concepto(qs_todos.filter(anho=anho_base))
+        por_concepto_prev = _serie_mensual_por_concepto(qs_todos.filter(anho=anho_prev))
         for concepto, serie_c in por_concepto_base.items():
             acumulado = sum(serie_c[:ultimo_mes_real])
             promedio = acumulado / ultimo_mes_real
@@ -590,12 +634,15 @@ def calcular_anexo1_tendencias(codigo_ue=None, subtitulo=None, anhos=None, exclu
             delta = proyeccion - cierre_anterior
             delta_pct = (delta / cierre_anterior * 100) if cierre_anterior else None
             codigo, _, nombre = concepto.partition(' ')
-            tabla_subtitulos.append({
-                'codigo': codigo, 'nombre': nombre.strip(), 'acumulado_real': acumulado,
+            arbol_proyeccion.append({
+                'concepto': concepto, 'codigo': codigo, 'nombre': nombre.strip(),
+                'nivel': nivel_por_concepto.get(concepto, 1),
+                'acumulado_real': acumulado,
                 'proyeccion_diciembre': proyeccion, 'cierre_anio_anterior': cierre_anterior,
                 'delta': delta, 'delta_pct': delta_pct,
             })
-        tabla_subtitulos.sort(key=lambda r: r['codigo'])
+        arbol_proyeccion.sort(key=lambda r: r['codigo'])
+        _enriquecer_jerarquia(arbol_proyeccion)
 
     subtitulos_disponibles = []
     for concepto in sorted(set(qs_base.values_list('concepto_presupuestario', flat=True))):
@@ -609,7 +656,7 @@ def calcular_anexo1_tendencias(codigo_ue=None, subtitulo=None, anhos=None, exclu
         'ultimo_mes_real': ultimo_mes_real,
         'series_por_anho': {str(a): v for a, v in series_por_anho.items()},
         'proyeccion_anho_base': proyeccion_anho_base,
-        'tabla_subtitulos': tabla_subtitulos,
+        'arbol_proyeccion': arbol_proyeccion,
         'subtitulos_disponibles': subtitulos_disponibles,
     }
 
@@ -721,9 +768,10 @@ def calcular_anexo1_financiero(codigo_ue=None, anho=None, mes_desde=None, mes_ha
 # =============================================================================
 
 def calcular_anexo1_detallado(codigo_ue=None, anho=None, mes_desde=None, mes_hasta=None, search=None, excluir_34_35=True):
-    """Devuelve TODAS las filas (niveles 1-5) planas — el árbol de drill-down
-    se arma en el frontend por prefijo de código, igual que bld() en el
-    original, en vez de anidar acá."""
+    """Devuelve TODAS las filas (niveles 1-5) planas, con jerarquía real N1-N5
+    resuelta contra `ConceptoJerarquia` (ver `_enriquecer_jerarquia`) — el
+    frontend arma el árbol anidando por esos campos en vez de adivinar por
+    prefijo de código como hacía antes (`bld()` del original)."""
     filas = _agregar(_filtrar_base(codigo_ue, anho, mes_desde, mes_hasta, excluir_34_35))
     if search:
         s = search.lower()
@@ -747,6 +795,7 @@ def calcular_anexo1_detallado(codigo_ue=None, anho=None, mes_desde=None, mes_has
             'estado_pct_ejecucion': _clasificar_pct(pct_ejecucion) if pct_ejecucion is not None else None,
             'es_categoria_especial': f['codigo'] in ('34', '35'),
         })
+    _enriquecer_jerarquia(resultado)
     return {'filas': resultado}
 
 

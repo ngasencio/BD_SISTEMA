@@ -38,8 +38,8 @@ export default function SubTabControl({ filtros, filasBase }) {
     return (
         <div>
             <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 4 }}>Concepto</label>
-                <select value={concepto} onChange={(e) => setConcepto(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: 12.5, minWidth: 260 }}>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gob-gris4)', display: 'block', marginBottom: 4 }}>Concepto</label>
+                <select value={concepto} onChange={(e) => setConcepto(e.target.value)} style={{ padding: '7px 10px', border: '1px solid var(--gob-gris3)', borderRadius: 7, fontSize: 12.5, minWidth: 260 }}>
                     <option value="">Seleccionar concepto…</option>
                     {conceptosDisponibles.map((c) => (
                         <option key={c.concepto} value={c.concepto}>{c.codigo} {c.nombre}</option>
@@ -47,7 +47,7 @@ export default function SubTabControl({ filtros, filasBase }) {
                 </select>
             </div>
 
-            {!concepto && <div className="card" style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Selecciona un concepto para ver su control estadístico (Shewhart).</div>}
+            {!concepto && <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--gob-gris4)' }}>Selecciona un concepto para ver su control estadístico (Shewhart).</div>}
             {loading && concepto && <div className="loading-spinner">Cargando…</div>}
             {error && <div className="error-message">{error}</div>}
 
@@ -58,7 +58,12 @@ export default function SubTabControl({ filtros, filasBase }) {
             {chartData && (
                 <>
                     <div className="card" style={{ padding: 16, height: 380, marginBottom: 16 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 10 }}>Control Estadístico — μ = {fmtM(data.media)}, σ = {fmtM(data.sigma)}</div>
+                        <div
+                            style={{ fontSize: 13, fontWeight: 700, color: 'var(--gob-gris5)', marginBottom: 10 }}
+                            data-tip="Gráfico de control (Shewhart): compara el gasto mensual del año actual contra la media histórica ± 1 desviación estándar del concepto. Puntos rojos = fuera de control."
+                        >
+                            Control Estadístico — μ = {fmtM(data.media)}, σ = {fmtM(data.sigma)}
+                        </div>
                         <Line
                             data={chartData}
                             options={{
@@ -69,7 +74,7 @@ export default function SubTabControl({ filtros, filasBase }) {
                         />
                     </div>
                     {data.fuera_de_control.length > 0 ? (
-                        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '12px 16px', fontSize: 12.5, color: '#dc2626' }}>
+                        <div style={{ background: 'var(--gob-rojo-lt)', border: '1px solid var(--gob-rojo)', borderRadius: 'var(--radius)', padding: '12px 16px', fontSize: 12.5, color: 'var(--gob-rojo)' }}>
                             ⚠️ {data.fuera_de_control.length} mes(es) fuera de control en {data.anho_actual}:
                             <ul style={{ margin: '6px 0 0 16px' }}>
                                 {data.fuera_de_control.map((f) => (
@@ -78,7 +83,7 @@ export default function SubTabControl({ filtros, filasBase }) {
                             </ul>
                         </div>
                     ) : (
-                        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '10px 16px', fontSize: 12.5, color: '#16a34a' }}>
+                        <div style={{ background: 'var(--gob-verde-lt)', border: '1px solid var(--gob-verde)', borderRadius: 'var(--radius)', padding: '10px 16px', fontSize: 12.5, color: 'var(--gob-verde)' }}>
                             ✅ Todos los meses de {data.anho_actual} dentro de los límites de control estadístico.
                         </div>
                     )}

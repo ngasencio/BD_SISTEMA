@@ -11,12 +11,47 @@ from .models import (
     OrdenCompra, PlanerPAC, RevisionOCCorregible,
     CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog,
-    SigfeAnexo1,
+    SigfeAnexo1, ConceptoJerarquia,
     PacProyectoMaestro, Departamento, Establecimiento, SsoSubdireccion,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
 _GANADOR_FLAGS = frozenset(['1', 'Si', 'si', 'True', 'true'])
+
+
+# =============================================================================
+# Jerarquía de conceptos presupuestarios (ConceptoJerarquia, 702 filas, N1-N5)
+# — usada por el reporte HTML de Anexo N°3 (devengo_sigfe_anual_reporte_html)
+# y por el árbol jerárquico de Anexo N°1 (calcular_anexo1_detallado).
+# =============================================================================
+
+_NIVELES_PREFIJO_HIER = (10, 7, 4, 2)
+
+
+def _construir_hier_lookup() -> dict:
+    """{codigo: [n1_desc, n2_desc, n3_desc, n4_desc, n5_desc, nivel]} — mismo
+    formato que el HIER_LOOKUP ya embebido en el HTML standalone, para poder
+    reutilizar exactamente la misma lógica de resolución (resolveHier)."""
+    lookup = {}
+    for c in ConceptoJerarquia.objects.all().values(
+        'codigo', 'n1_desc', 'n2_desc', 'n3_desc', 'n4_desc', 'n5_desc', 'nivel'
+    ):
+        lookup[c['codigo']] = [
+            c['n1_desc'], c['n2_desc'], c['n3_desc'], c['n4_desc'], c['n5_desc'], c['nivel'],
+        ]
+    return lookup
+
+
+def _resolver_hier(lookup: dict, codigo: str):
+    """Réplica de resolveHier() del HTML: match exacto, si no, prefijos
+    progresivos de largo 10/7/4/2 (N4→N1)."""
+    if codigo in lookup:
+        return lookup[codigo]
+    for largo in _NIVELES_PREFIJO_HIER:
+        prefijo = codigo[:largo]
+        if prefijo in lookup:
+            return lookup[prefijo]
+    return None
 
 
 def obtener_kpis_devengo(devengo_qs, codigo_ue=None, solo_deuda=True):

@@ -8,10 +8,11 @@
  *  /login                       → Pública
  *  /                            → Protegida → AppLayout > Home
  *  /licitaciones                → Protegida → AppLayout > Dashboard
- *  /anexo3/reporte-sigfe         → Protegida → AppLayout > ReporteSigfePage (único reporte Anexo N°3 — el viejo AnexoDeudaPage se eliminó)
- *  /abastecimiento/dashboard    → Protegida (rol: admin, abastecimiento)
- *  /abastecimiento/fsc          → Protegida (rol: admin, abastecimiento)
- *  /finanzas/dashboard          → Protegida (rol: admin, finanzas)
+ *  /abastecimiento/*            → Protegida (rol: admin, abastecimiento, general)
+ *  /finanzas/*                  → Protegida (rol: admin, finanzas, general)
+ *  /anexo1/base-datos           → Protegida (rol: admin, finanzas, general)
+ *  /anexo3/reporte-sigfe        → Protegida (rol: admin, finanzas, general) — único reporte Anexo N°3, el viejo AnexoDeudaPage se eliminó
+ *  /admin/usuarios              → Protegida (rol: admin)
  */
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
@@ -68,8 +69,6 @@ function AppRoutes() {
             {/* Rutas generales */}
             <Route path="/" element={<Home />} />
             <Route path="/licitaciones" element={<Dashboard />} />
-            {anexo1SigfeRoutes}
-            {devengoSigfeRoutes}
             <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
             {/* Módulo PAC (todos los autenticados) */}
             {pacRoutes}
@@ -78,14 +77,16 @@ function AppRoutes() {
             {/* Módulo Compra Ágil (todos los autenticados) */}
             {compraAgilRoutes}
 
-            {/* Módulo Abastecimiento (admin + abastecimiento + viewer) */}
-            <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'viewer']} />}>
+            {/* Módulo Abastecimiento (admin + abastecimiento + general) */}
+            <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'general']} />}>
               {abastecimientoRoutes}
             </Route>
 
-            {/* Módulo Finanzas (admin + finanzas) */}
-            <Route element={<RequireRole allowed={['admin', 'finanzas']} />}>
+            {/* Módulo Finanzas (admin + finanzas + general) */}
+            <Route element={<RequireRole allowed={['admin', 'finanzas', 'general']} />}>
               {finanzasRoutes}
+              {devengoSigfeRoutes}
+              {anexo1SigfeRoutes}
             </Route>
 
             {/* Perfil propio — todos los autenticados */}

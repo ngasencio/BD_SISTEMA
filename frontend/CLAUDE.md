@@ -49,7 +49,8 @@ src/
     ├── pac/                  # /pac — PAC, Res.188, indicadores
     ├── abastecimiento/       # /abastecimiento/* — FSC, boletas
     ├── finanzas/             # /finanzas/* — devengo, dashboard finanzas
-    └── devengo-sigfe/        # /anexo3/reporte-sigfe — Anexo N°3, reporte jerárquico SIGFE (iframe + fetch autenticado)
+    ├── devengo-sigfe/        # /anexo3/reporte-sigfe — Anexo N°3, reporte jerárquico SIGFE (iframe + fetch autenticado)
+    └── anexo1-sigfe/         # /anexo1/base-datos — Anexo N°1, 11 tabs de ejecución presupuestaria + PDF real (reportlab)
 ```
 
 ---
@@ -85,6 +86,7 @@ Rol se extrae del JWT payload: `user.role` o `user.groups?.[0]` o `'viewer'` por
 | `/` | `pages/Home` | Autenticado |
 | `/licitaciones` | `pages/Dashboard` | Autenticado |
 | `/anexo3/reporte-sigfe` | `features/devengo-sigfe/components/ReporteSigfePage` | Autenticado |
+| `/anexo1/base-datos` | `features/anexo1-sigfe/components/Anexo1SigfePage` | Autenticado |
 | `/ordenes-compra` | `pages/OrdenesCompraDashboard` | Autenticado |
 | `/compra-agil` | `features/compra-agil/components/CompraAgilPage` | Autenticado |
 | `/pac` | `features/pac/components/PacDashboardPage` | Autenticado |
@@ -269,6 +271,7 @@ Si necesitas una clase nueva → agregarla en `frontend/src/index.css`.
 | Licitaciones | `/licitaciones` | ✅ Completo | Dashboard + filtros + gráficos + **botón ETL + panel de cambios** |
 | Órdenes de Compra | `/ordenes-compra` | ✅ Funcional | Pendiente migrar a `features/` + **botón ETL + panel de cambios**. Tab Comparativo Anual implementado en `OCDashboardPage.jsx`. |
 | Anexo N°3 | `/anexo3/reporte-sigfe` | ✅ Funcional | Reporte HTML standalone (árbol jerárquico + Chart.js) servido por Django con D_SLIM inyectado desde `api_sigfe_devengo_anual`, embebido vía Blob URL (fetch autenticado, no `<iframe src=...>` público). Botón "Actualizar desde SIGFE" dispara ETL Selenium headless con modal usuario/contraseña/fechas. El viejo dashboard en `/anexo3` (`AnexoDeudaPage`/`DeudaDashboard`, tabla `devengo`) fue eliminado — este reporte es el único Anexo N°3. |
+| Anexo N°1 | `/anexo1/base-datos` | ✅ Completo | App React real (no standalone HTML): 11 tabs (Base de datos, Resumen, Detallado + 3 sub-tabs, Tendencias, Alertas, Semáforo, Burn Rate, Deuda Flotante, Financiero, Conciliación N°3, Exportar) + PDF real generado en servidor con reportlab (`services_reportes_anexo1.py`, 8 secciones seleccionables con checkboxes + gráficos matplotlib) — a diferencia del "PDF" de Anexo N°3, que es en realidad `window.print()`. Restyle v2.0 (2026-08-13): estilos alineados a los tokens `--gob-*`/`.kpi-grid`/`.filter-zone`/`.tabs-bar` ya usados por `pac-cumplimiento`; se corrigió además un bug de CSS duplicado en `index.css` (`.page-header`/`.tabs-bar`/`.tab-btn` definidos dos veces con estilos contradictorios). |
 | Compra Ágil | `/compra-agil` | ✅ Completo | Tablas + análisis ML + **botón ETL + panel de cambios** |
 | PAC | `/pac` | ✅ Completo | Res.188 indicadores + Informe PDF (tab OC eliminado) |
 | Boletas de Garantía | `/abastecimiento/boletas` | ✅ Completo | CRUD + auditoría + archivo adjunto |
