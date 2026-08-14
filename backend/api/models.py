@@ -669,6 +669,34 @@ class Factura(models.Model):
         return f"Factura {self.folio} — {self.razon_social_emisor}"
 
 
+class FacturaSyncLog(models.Model):
+    """Historial de corridas del ETL DIPRES/Acepta (módulo Facturas). Alimenta el tab
+    'Datos' con la fecha de última actualización — Factura no tiene un campo propio
+    de auditoría y es managed=False, así que esta tabla nueva lo suple sin tocarla."""
+    ESTADOS = [
+        ('completado', 'Completado'),
+        ('error', 'Error'),
+        ('cancelado', 'Cancelado'),
+    ]
+
+    fecha_ejecucion = models.DateTimeField(auto_now_add=True)
+    fecha_desde = models.DateField()
+    fecha_hasta = models.DateField()
+    registros_leidos = models.IntegerField(default=0)
+    registros_nuevos = models.IntegerField(default=0)
+    registros_actualizados = models.IntegerField(default=0)
+    estado = models.CharField(max_length=20, choices=ESTADOS)
+    error_mensaje = models.TextField(null=True, blank=True)
+    usuario = models.CharField(max_length=150, blank=True)
+
+    class Meta:
+        db_table = 'data_facturas_sync_log'
+        ordering = ['-fecha_ejecucion']
+
+    def __str__(self):
+        return f"Sync {self.fecha_ejecucion:%Y-%m-%d %H:%M} — {self.estado}"
+
+
 # ─── PAC / COMPRAS ÁGILES (managed=False — tablas existentes) ────────────────
 
 class PlanerPAC(models.Model):

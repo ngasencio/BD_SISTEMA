@@ -3,8 +3,8 @@ import re
 from collections import defaultdict
 from datetime import date, datetime
 
-from django.db.models import Count, DecimalField, Max, Q, Sum
-from django.db.models.functions import Cast
+from django.db.models import Avg, CharField, Count, DecimalField, Max, Q, Sum, Value
+from django.db.models.functions import Cast, Concat, Substr
 
 from .models import (
     DetalleOrdenCompra, GestionContrato, Licitacion, DetalleLicitacion,
@@ -13,6 +13,7 @@ from .models import (
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog,
     SigfeAnexo1, ConceptoJerarquia,
     PacProyectoMaestro, Departamento, Establecimiento, SsoSubdireccion,
+    Factura, FacturaSyncLog,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
@@ -4085,3 +4086,184 @@ def calcular_pac_jerarquia_planer(anho):
         resultado.append(sub)
     resultado.sort(key=lambda s: (s['nombre'] == 'Sin Clasificar', -s['total']))
     return {'anho': int(anho), 'subdirecciones': resultado}
+
+
+# =============================================================================
+# Módulo Facturas (DIPRES/Acepta) — tab "Datos"
+# =============================================================================
+
+def calcular_facturas_stats() -> dict:
+    """KPIs para el tab 'Datos' del módulo Facturas: total de registros, distribución
+    por año (agrupada en la BD a partir de los 4 últimos caracteres de `emision`,
+    string DD-MM-YYYY — evita el slicing en Python que usa facturas_raw_all) y la
+    última sincronización DIPRES (FacturaSyncLog, ver docstring del modelo)."""
+    total_registros = Factura.objects.count()
+
+    por_anio_qs = (
+        Factura.objects
+        .exclude(emision__isnull=True)
+        .exclude(emision='')
+        .annotate(anio=Substr('emision', 7, 4))
+        .values('anio')
+        .annotate(count=Count('id'))
+        .order_by('anio')
+    )
+    por_anio = [
+        {'anio': r['anio'], 'count': r['count']}
+        for r in por_anio_qs if r['anio'] and r['anio'].isdigit()
+    ]
+
+    ultima = FacturaSyncLog.objects.first()  # ordering = ['-fecha_ejecucion']
+    ultima_sync = None
+    if ultima:
+        ultima_sync = {
+            'fecha_ejecucion': ultima.fecha_ejecucion.isoformat(),
+            'fecha_desde': ultima.fecha_desde.isoformat(),
+            'fecha_hasta': ultima.fecha_hasta.isoformat(),
+            'registros_leidos': ultima.registros_leidos,
+            'registros_nuevos': ultima.registros_nuevos,
+            'registros_actualizados': ultima.registros_actualizados,
+            'estado': ultima.estado,
+            'error_mensaje': ultima.error_mensaje,
+            'usuario': ultima.usuario,
+        }
+
+    historial_sync = [
+        {
+            'fecha_ejecucion': s.fecha_ejecucion.isoformat(),
+            'fecha_desde': s.fecha_desde.isoformat(),
+            'fecha_hasta': s.fecha_hasta.isoformat(),
+            'registros_nuevos': s.registros_nuevos,
+            'registros_actualizados': s.registros_actualizados,
+            'estado': s.estado,
+            'usuario': s.usuario,
+        }
+        for s in FacturaSyncLog.objects.all()[:10]
+    ]
+
+    return {
+        'total_registros': total_registros,
+        'por_anio': por_anio,
+        'ultima_sync': ultima_sync,
+        'historial_sync': historial_sync,
+    }
+
+
+def _humanizar_tipo_documento(raw) -> str:
+    """`tipo_documento` llega como slug (ej. 'factura_electronica',
+    'nota_de_credito_electronica') — no como código DTE numérico. Dos fuentes
+    históricas conviven (Excel legacy vs. scraper DIPRES) con slugs ligeramente
+    distintos para el mismo tipo de documento (ej. 'nota_credito' vs.
+    'nota_de_credito_electronica') — no se fusionan aquí para no asumir
+    equivalencias sin verificar; solo se humaniza el texto. Algunas filas
+    legacy tienen caracteres corruptos (U+FFFD) por un mal-decode en la carga
+    original desde Excel — irrecuperable, se muestra tal cual."""
+    if not raw:
+        return 'Sin especificar'
+    return str(raw).replace('_', ' ').strip().title()
+
+
+def calcular_facturas_analisis() -> dict:
+    """Análisis exploratorio para el tab 'Datos' del módulo Facturas: composición
+    por tipo de documento, serie temporal mensual, distribución por tarea_actual,
+    relación con Orden de Compra (folio_oc) y detección de duplicados (folio+emisor).
+    Todas las agregaciones corren en la BD — nada de slicing en Python sobre 16k+ filas."""
+    qs = Factura.objects.all()
+    total = qs.count()
+
+    # --- Composición por tipo de documento ---
+    por_tipo_qs = (
+        qs.values('tipo_documento')
+        .annotate(count=Count('id'), monto_total=Sum('monto_total'))
+        .order_by('-count')
+    )
+    por_tipo_documento = [
+        {
+            'tipo_documento': r['tipo_documento'] or 'sin_especificar',
+            'label': _humanizar_tipo_documento(r['tipo_documento']),
+            'count': r['count'],
+            'pct': round(r['count'] / total * 100, 1) if total else 0,
+            'monto_total': float(r['monto_total'] or 0),
+        }
+        for r in por_tipo_qs
+    ]
+
+    # --- Serie temporal mensual (a partir de emision, string DD-MM-YYYY) ---
+    serie_qs = (
+        qs.exclude(emision__isnull=True).exclude(emision='')
+        .annotate(periodo=Concat(
+            Substr('emision', 7, 4), Value('-'), Substr('emision', 4, 2),
+            output_field=CharField(),
+        ))
+        .values('periodo')
+        .annotate(count=Count('id'), monto_total=Sum('monto_total'))
+        .order_by('periodo')
+    )
+    serie_temporal = [
+        {'periodo': r['periodo'], 'count': r['count'], 'monto_total': float(r['monto_total'] or 0)}
+        for r in serie_qs
+        if r['periodo'] and len(r['periodo']) == 7 and r['periodo'][:4].isdigit() and r['periodo'][5:7].isdigit()
+    ]
+
+    # --- Distribución por tarea_actual (estado de tramitación) ---
+    tarea_qs = (
+        qs.exclude(tarea_actual__isnull=True).exclude(tarea_actual='')
+        .values('tarea_actual')
+        .annotate(count=Count('id'))
+        .order_by('-count')[:12]
+    )
+    por_tarea_actual = [
+        {'tarea_actual': r['tarea_actual'], 'count': r['count']}
+        for r in tarea_qs
+    ]
+
+    # --- Relación con Orden de Compra (folio_oc) ---
+    con_oc = qs.exclude(folio_oc__isnull=True).exclude(folio_oc='').count()
+    sin_oc = total - con_oc
+    relacion_oc = {
+        'con_oc': con_oc,
+        'sin_oc': sin_oc,
+        'pct_con_oc': round(con_oc / total * 100, 1) if total else 0,
+    }
+
+    # --- Duplicados: filas que comparten folio+emisor (debería ser 0 desde que el
+    # ETL hace upsert por esa clave, pero puede haber arrastre de cargas previas) ---
+    dup_qs = (
+        qs.values('folio', 'emisor')
+        .annotate(count=Count('id'))
+        .filter(count__gt=1)
+        .order_by('-count')
+    )
+    dup_detalle = list(dup_qs[:50])
+    dup_grupos = dup_qs.count()
+    dup_filas_agg = dup_qs.aggregate(filas=Sum('count'))
+    duplicados = {
+        'grupos_duplicados': dup_grupos,
+        'filas_afectadas': dup_filas_agg['filas'] or 0,
+        'detalle': [
+            {'folio': d['folio'], 'emisor': d['emisor'], 'count': d['count']}
+            for d in dup_detalle
+        ],
+        'detalle_truncado': dup_grupos > 50,
+    }
+
+    # --- Montos globales ---
+    montos_agg = qs.aggregate(
+        total=Sum('monto_total'), neto=Sum('monto_neto'),
+        iva=Sum('monto_iva'), promedio=Avg('monto_total'),
+    )
+    montos = {
+        'total': float(montos_agg['total'] or 0),
+        'neto': float(montos_agg['neto'] or 0),
+        'iva': float(montos_agg['iva'] or 0),
+        'promedio': float(montos_agg['promedio'] or 0),
+    }
+
+    return {
+        'por_tipo_documento': por_tipo_documento,
+        'serie_temporal': serie_temporal,
+        'por_tarea_actual': por_tarea_actual,
+        'relacion_oc': relacion_oc,
+        'duplicados': duplicados,
+        'montos': montos,
+    }

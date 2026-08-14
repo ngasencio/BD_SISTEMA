@@ -67,8 +67,12 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 BASE_URL = "https://dipres.acepta.com/"
-PERFIL_DIR = Path("./.perfil_dipres").resolve()
-SALIDA_DIR = Path("./descargas_dipres").resolve()
+# Anclado a la carpeta del script (no al cwd): necesario para que las corridas
+# lanzadas desde un hilo Django (cwd = backend/ u otro) usen siempre el mismo
+# perfil persistente y la misma carpeta de descargas que el uso interactivo.
+CARPETA = Path(__file__).parent.resolve()
+PERFIL_DIR = (CARPETA / ".perfil_dipres").resolve()
+SALIDA_DIR = (CARPETA / "descargas_dipres").resolve()
 
 SEL_LOGIN_RUT = 'input[name="LoginForm[rut]"]'
 SEL_LOGIN_PASS = 'input[type="password"]'
@@ -179,6 +183,20 @@ class Criterios:
 
 def log(msg: str) -> None:
     print(f"[{datetime.now():%H:%M:%S}] {msg}", flush=True)
+
+
+def _avisar(progress_callback, paso: str, paso_desc: str, progreso_pct: int,
+            mensaje: str | None = None) -> None:
+    """Reporta progreso al callback opcional (patrón usado por sigfe_descarga_devengos_Completo.py).
+
+    No debe interrumpir el flujo si el callback falla.
+    """
+    log(mensaje or paso_desc)
+    if progress_callback:
+        try:
+            progress_callback(paso, paso_desc, progreso_pct, mensaje or paso_desc)
+        except Exception:
+            pass
 
 
 def titulo(txt: str) -> None:
@@ -349,7 +367,13 @@ def esperar_spinner(page: Page, selector: str, timeout_s: int = 180) -> None:
 # LOGIN
 # ---------------------------------------------------------------------------
 
-def asegurar_sesion(page: Page, headless: bool) -> None:
+def asegurar_sesion(page: Page, headless: bool,
+                    usuario: str | None = None, password: str | None = None) -> None:
+    """
+    usuario/password: si se pasan (llamadas programaticas, ej. desde el hilo Django),
+    se usan directo y NUNCA se cae a input()/getpass() -- eso colgaria un hilo del
+    servidor esperando stdin. Sin ellos, se comporta como siempre (env vars o consola).
+    """
     log("Abriendo portal...")
     page.goto(BASE_URL, wait_until="domcontentloaded")
 
@@ -367,10 +391,14 @@ def asegurar_sesion(page: Page, headless: bool) -> None:
     if headless:
         raise RuntimeError(
             "La sesion expiro y estas en modo headless. El reCAPTCHA invisible "
-            "no se resuelve sin navegador visible. Corre una vez en modo visible."
+            "no se resuelve sin navegador visible. Corre una vez en modo visible "
+            "con acceso directo a la maquina (esto no se puede resolver via web)."
         )
 
-    rut, pwd = credenciales()
+    if usuario and password:
+        rut, pwd = usuario, password
+    else:
+        rut, pwd = credenciales()
     log("Completando formulario de login...")
     fr_login.fill(SEL_LOGIN_RUT, rut)
 
@@ -632,7 +660,8 @@ def elegir_reporte(nuevos: list[FilaReporte], crit: Criterios,
 
 
 def esperar_reporte(page: Page, ids_previos: set[str], rut_propio: str,
-                    crit: Criterios, url_rep: str | None = None) -> FilaReporte:
+                    crit: Criterios, url_rep: str | None = None,
+                    progress_callback=None, pct_base: int = 10, pct_span: int = 70) -> FilaReporte:
     """
     Identifica el reporte por ID NUEVO + criterios de elegir_reporte().
     Nunca por posicion en la grilla: la grilla es compartida entre usuarios.
@@ -650,26 +679,32 @@ def esperar_reporte(page: Page, ids_previos: set[str], rut_propio: str,
         refrescar_grilla(page, url_rep)
         filas = leer_grilla(page)
 
+        transcurrido = 1 - max(0.0, (limite - time.time())) / TIMEOUT_REPORTE_S
+        pct = pct_base + int(pct_span * min(transcurrido, 0.95))
+
         if objetivo is None:
             nuevos = [f for f in filas if f.id not in ids_previos]
             elegido = elegir_reporte(nuevos, crit, rut_propio)
             if elegido:
                 objetivo = elegido.id
             else:
-                log(f"Aun no aparece un reporte nuevo "
-                    f"({len(filas)} filas en grilla, 0 nuevas). Esperando...")
+                _avisar(progress_callback, "esperando", "Esperando que DIPRES genere el reporte...", pct,
+                        f"Aun no aparece un reporte nuevo ({len(filas)} filas en grilla, 0 nuevas). Esperando...")
 
         if objetivo:
             fila = next((f for f in filas if f.id == objetivo), None)
             if fila:
                 if fila.listo:
-                    log(f"Reporte {fila.id} LISTO ({fila.total_registros} registros).")
+                    _avisar(progress_callback, "reporte_listo",
+                            f"Reporte listo ({fila.total_registros} registros)", pct_base + pct_span,
+                            f"Reporte {fila.id} LISTO ({fila.total_registros} registros).")
                     return fila
                 if fila.estado.strip().upper() == "OK" and not fila.href_descarga:
-                    log(f"Reporte {fila.id} dice OK pero no expone enlace de "
-                        f"descarga todavia. Reintentando...")
+                    _avisar(progress_callback, "esperando", "Esperando enlace de descarga...", pct,
+                            f"Reporte {fila.id} dice OK pero no expone enlace de descarga todavia. Reintentando...")
                 else:
-                    log(f"Reporte {fila.id} en progreso: estado='{fila.estado}'")
+                    _avisar(progress_callback, "esperando", f"Reporte en progreso: {fila.estado}", pct,
+                            f"Reporte {fila.id} en progreso: estado='{fila.estado}'")
 
     raise TimeoutError(f"El reporte no quedo disponible en {TIMEOUT_REPORTE_S}s.")
 
@@ -851,7 +886,9 @@ def tramos(desde: date, hasta: date, dias: int):
         ini = fin + timedelta(days=1)
 
 
-def ejecutar_descarga(d0: date, d1: date, op: Opciones) -> list[Path]:
+def ejecutar_descarga(d0: date, d1: date, op: Opciones,
+                      usuario: str | None = None, password: str | None = None,
+                      progress_callback=None) -> list[Path]:
     """
     Usa DOS pestanas para que la de busqueda nunca tenga que navegar a Reportes:
 
@@ -863,9 +900,14 @@ def ejecutar_descarga(d0: date, d1: date, op: Opciones) -> list[Path]:
     confirmado, y se navega con el href real del menu (que lleva el session_id).
     Abrirla antes dejaba una pestana en blanco durante el captcha, y un
     goto(BASE_URL) limpio caia en la pantalla de login.
+
+    usuario/password/progress_callback: opcionales, usados por
+    ejecutar_actualizacion_facturas() para correr sin prompts desde un hilo
+    Django. En uso interactivo (menu CLI) se dejan en None y todo funciona
+    igual que antes.
     """
     PERFIL_DIR.mkdir(parents=True, exist_ok=True)
-    rut_propio = os.environ.get("DIPRES_RUT", "")
+    rut_propio = usuario or os.environ.get("DIPRES_RUT", "")
     generados: list[Path] = []
     buzon_dialogos: list[str] = []
     fallo: Exception | None = None
@@ -892,8 +934,10 @@ def ejecutar_descarga(d0: date, d1: date, op: Opciones) -> list[Path]:
         pg_reportes: Page | None = None
 
         try:
+            _avisar(progress_callback, "sesion", "Abriendo sesion en DIPRES/Acepta...", 2)
             pg_busqueda.bring_to_front()
-            asegurar_sesion(pg_busqueda, op.headless)
+            asegurar_sesion(pg_busqueda, op.headless, usuario=usuario, password=password)
+            _avisar(progress_callback, "sesion", "Sesion confirmada", 8)
 
             info = contexto_sesion(pg_busqueda)
             if info:
@@ -914,9 +958,12 @@ def ejecutar_descarga(d0: date, d1: date, op: Opciones) -> list[Path]:
             log("Pestana de Reportes autenticada y con grilla cargada.")
 
             lista = list(tramos(d0, d1, op.chunk_dias))
+            n = len(lista)
             for i, (ini, fin) in enumerate(lista, 1):
+                pct_ini = 10 + int((i - 1) * 85 / n)
+                pct_fin = 10 + int(i * 85 / n)
                 log("-" * 60)
-                log(f"TRAMO {i}/{len(lista)}: {ini} -> {fin}")
+                _avisar(progress_callback, "tramo", f"Tramo {i}/{n}: {ini} -> {fin}", pct_ini)
 
                 # --- Pestana B: snapshot ANTES de exportar -------------------
                 refrescar_grilla(pg_reportes, url_rep)
@@ -937,11 +984,15 @@ def ejecutar_descarga(d0: date, d1: date, op: Opciones) -> list[Path]:
                 # --- Pestana B: polling y descarga --------------------------
                 pg_reportes.bring_to_front()
                 fila = esperar_reporte(pg_reportes, ids_previos, rut_propio,
-                                       crit, url_rep)
+                                       crit, url_rep, progress_callback=progress_callback,
+                                       pct_base=pct_ini, pct_span=(pct_fin - pct_ini))
                 generados.extend(descargar_y_extraer(ctx, fila, op.salida, op.conservar_zip))
+                _avisar(progress_callback, "tramo", f"Tramo {i}/{n} descargado", pct_fin)
 
             if op.unir and len(generados) > 1:
                 unir_archivos(generados, op.salida / f"consolidado_{d0}_{d1}")
+
+            _avisar(progress_callback, "completado", "Descarga finalizada", 95)
 
         except Exception as e:
             fallo = e
@@ -958,6 +1009,138 @@ def ejecutar_descarga(d0: date, d1: date, op: Opciones) -> list[Path]:
     if fallo:
         raise fallo
     return generados
+
+
+# ---------------------------------------------------------------------------
+# CARGA A DJANGO — entrypoint programatico para el modulo web "Facturas"
+# ---------------------------------------------------------------------------
+#
+# Sin prompts, sin menu: pensado para ser llamado desde un hilo daemon de
+# Django (ver backend/api/views.py, patron identico al usado por
+# api/data/data_devengo/sigfe_descarga_devengos_Completo.py).
+
+def setup_django() -> None:
+    ruta_api = CARPETA.parent.parent  # api/data/data_facturas -> api -> raiz proyecto
+    backend = ruta_api / "backend"
+    if str(backend) not in sys.path:
+        sys.path.insert(0, str(backend))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+    import django
+    django.setup()
+
+
+def _leer_archivos_descargados(archivos: list[Path]):
+    """
+    Lee los archivos que ESTA corrida genero (no un glob de toda la carpeta).
+    Detecta el formato real por bytes (igual que descargar_y_extraer/detectar_formato):
+    el portal puede entregar Excel binario real, HTML disfrazado de .xls, o CSV/texto.
+    """
+    import pandas as pd
+    from actualizar_facturas import DATE_COLS
+
+    frames = []
+    total_leido = 0
+    for ruta in archivos:
+        datos = ruta.read_bytes()
+        ext, desc, binario = detectar_formato(datos)
+        try:
+            if ext in (".xls", ".xlsx") and binario:
+                df = pd.read_excel(ruta, dtype=str)
+                df_typed = pd.read_excel(ruta)
+            elif ext == ".xls" and not binario:
+                tablas = pd.read_html(io.StringIO(decodificar(datos)))
+                df_typed = max(tablas, key=len)
+                df = df_typed.astype(str)
+            else:
+                texto = decodificar(datos)
+                delim = detectar_delimitador(texto)
+                df = pd.read_csv(ruta, dtype=str, sep=delim, encoding="utf-8", engine="python")
+                df_typed = pd.read_csv(ruta, sep=delim, encoding="utf-8", engine="python")
+        except Exception as e:
+            log(f"   ADVERTENCIA: no pude leer {ruta.name} ({desc}): {e}")
+            continue
+
+        for col in DATE_COLS:
+            if col in df_typed.columns:
+                df[col] = df_typed[col]
+
+        frames.append(df)
+        total_leido += len(df)
+        log(f"   Leido {ruta.name} ({desc}): {len(df)} filas")
+
+    if not frames:
+        raise RuntimeError("No se pudo leer ningun archivo de la descarga.")
+    unified = pd.concat(frames, ignore_index=True)
+    return unified, total_leido
+
+
+def ejecutar_actualizacion_facturas(usuario: str, password: str,
+                                    fecha_desde_iso: str, fecha_hasta_iso: str,
+                                    headless: bool = True, progress_callback=None) -> dict:
+    """
+    Descarga [fecha_desde_iso, fecha_hasta_iso] desde DIPRES/Acepta, unifica/limpia
+    los archivos resultantes y hace upsert (folio+emisor) en el modelo Factura.
+    Nunca borra registros existentes -- ver decision de arquitectura del modulo Facturas.
+    """
+    d0 = date.fromisoformat(fecha_desde_iso)
+    d1 = date.fromisoformat(fecha_hasta_iso)
+    if d0 > d1:
+        raise ValueError("fecha_desde no puede ser posterior a fecha_hasta.")
+
+    op = Opciones(headless=headless, salida=SALIDA_DIR)
+    archivos = ejecutar_descarga(d0, d1, op, usuario=usuario, password=password,
+                                 progress_callback=progress_callback)
+
+    if not archivos:
+        _avisar(progress_callback, "completado", "Sin archivos nuevos para el rango indicado", 100)
+        return {"filas_leidas": 0, "nuevas": 0, "actualizadas": 0, "total_final": None}
+
+    _avisar(progress_callback, "procesando", "Unificando y limpiando datos descargados...", 96)
+    df, filas_leidas = _leer_archivos_descargados(archivos)
+
+    from actualizar_facturas import limpiar as _limpiar_facturas, _safe as _safe_valor
+    df = _limpiar_facturas(df)
+
+    _avisar(progress_callback, "guardando", "Guardando en la base de datos...", 98)
+    setup_django()
+    from django.db import transaction
+    from api.models import Factura
+
+    cols = [f.name for f in Factura._meta.get_fields()
+            if hasattr(f, 'column') and f.name != 'id']
+
+    nuevas = 0
+    actualizadas = 0
+    with transaction.atomic():
+        for _, row in df.iterrows():
+            kwargs = {col: _safe_valor(row[col]) for col in cols if col in df.columns}
+            folio = kwargs.pop('folio', None)
+            emisor = kwargs.pop('emisor', None)
+            if folio is None or emisor is None:
+                continue
+            try:
+                _, creado = Factura.objects.update_or_create(
+                    folio=folio, emisor=emisor, defaults=kwargs
+                )
+            except Factura.MultipleObjectsReturned:
+                log(f"   ADVERTENCIA: folio={folio} emisor={emisor} tiene mas de una "
+                    f"fila existente en BD, se omite (revisar duplicados manualmente).")
+                continue
+            if creado:
+                nuevas += 1
+            else:
+                actualizadas += 1
+
+    total_final = Factura.objects.count()
+    _avisar(progress_callback, "completado", "Actualizacion completada", 100,
+            f"Listo: {nuevas} nuevas, {actualizadas} actualizadas, {total_final} en total.")
+
+    return {
+        "filas_leidas": filas_leidas,
+        "nuevas": nuevas,
+        "actualizadas": actualizadas,
+        "total_final": total_final,
+    }
 
 
 # ---------------------------------------------------------------------------

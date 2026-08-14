@@ -42,7 +42,7 @@ from rest_framework.permissions import BasePermission
 from .models import (
     BoletaGarantia, BoletaGarantiaAudit, Comprador,
     DetalleLicitacion, DetalleOrdenCompra,
-    Factura, Licitacion, OrdenCompra, Proveedor,
+    Factura, FacturaSyncLog, Licitacion, OrdenCompra, Proveedor,
     PlanerPAC, CompraAgilResumen, CompraAgilProducto, CompraAgilProveedor,
     RevisionOCCorregible, GestionContrato,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
@@ -82,6 +82,8 @@ from .services import (
     calcular_compraagil_ahorro_stats,
     calcular_ahorro_licitaciones,
     calcular_gestion_licitaciones,
+    calcular_facturas_stats,
+    calcular_facturas_analisis,
     _construir_hier_lookup,
     _resolver_hier,
 )
@@ -1186,6 +1188,201 @@ def facturas_raw_all(request):
     data = list(qs)
     cache.set(cache_key, data, timeout=300)
     return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsFinanzas])
+def facturas_stats_view(request):
+    """KPIs del tab 'Datos' del módulo Facturas: total, distribución por año,
+    última sincronización DIPRES/Acepta."""
+    cache_key = 'facturas_stats'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return Response(cached)
+    data = calcular_facturas_stats()
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsFinanzas])
+def facturas_analisis_view(request):
+    """Análisis exploratorio del tab 'Datos': composición por tipo de documento,
+    serie temporal, tarea_actual, relación con OC y duplicados."""
+    cache_key = 'facturas_analisis'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return Response(cached)
+    data = calcular_facturas_analisis()
+    cache.set(cache_key, data, timeout=600)
+    return Response(data)
+
+
+# -- Actualización desde DIPRES/Acepta (Playwright, disparada desde el dashboard) --
+
+_tareas_actualizacion_facturas: dict = {}
+
+_RUTA_DATA_FACTURAS = Path(__file__).parent.parent.parent / "api" / "data" / "data_facturas"
+
+
+def _ejecutar_actualizacion_facturas(task_id: str, usuario: str, password: str,
+                                     fecha_desde: str, fecha_hasta: str,
+                                     headless: bool = True):
+    """Descarga (Playwright) + upsert (folio+emisor) de facturas DIPRES/Acepta,
+    delegando en dipres_scraper.ejecutar_actualizacion_facturas. headless=False
+    solo tiene efecto real si quien la dispara tiene acceso directo a la pantalla
+    del servidor (el reCAPTCHA no se puede resolver de forma remota vía el modal
+    web) — se usa para el re-login manual de mantención tras expirar la sesión."""
+    _tareas_actualizacion_facturas[task_id]["thread_id"] = threading.current_thread().ident
+
+    ruta_modulo = str(_RUTA_DATA_FACTURAS)
+    if ruta_modulo not in sys.path:
+        sys.path.insert(0, ruta_modulo)
+
+    try:
+        import dipres_scraper
+    except ImportError as exc:
+        _tareas_actualizacion_facturas[task_id].update(
+            status="error", error=f"No se pudo cargar dipres_scraper: {exc}"
+        )
+        return
+
+    logs = []
+
+    def _cb(paso=None, paso_desc=None, progreso_pct=None, log=None):
+        upd = {}
+        if paso is not None:
+            upd["paso"] = paso
+        if paso_desc is not None:
+            upd["paso_desc"] = paso_desc
+        if progreso_pct is not None:
+            upd["progreso_pct"] = progreso_pct
+        if log:
+            logs.append(log)
+            upd["logs_recientes"] = logs[-40:]
+        if upd:
+            _tareas_actualizacion_facturas[task_id].update(**upd)
+
+    resultado = None
+    error_msg = None
+    try:
+        _tareas_actualizacion_facturas[task_id].update(status="en_proceso")
+        _cb(paso=1, paso_desc="Iniciando navegador y autenticando en DIPRES/Acepta...", progreso_pct=1,
+            log=f"Descargando facturas del {fecha_desde} al {fecha_hasta}...")
+
+        resultado = dipres_scraper.ejecutar_actualizacion_facturas(
+            usuario, password, fecha_desde, fecha_hasta,
+            headless=headless, progress_callback=_cb,
+        )
+
+        cache.delete('facturas_stats')
+        cache.delete('facturas_analisis')
+
+        _tareas_actualizacion_facturas[task_id].update(
+            status="completado", paso=3,
+            paso_desc=(
+                f"Completado: {resultado['nuevas']} nuevas, "
+                f"{resultado['actualizadas']} actualizadas."
+            ),
+            logs_recientes=logs[-40:],
+            progreso_pct=100,
+            diff=resultado,
+        )
+
+    except Exception as exc:
+        logger.exception("Error actualizando facturas DIPRES")
+        error_msg = str(exc)
+        _tareas_actualizacion_facturas[task_id].update(
+            status="error", error=error_msg, logs_recientes=logs[-40:],
+        )
+    finally:
+        # Se ejecuta también si _cancelar_tarea() mató el hilo (SystemExit async) —
+        # el status ya fue puesto en 'cancelado' por ese endpoint antes de matar el
+        # hilo, así que se respeta tal cual en vez de reportarlo como error.
+        estado_final = _tareas_actualizacion_facturas.get(task_id, {}).get("status", "error")
+        if estado_final not in ("completado", "cancelado", "error"):
+            estado_final = "error"
+        try:
+            FacturaSyncLog.objects.create(
+                fecha_desde=fecha_desde,
+                fecha_hasta=fecha_hasta,
+                registros_leidos=(resultado or {}).get('filas_leidas', 0),
+                registros_nuevos=(resultado or {}).get('nuevas', 0),
+                registros_actualizados=(resultado or {}).get('actualizadas', 0),
+                estado=estado_final,
+                error_mensaje=error_msg,
+                usuario=usuario,
+            )
+        except Exception:
+            logger.exception("No se pudo registrar FacturaSyncLog")
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, _IsFinanzas])
+def iniciar_actualizacion_facturas(request):
+    """Inicia la descarga + upsert de facturas DIPRES/Acepta.
+    Body: {usuario, password, fecha_desde, fecha_hasta, visible} (fechas YYYY-MM-DD;
+    visible=true corre con Chromium visible — solo útil con acceso directo al servidor)."""
+    for tarea in _tareas_actualizacion_facturas.values():
+        if tarea.get("status") in ("iniciado", "en_proceso"):
+            return Response({"error": "Ya hay una actualización de Facturas en curso."}, status=409)
+
+    usuario = str(request.data.get("usuario", "")).strip()
+    password = str(request.data.get("password", "")).strip()
+    fecha_desde = str(request.data.get("fecha_desde", "")).strip()
+    fecha_hasta = str(request.data.get("fecha_hasta", "")).strip()
+    headless = not _bool_query(request.data.get("visible"), default=False)
+
+    if not usuario or not password:
+        return Response({"error": "Debe indicar usuario y contraseña de DIPRES/Acepta."}, status=400)
+    if not _PATRON_FECHA_ISO_SIGFE.match(fecha_desde) or not _PATRON_FECHA_ISO_SIGFE.match(fecha_hasta):
+        return Response({"error": "Fechas inválidas (se esperan como YYYY-MM-DD)."}, status=400)
+    if fecha_desde > fecha_hasta:
+        return Response({"error": "La fecha 'desde' no puede ser posterior a 'hasta'."}, status=400)
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_actualizacion_facturas[task_id] = {
+        "status": "iniciado",
+        "paso": 0,
+        "paso_desc": "Iniciando...",
+        "error": None,
+        "logs_recientes": [],
+        "progreso_pct": 0,
+        "diff": None,
+    }
+    threading.Thread(
+        target=_ejecutar_actualizacion_facturas,
+        args=(task_id, usuario, password, fecha_desde, fecha_hasta),
+        kwargs={"headless": headless},
+        daemon=True,
+    ).start()
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsFinanzas])
+def estado_actualizacion_facturas(request, task_id):
+    """Retorna el estado de una tarea de actualización de Facturas."""
+    tarea = _tareas_actualizacion_facturas.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id":        task_id,
+        "status":         tarea["status"],
+        "paso":           tarea["paso"],
+        "paso_desc":      tarea["paso_desc"],
+        "progreso_pct":   tarea.get("progreso_pct", 0),
+        "logs_recientes": tarea.get("logs_recientes", []),
+        "error":          tarea.get("error"),
+        "diff":           tarea.get("diff"),
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, _IsFinanzas])
+def cancelar_actualizacion_facturas(request, task_id):
+    """Cancela una tarea de actualización de Facturas en curso (mata el hilo real)."""
+    return _cancelar_tarea(_tareas_actualizacion_facturas, task_id)
 
 
 # =============================================================================

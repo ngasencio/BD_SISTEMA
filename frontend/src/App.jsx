@@ -37,6 +37,7 @@ import { compraAgilRoutes } from './features/compra-agil/routes';
 import { perfilRoute, adminUsuariosRoute } from './features/usuarios/routes';
 import { devengoSigfeRoutes } from './features/devengo-sigfe/routes';
 import { anexo1SigfeRoutes } from './features/anexo1-sigfe/routes';
+import { facturasRoutes } from './features/facturas/routes';
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ function AppRoutes() {
               {finanzasRoutes}
               {devengoSigfeRoutes}
               {anexo1SigfeRoutes}
+              {facturasRoutes}
             </Route>
 
             {/* Perfil propio — todos los autenticados */}

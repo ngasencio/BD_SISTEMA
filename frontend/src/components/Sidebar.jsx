@@ -11,7 +11,7 @@ export default function Sidebar() {
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
         abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac') || path.startsWith('/compra-agil'),
-        finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas'),
+        finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas') || path.startsWith('/facturas'),
         admin: path.startsWith('/admin'),
     });
     const [openMods, setOpenMods] = useState({
@@ -20,7 +20,7 @@ export default function Sidebar() {
         pac: path.startsWith('/pac'),
         inventario: false,
         garantias: path.startsWith('/abastecimiento/boletas'),
-        finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas'),
+        finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas') || path.startsWith('/facturas'),
     });
     const pacTab = path === '/pac' ? (new URLSearchParams(location.search).get('tab') || 'resumen') : null;
     const pacCumplimientoTab = path === '/pac-cumplimiento' ? (new URLSearchParams(location.search).get('tab') || 'resumen') : null;
@@ -208,6 +208,12 @@ export default function Sidebar() {
                                     onClick={() => goTo('/anexo3/reporte-sigfe', 'finanzas', 'finReportes')}
                                 >
                                     <span>🌳</span> <span className="nav-item-text">Anexo N°3 - Reporte Deuda</span>
+                                </div>
+                                <div
+                                    className={`nav-item ${isActive('/facturas') ? 'active' : ''}`}
+                                    onClick={() => goTo('/facturas', 'finanzas', 'finReportes')}
+                                >
+                                    <span>🧾</span> <span className="nav-item-text">Facturas DIPRES</span>
                                 </div>
                             </div>
                         </div>
