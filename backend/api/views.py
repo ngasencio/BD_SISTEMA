@@ -400,6 +400,45 @@ def sigfe_anexo1_resumen(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, _IsFinanzas])
+def sigfe_anexo1_serie_nivel1(request):
+    ue = request.GET.get('ue') or None
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_serie_nivel1_{ue}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_serie_nivel1_establecimiento
+    response_data = calcular_anexo1_serie_nivel1_establecimiento(codigo_ue=ue, excluir_34_35=excluir_34_35)
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsFinanzas])
+def sigfe_anexo1_guia_simple(request):
+    ue = request.GET.get('ue') or None
+    anho = _int_o_none(request.GET.get('anho'))
+    mes_desde = _int_o_none(request.GET.get('mes_desde'))
+    mes_hasta = _int_o_none(request.GET.get('mes_hasta'))
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_guia_simple_{ue}_{anho}_{mes_desde}_{mes_hasta}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_guia_simple
+    response_data = calcular_anexo1_guia_simple(
+        codigo_ue=ue, anho=anho, mes_desde=mes_desde, mes_hasta=mes_hasta, excluir_34_35=excluir_34_35,
+    )
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_alertas(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -840,7 +879,7 @@ def devengo_sigfe_anual_reporte_html(request):
             qs = qs.filter(fecha_documento__year__gte=date.today().year - 1)
         qs = qs.values(
             'codigo_ue', 'principal', 'tipo_documento', 'fecha_conforme', 'fecha_documento',
-            'id_chile_compra', 'catalogo_01', 'catalogo_03', 'catalogo_04',
+            'fecha_ingreso', 'id_chile_compra', 'catalogo_01', 'catalogo_03', 'catalogo_04',
             'concepto_presupuestario', 'monto_vigente', 'monto_disponible', 'monto_consumido',
         )
 
@@ -850,6 +889,7 @@ def devengo_sigfe_anual_reporte_html(request):
         for r in qs.iterator(chunk_size=2000):
             f = r['fecha_conforme'].isoformat() if r['fecha_conforme'] else ''
             fd = r['fecha_documento'].isoformat() if r['fecha_documento'] else ''
+            fi = r['fecha_ingreso'].isoformat() if r['fecha_ingreso'] else ''
 
             c3_raw = (r['catalogo_03'] or '').strip()
             c4_raw = (r['catalogo_04'] or '').strip()
@@ -867,7 +907,7 @@ def devengo_sigfe_anual_reporte_html(request):
                 'u': r['codigo_ue'] or '',
                 'pr': r['principal'] or 'Desconocido',
                 'td': (r['tipo_documento'] or '')[:30],
-                'f': f, 'fd': fd, 'me': fd[:7],
+                'f': f, 'fd': fd, 'fi': fi, 'me': fd[:7],
                 'mp': 1 if idcc.strip() else 0,
                 'c1': (r['catalogo_01'] or '').replace('ProgramaPresupuestario - ', '')[:40],
                 'c3': c3, 'c4': c4,

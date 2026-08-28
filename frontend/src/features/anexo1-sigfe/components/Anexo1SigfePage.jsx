@@ -7,6 +7,7 @@ import BannerActualizacionAnexo1 from './BannerActualizacionAnexo1';
 import PanelCambiosAnexo1 from './PanelCambiosAnexo1';
 import FiltroEjecucion from './FiltroEjecucion';
 import TabResumen from './tabs/TabResumen';
+import TabGuiaSimple from './tabs/TabGuiaSimple';
 import TabAlertas from './tabs/TabAlertas';
 import TabSemaforo from './tabs/TabSemaforo';
 import TabBurnRate from './tabs/TabBurnRate';
@@ -19,6 +20,7 @@ import TabConciliacion from './tabs/TabConciliacion';
 
 const TABS = [
     { id: 'base-datos', label: '🗄️ Base de datos' },
+    { id: 'guia-simple', label: '🧭 Guía Rápida' },
     { id: 'resumen', label: '📊 Resumen Ejecutivo' },
     { id: 'detallado', label: '🔍 Análisis Detallado' },
     { id: 'tendencias', label: '📈 Histórico y Tendencias' },
@@ -167,6 +169,9 @@ export default function Anexo1SigfePage() {
                 />
             )}
 
+            {tab === 'guia-simple' && anhos.length > 0 && (
+                <TabGuiaSimple filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
             {tab === 'resumen' && anhos.length > 0 && (
                 <TabResumen filtros={filtrosConAnho} refreshKey={refreshKey} />
             )}

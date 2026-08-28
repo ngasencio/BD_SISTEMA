@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
+import EstablecimientoSerieNivel1 from './EstablecimientoSerieNivel1';
 
 const COLOR_ESTADO = {
-    verde: { bg: '#dcfce7', border: '#16a34a', text: '#166534' },
-    amarillo: { bg: '#fef9c3', border: '#ca8a04', text: '#854d0e' },
-    rojo: { bg: '#fee2e2', border: '#dc2626', text: '#991b1b' },
+    verde: { bg: 'var(--gob-verde-lt)', border: 'var(--gob-verde)', text: '#166534' },
+    amarillo: { bg: 'var(--gob-amarillo-lt)', border: 'var(--gob-amarillo)', text: '#854d0e' },
+    rojo: { bg: 'var(--gob-rojo-lt)', border: 'var(--gob-rojo)', text: 'var(--gob-rojo)' },
 };
 
 const ETIQUETA_ESTADO = {
@@ -12,7 +13,7 @@ const ETIQUETA_ESTADO = {
     rojo: 'Sin datos',
 };
 
-function formatearPeriodo(periodo) {
+export function formatearPeriodo(periodo) {
     const [anho, mes] = periodo.split('-');
     const nombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     return `${nombres[parseInt(mes, 10) - 1]} ${anho.slice(2)}`;
@@ -35,10 +36,10 @@ function Celda({ info }) {
                 border: `1px solid ${colores.border}`,
                 color: colores.text,
                 textAlign: 'center',
-                padding: '8px 4px',
-                fontSize: 12,
+                padding: '5px 4px',
+                fontSize: 11,
                 fontWeight: 600,
-                minWidth: 46,
+                minWidth: 40,
                 cursor: 'default',
             }}
         >
@@ -48,23 +49,32 @@ function Celda({ info }) {
 }
 
 export default function MatrizEstadoBD({ data }) {
+    const [seleccionado, setSeleccionado] = useState(null);
+    const [hover, setHover] = useState(null);
+
     if (!data) return null;
     const { establecimientos, periodos, matriz } = data;
 
+    const toggleSeleccion = (codigoUe) => {
+        setSeleccionado((prev) => (prev === codigoUe ? null : codigoUe));
+    };
+
+    const estSeleccionado = establecimientos.find((e) => e.codigo_ue === seleccionado);
+
     return (
         <div className="card" style={{ padding: 0 }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
                 {Object.entries(ETIQUETA_ESTADO).map(([estado, etiqueta]) => (
-                    <div key={estado} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--gob-gris5)' }}>
+                    <div key={estado} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--gob-gris5)' }}>
                         <span style={{
-                            width: 12, height: 12, borderRadius: 3, display: 'inline-block',
+                            width: 10, height: 10, borderRadius: 3, display: 'inline-block',
                             background: COLOR_ESTADO[estado].bg, border: `1px solid ${COLOR_ESTADO[estado].border}`,
                         }} />
                         {etiqueta}
                     </div>
                 ))}
-                <div style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--gob-gris4)' }}>
-                    El número en cada celda es la cantidad de filas cargadas para ese mes.
+                <div style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--gob-gris4)' }}>
+                    Cantidad de filas cargadas por mes · clic en un establecimiento para ver su gasto Nivel 1.
                 </div>
             </div>
 
@@ -74,14 +84,16 @@ export default function MatrizEstadoBD({ data }) {
                         <tr>
                             <th style={{
                                 position: 'sticky', left: 0, background: 'var(--gob-gris1)', zIndex: 1,
-                                textAlign: 'left', padding: '8px 12px', fontSize: 12.5, color: 'var(--gob-gris5)',
+                                textAlign: 'left', padding: '6px 12px', fontSize: 10.5, color: 'var(--gob-gris4)',
+                                fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px',
                                 borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap',
                             }}>
                                 Establecimiento
                             </th>
                             {periodos.map((p) => (
                                 <th key={p} style={{
-                                    padding: '8px 4px', fontSize: 11.5, color: 'var(--gob-gris4)', fontWeight: 600,
+                                    padding: '6px 4px', fontSize: 10.5, color: 'var(--gob-gris4)', fontWeight: 700,
+                                    textTransform: 'uppercase', letterSpacing: '.2px',
                                     borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap',
                                 }}>
                                     {formatearPeriodo(p)}
@@ -90,24 +102,44 @@ export default function MatrizEstadoBD({ data }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {establecimientos.map((est) => (
-                            <tr key={est.codigo_ue}>
-                                <td style={{
-                                    position: 'sticky', left: 0, background: '#fff', zIndex: 1,
-                                    padding: '8px 12px', fontSize: 13, color: 'var(--gob-gris5)', whiteSpace: 'nowrap',
-                                    borderBottom: '1px solid var(--gob-gris2)',
-                                }}>
-                                    <div style={{ fontWeight: 600 }}>{est.nombre}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--gob-gris4)' }}>{est.codigo_ue}</div>
-                                </td>
-                                {periodos.map((p) => (
-                                    <Celda key={p} info={matriz[est.codigo_ue]?.[p] || { estado: 'rojo', n_filas: 0 }} />
-                                ))}
-                            </tr>
-                        ))}
+                        {establecimientos.map((est) => {
+                            const activo = est.codigo_ue === seleccionado;
+                            const resaltado = activo || est.codigo_ue === hover;
+                            return (
+                                <tr
+                                    key={est.codigo_ue}
+                                    onClick={() => toggleSeleccion(est.codigo_ue)}
+                                    style={{ cursor: 'pointer' }}
+                                    onMouseEnter={() => setHover(est.codigo_ue)}
+                                    onMouseLeave={() => setHover((prev) => (prev === est.codigo_ue ? null : prev))}
+                                >
+                                    <td style={{
+                                        position: 'sticky', left: 0, zIndex: 1,
+                                        background: resaltado ? 'var(--gob-celeste-lt)' : '#fff',
+                                        borderLeft: activo ? '3px solid var(--gob-azul)' : '3px solid transparent',
+                                        padding: '6px 12px 6px 9px', fontSize: 12.5, color: 'var(--gob-gris5)', whiteSpace: 'nowrap',
+                                        borderBottom: '1px solid var(--gob-gris2)',
+                                    }}>
+                                        <div style={{ fontWeight: 600 }}>{est.nombre}</div>
+                                        <div style={{ fontSize: 10.5, color: 'var(--gob-gris4)' }}>{est.codigo_ue}</div>
+                                    </td>
+                                    {periodos.map((p) => (
+                                        <Celda key={p} info={matriz[est.codigo_ue]?.[p] || { estado: 'rojo', n_filas: 0 }} />
+                                    ))}
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
+
+            {estSeleccionado && (
+                <EstablecimientoSerieNivel1
+                    codigoUe={estSeleccionado.codigo_ue}
+                    nombre={estSeleccionado.nombre}
+                    onClose={() => setSeleccionado(null)}
+                />
+            )}
         </div>
     );
 }

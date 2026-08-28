@@ -48,6 +48,10 @@ backend/add_cols.py
 frontend/dist/
 frontend/node_modules/
 
+# Backups locales de MySQL (voluminosos, nunca al repo)
+mysql_dump_backup/
+backup_mysql_db_table_*/
+
 # OS
 .DS_Store
 Thumbs.db

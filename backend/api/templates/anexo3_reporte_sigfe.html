@@ -418,6 +418,7 @@ body{font-family:var(--f);background:var(--gris0);color:var(--gris7);height:100v
   <!-- TABS -->
   <div class="tabs">
     <div class="tab-btn active" onclick="TAB.show('resumen',this)">📊 Resumen Ejecutivo</div>
+    <div class="tab-btn" onclick="TAB.show('simple',this)">🧭 Guía Rápida</div>
     <div class="tab-btn" onclick="TAB.show('deuda',this)">⚠️ Deuda Flotante</div>
     <div class="tab-btn" onclick="TAB.show('pagos',this)">📈 Análisis de Pagos</div>
     <div class="tab-btn" onclick="TAB.show('prov',this)">🏢 Proveedores</div>
@@ -426,7 +427,6 @@ body{font-family:var(--f);background:var(--gris0);color:var(--gris7);height:100v
     <div class="tab-btn" onclick="TAB.show('antiguedad',this)">⏳ Antigüedad Deuda</div>
     <div class="tab-btn" onclick="TAB.show('concepto',this)">📂 Concepto Presup.</div>
     <div class="tab-btn" onclick="TAB.show('arbol',this)">🌳 Árbol Presupuestario</div>
-    <div class="tab-btn" onclick="TAB.show('pronostico',this)">🔮 Pronóstico</div>
   </div>
 
   <!-- CONTENT -->
@@ -469,6 +469,74 @@ body{font-family:var(--f);background:var(--gris0);color:var(--gris7);height:100v
         </div>
         <div class="card-body"><div class="ch-wrap tall"><canvas id="ch-proj"></canvas></div></div>
       </div>
+    </div>
+
+    <!-- ── TAB: GUÍA RÁPIDA (explicación en lenguaje simple) ── -->
+    <div class="tab-view" id="tab-simple">
+
+      <div style="background:var(--az4);border-left:4px solid var(--az);border-radius:var(--r);padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-start">
+        <span style="font-size:22px">💡</span>
+        <div style="font-size:12px;color:var(--gris7);line-height:1.6">
+          <strong>¿Qué muestra este reporte?</strong> Cada documento (factura, boleta u orden de compra) que recibe el hospital tiene 3 montos:
+          lo <strong>comprometido</strong> a pagar (Vigente), lo que <strong>ya se pagó</strong> (Consumido) y lo que <strong>todavía se debe</strong> (Disponible).
+          Esta pestaña resume esa información sin tecnicismos, agrupada por: tipo de documento, a quién se le debe, en qué unidad del hospital,
+          cuándo llegó el documento y en qué categoría de gasto se clasifica.
+        </div>
+      </div>
+
+      <!-- Los 3 montos -->
+      <div class="kpi-grid" id="kpi-simple-montos"></div>
+
+      <div class="g2" style="margin-bottom:14px">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-t">💰 De cada $100 comprometidos...</span></div>
+          <div class="card-body">
+            <div style="font-size:11.5px;color:var(--gris5);margin-bottom:8px;line-height:1.5">Qué proporción ya fue pagada y cuál todavía se debe.</div>
+            <div class="ch-wrap"><canvas id="ch-simple-montos"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-t">📄 ¿Qué tipo de documentos son?</span></div>
+          <div class="card-body">
+            <div style="font-size:11.5px;color:var(--gris5);margin-bottom:10px;line-height:1.5">Cada barra es un tipo de comprobante (factura, boleta, orden de compra, etc.). El monto es lo que aún se debe de ese tipo.</div>
+            <div id="simple-tipodoc"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="g2" style="margin-bottom:14px">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-t">🏢 ¿A quién se le debe / se le pagó?</span></div>
+          <div class="card-body">
+            <div style="font-size:11.5px;color:var(--gris5);margin-bottom:10px;line-height:1.5">Empresas o personas a las que el hospital les compró (columna "Principal"). El monto es la deuda pendiente con cada una.</div>
+            <div id="simple-principal"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-t">🏥 ¿En qué unidad o establecimiento?</span></div>
+          <div class="card-body">
+            <div style="font-size:11.5px;color:var(--gris5);margin-bottom:10px;line-height:1.5">Cada Unidad Ejecutora es un hospital o establecimiento de la red. El monto es la deuda pendiente de esa unidad.</div>
+            <div id="simple-ue"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-hd"><span class="card-hd-t">📅 ¿Cuándo llegaron los documentos?</span></div>
+        <div class="card-body">
+          <div style="font-size:11.5px;color:var(--gris5);margin-bottom:8px;line-height:1.5">Fecha en que el documento ingresó / fue recepcionado para su trámite, agrupado por mes.</div>
+          <div class="ch-wrap"><canvas id="ch-simple-fecha"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-hd"><span class="card-hd-t">📂 ¿En qué se gastó la plata? (Concepto Presupuestario)</span></div>
+        <div class="card-body">
+          <div style="font-size:11.5px;color:var(--gris5);margin-bottom:10px;line-height:1.5">Categoría de gasto según las normas del Estado (ej: "Bienes y Servicios de Consumo", "Gastos en Personal"). El monto es la deuda pendiente de esa categoría.</div>
+          <div id="simple-concepto"></div>
+        </div>
+      </div>
+
     </div>
 
     <!-- ── TAB 2: DEUDA FLOTANTE ── -->
@@ -1079,133 +1147,6 @@ body{font-family:var(--f);background:var(--gris0);color:var(--gris7);height:100v
     </div>
 
   
-    <!-- TAB: PRONÓSTICO PREDICTIVO -->
-    <div class="tab-view" id="tab-pronostico">
-
-      <!-- Cabecera -->
-      <div style="background:linear-gradient(135deg,var(--az3),#0d4f7c 50%,#1565a8);border-radius:var(--r2);padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:18px;box-shadow:var(--sh2)">
-        <div style="font-size:36px">🔮</div>
-        <div style="flex:1">
-          <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:4px">Análisis Predictivo de Liquidación de Deuda</div>
-          <div style="font-size:11.5px;color:rgba(255,255,255,.72);line-height:1.5">
-            Modelo basado en capacidad de pago histórica (oct 2025 – feb 2026) ·
-            <strong style="color:#fff">Deuda activa: $7.752.271.984</strong> ·
-            Capacidad base: $2.772M/mes · Referencia: 14 Mar 2026
-          </div>
-        </div>
-        <div style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:var(--r2);padding:10px 16px;text-align:center">
-          <div style="font-size:10px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">Escenario</div>
-          <select id="fc-escenario" onchange="renderPronostico()"
-            style="background:transparent;border:none;color:#fff;font-size:14px;font-weight:700;font-family:var(--f);cursor:pointer;outline:none">
-            <option value="base"     style="color:#000">📊 Base</option>
-            <option value="pesimista" style="color:#000">📉 Pesimista</option>
-            <option value="optimista" style="color:#000">📈 Optimista</option>
-            <option value="acelerado" style="color:#000">🚀 Acelerado</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- KPIs -->
-      <div id="fc-kpis" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px"></div>
-
-      <!-- Curva de liquidación -->
-      <div class="card" style="margin-bottom:14px">
-        <div class="card-hd" style="background:linear-gradient(90deg,var(--az3),var(--az))">
-          <span style="font-size:15px">📉</span>
-          <span class="card-hd-t" style="color:#fff">Curva de Liquidación — 4 Escenarios</span><span class="tip-ico" data-tip="Curva de Liquidación||Proyección de la deuda restante bajo 4 escenarios de capacidad de pago: Pesimista (50%), Base (100%), Optimista (150%) y Acelerado (200%) del promedio histórico.||Muestra cuándo se liquidaría la deuda total en cada escenario. La banda ±15% indica incertidumbre. Si el escenario base supera 12 meses, la deuda es estructural.">ℹ</span>
-          <label style="margin-left:auto;font-size:10.5px;color:rgba(255,255,255,.75);display:flex;align-items:center;gap:5px;cursor:pointer">
-            <input type="checkbox" id="fc-show-ci" checked onchange="renderPronostico()" style="accent-color:#6bccd6">
-            Banda ±15%
-          </label>
-        </div>
-        <div class="card-body"><div style="position:relative;height:320px"><canvas id="ch-fc-curva"></canvas></div></div>
-      </div>
-
-      <!-- Fila 2: Antigüedad + Historial -->
-      <div class="g2" style="margin-bottom:14px">
-        <div class="card">
-          <div class="card-hd"><span class="card-hd-t">⏳ Deuda por Antigüedad</span><span class="card-hd-sub" id="fc-ag-sub"></span></div>
-          <div class="card-body">
-            <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
-              <div style="position:relative;width:110px;height:110px;flex-shrink:0"><canvas id="ch-fc-donut"></canvas></div>
-              <div id="fc-ag-legend" style="flex:1;font-size:10.5px"></div>
-            </div>
-            <div id="fc-ag-bars"></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-hd"><span class="card-hd-t">📅 Historial de Pagos y Tendencia</span></div>
-          <div class="card-body">
-            <div style="position:relative;height:190px;margin-bottom:10px"><canvas id="ch-fc-hist"></canvas></div>
-            <div id="fc-tendencia-txt" style="font-size:11px;color:var(--gris5);line-height:1.6;background:var(--gris0);border-radius:var(--r);padding:8px 10px;border-left:3px solid var(--az2)"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Simulador -->
-      <div class="card" style="margin-bottom:14px;border:2px solid var(--az4)">
-        <div class="card-hd" style="background:var(--az4)">
-          <span style="font-size:15px">🎛️</span>
-          <span class="card-hd-t" style="color:var(--az3)">Simulador Interactivo de Capacidad de Pago</span>
-          <span style="font-size:11px;color:var(--az);margin-left:8px">Ajusta los parámetros y ve el impacto en tiempo real</span>
-        </div>
-        <div class="card-body" style="padding:16px">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:14px">
-            <div>
-              <label style="font-size:11px;font-weight:700;color:var(--gris6);display:block;margin-bottom:5px">💰 Pago mensual (M$)</label>
-              <input type="range" id="fc-slider-pago" min="500" max="10000" step="100" value="2772" oninput="updateSimulador()" style="width:100%;accent-color:var(--az)">
-              <div style="display:flex;justify-content:space-between;margin-top:3px">
-                <span style="font-size:10px;color:var(--gris4)">$500M</span>
-                <span id="fc-slider-val" style="font-size:12px;font-weight:700;color:var(--az);font-family:var(--fm)">$2.772M</span>
-                <span style="font-size:10px;color:var(--gris4)">$10.000M</span>
-              </div>
-            </div>
-            <div>
-              <label style="font-size:11px;font-weight:700;color:var(--gris6);display:block;margin-bottom:5px">📈 Crecimiento mensual (%)</label>
-              <input type="range" id="fc-slider-crec" min="-20" max="50" step="5" value="0" oninput="updateSimulador()" style="width:100%;accent-color:var(--az2)">
-              <div style="display:flex;justify-content:space-between;margin-top:3px">
-                <span style="font-size:10px;color:var(--gris4)">-20%</span>
-                <span id="fc-crec-val" style="font-size:12px;font-weight:700;color:var(--az2);font-family:var(--fm)">0%</span>
-                <span style="font-size:10px;color:var(--gris4)">+50%</span>
-              </div>
-            </div>
-            <div>
-              <label style="font-size:11px;font-weight:700;color:var(--gris6);display:block;margin-bottom:5px">🏦 Deuda nueva/mes (M$)</label>
-              <input type="range" id="fc-slider-nueva" min="0" max="5000" step="100" value="0" oninput="updateSimulador()" style="width:100%;accent-color:var(--rd)">
-              <div style="display:flex;justify-content:space-between;margin-top:3px">
-                <span style="font-size:10px;color:var(--gris4)">$0</span>
-                <span id="fc-nueva-val" style="font-size:12px;font-weight:700;color:var(--rd);font-family:var(--fm)">$0M</span>
-                <span style="font-size:10px;color:var(--gris4)">$5.000M</span>
-              </div>
-            </div>
-          </div>
-          <div id="fc-sim-resultado" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px"></div>
-          <div style="position:relative;height:170px"><canvas id="ch-fc-sim"></canvas></div>
-        </div>
-      </div>
-
-      <!-- Fila 3: Top proveedores + Por establecimiento -->
-      <div class="g2" style="margin-bottom:14px">
-        <div class="card">
-          <div class="card-hd"><span class="card-hd-t">🏢 Top 10 Proveedores — Deuda</span></div>
-          <div class="card-body" style="padding:10px 16px" id="fc-top-prov"></div>
-        </div>
-        <div class="card">
-          <div class="card-hd"><span class="card-hd-t">🏥 Deuda por Establecimiento</span></div>
-          <div class="card-body" style="padding:10px 16px" id="fc-by-ue"></div>
-        </div>
-      </div>
-
-      <!-- Diagnóstico -->
-      <div class="card">
-        <div class="card-hd" style="background:linear-gradient(90deg,#1a3d71,var(--az2))">
-          <span style="font-size:15px">🩺</span>
-          <span class="card-hd-t" style="color:#fff">Diagnóstico Financiero y Recomendaciones</span>
-        </div>
-        <div class="card-body" style="padding:16px" id="fc-recomendaciones"></div>
-      </div>
-
-    </div><!-- /tab-pronostico -->
 
 </div><!-- /content -->
 </div><!-- /main -->
@@ -1414,6 +1355,7 @@ function toggleFilters(){
 const TAB = {
   map:{
     resumen:    ()=>renderResumen(),
+    simple:     ()=>renderSimple(),
     deuda:      ()=>renderDeuda(),
     pagos:      ()=>{ renderPagos(); renderPagosTbl(); },
     prov:       ()=>renderProv(),
@@ -1423,7 +1365,6 @@ const TAB = {
     antiguedad: ()=>renderAntiguedad(),
     concepto:   ()=>renderConcepto(),
     arbol:      ()=>renderArbol(),
-    pronostico: ()=>renderPronostico(),
   },
   show(name, btn){
     document.querySelectorAll('.tab-view').forEach(e=>e.classList.remove('active'));
@@ -1625,6 +1566,83 @@ function renderProyeccion(d){
       }
     }
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  TAB: GUÍA RÁPIDA (explicación en lenguaje simple, sin tecnicismos)
+// ═══════════════════════════════════════════════════════════════════
+function simpleBarList(rows, opts={}){
+  if(!rows.length) return '<div style="font-size:11.5px;color:var(--gris4);padding:8px 0">Sin datos para este filtro.</div>';
+  const max = Math.max(...rows.map(r=>r.val), 1);
+  return rows.map(r=>{
+    const pct = Math.max(r.val/max*100, 2).toFixed(0);
+    return `<div style="margin-bottom:11px">
+      <div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--gris7);margin-bottom:3px">
+        <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.lbl}">${r.lbl}</span>
+        <span style="font-family:var(--fm);font-weight:700;color:var(--az3);flex-shrink:0;margin-left:10px">${U.fmtM(r.val)}</span>
+      </div>
+      <div style="background:var(--gris1);border-radius:5px;height:9px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${opts.color||'var(--az2)'};border-radius:5px"></div>
+      </div>
+      ${r.sub?`<div style="font-size:10px;color:var(--gris4);margin-top:2px">${r.sub}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderSimple(){
+  const d = S.filtered;
+  const totV=d.reduce((a,r)=>a+r.vg,0), totC=d.reduce((a,r)=>a+r.co,0), totD=d.reduce((a,r)=>a+r.di,0);
+  const pctD = totV>0 ? totD/totV*100 : undefined;
+
+  document.getElementById('kpi-simple-montos').innerHTML = [
+    U.kpiCard('az','📌','Monto Vigente', U.fmtM(totV), 'Lo que el hospital se comprometió a pagar', undefined,
+      {desc:'Es el monto total acordado por los bienes o servicios recibidos: la "cuenta" completa de cada documento.',calc:'Suma de Monto Vigente de todos los documentos filtrados'}),
+    U.kpiCard('vd','✅','Monto Consumido', U.fmtM(totC), 'Lo que ya se pagó', undefined,
+      {desc:'Es la parte de esa cuenta que el hospital ya pagó efectivamente al proveedor.',calc:'Suma de Monto Consumido de todos los documentos filtrados'}),
+    U.kpiCard('rd','⏳','Monto Disponible', U.fmtM(totD), 'Lo que todavía se debe', pctD,
+      {desc:'Es la parte de la cuenta que aún no se ha pagado: la deuda pendiente con el proveedor.',calc:'Monto Vigente − Monto Consumido'}),
+  ].join('');
+
+  U.doughnut('ch-simple-montos', ['Ya pagado','Todavía se debe'], [totC, totD],
+    {ttFn:c=>c.label+': '+U.fmtM(c.raw), colors:['rgba(22,163,74,.75)','rgba(220,38,38,.75)']});
+
+  const grpTd = U.groupBy(d,'td');
+  document.getElementById('simple-tipodoc').innerHTML = simpleBarList(
+    grpTd.slice(0,8).map(g=>({lbl:g.lbl||'Sin especificar', val:g.disponible, sub:g.n+' documentos'})),
+    {color:'rgba(220,38,38,.6)'}
+  );
+
+  const grpPr = U.groupBy(d,'pr');
+  document.getElementById('simple-principal').innerHTML = simpleBarList(
+    grpPr.slice(0,8).map(g=>({lbl:g.lbl, val:g.disponible, sub:g.n+' documentos'})),
+    {color:'rgba(11,90,143,.6)'}
+  );
+
+  const grpUe = U.groupBy(d,'u');
+  document.getElementById('simple-ue').innerHTML = simpleBarList(
+    grpUe.map(g=>({lbl:(g.lbl||'').replace(/^\d+\s+/,'')||'Sin especificar', val:g.disponible, sub:g.n+' documentos'})),
+    {color:'rgba(202,138,4,.65)'}
+  );
+
+  const byMesFi = {};
+  d.forEach(r=>{
+    const mi = (r.fi||'').slice(0,7);
+    if(!mi || mi.length<7) return;
+    if(!byMesFi[mi]) byMesFi[mi] = {vg:0,co:0,di:0};
+    byMesFi[mi].vg+=r.vg; byMesFi[mi].co+=r.co; byMesFi[mi].di+=r.di;
+  });
+  const mesesFi = Object.keys(byMesFi).sort();
+  U.barV('ch-simple-fecha', mesesFi, [
+    {label:'Recibido ese mes', data:mesesFi.map(m=>byMesFi[m].vg/1e6), backgroundColor:'rgba(11,90,143,.5)', borderRadius:3},
+    {label:'Ya pagado',        data:mesesFi.map(m=>byMesFi[m].co/1e6), backgroundColor:'rgba(22,163,74,.65)', borderRadius:3},
+    {label:'Aún se debe',      data:mesesFi.map(m=>byMesFi[m].di/1e6), backgroundColor:'rgba(220,38,38,.7)', borderRadius:3},
+  ], {ttFn:c=>c.dataset.label+': $'+c.raw?.toFixed(1)+'M', yCb:v=>'$'+v+'M'});
+
+  const grpCp = U.groupBy(d,'cp');
+  document.getElementById('simple-concepto').innerHTML = simpleBarList(
+    grpCp.slice(0,10).map(g=>({lbl:g.lbl, val:g.disponible, sub:g.n+' documentos'})),
+    {color:'rgba(107,114,128,.65)'}
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2139,8 +2157,6 @@ const UZ = {
     S.all=[...UZ.newRows];   // Sin datos base: solo los cargados
     buildFilterOptions();
     applyFilters();
-    // Recalculate forecast from loaded data
-    recalcForecast();
     UZ.log('✅ Dashboard actualizado: '+(D_SLIM.length+UZ.newRows.length)+' registros totales');
     // Navigate to resumen
     document.querySelectorAll('.tab-view').forEach(e=>e.classList.remove('active'));
@@ -2217,7 +2233,7 @@ function updatePdfPreview(){
   const ue = document.getElementById('pdf-ue')?.value||'';
   const d = ue ? S.all.filter(r=>r.u===ue) : S.all;
   const totV=d.reduce((a,r)=>a+r.vg,0), totD=d.reduce((a,r)=>a+r.di,0);
-  const secs = ['resumen','deuda','pagos','prov','cat01','cat04','antiguedad','concepto','pronostico','recomend']
+  const secs = ['resumen','deuda','pagos','prov','cat01','cat04','antiguedad','concepto','recomend']
     .filter(s=>document.getElementById('pdf-sec-'+s)?.checked).length;
   const el=document.getElementById('pdf-preview-info');
   if(el) el.innerHTML=`📊 <strong>${d.length.toLocaleString('es-CL')}</strong> registros · Vigente: <strong>${U.fmtM(totV)}</strong> · Deuda: <strong>${U.fmtM(totD)}</strong> · <strong>${secs}</strong> secciones seleccionadas`;
@@ -2259,9 +2275,6 @@ function exportPDF(){
   d.filter(r=>r.co>0&&r.m).forEach(r=>{if(!byMes[r.m])byMes[r.m]=0;byMes[r.m]+=r.co;});
   const mesHist=Object.entries(byMes).sort((a,b)=>a[0]>b[0]?1:-1).slice(-6);
   const promPago=mesHist.length?mesHist.reduce((a,[,v])=>a+v,0)/mesHist.length:0;
-
-  // Forecast simple
-  const mesesLiqBase = totD>0&&promPago>0 ? Math.ceil(totD/promPago) : null;
 
   // ── CSS ──
   const css = `
@@ -2585,41 +2598,12 @@ function exportPDF(){
     );
   }
 
-  // ── 9. PRONÓSTICO ──
-  if(sec('pronostico')){
-    const escData=D_FC.escenarios?.base||{};
-    const escMeses=escData.meses||null;
-    const escFin=escData.fecha_fin||null;
-    const promPagoFC=D_FC.prom_mensual||promPago||0;
-    body += `<h2 class="page-break">9. Pronóstico de Liquidación de Deuda</h2>`;
-    body += kpiRow([
-      {lbl:'Deuda Total Activa',    val:U.fmtM(totD),                       sub:deudaRows.length+' documentos',         cls:'rd'},
-      {lbl:'Capacidad de Pago',     val:'$'+Math.round(promPagoFC/1e6).toLocaleString('es-CL')+'M/mes', sub:'Promedio histórico', cls:'az' in{}?'':''},
-      {lbl:'Liquidación Estimada',  val:escFin||'—',                         sub:(escMeses||'—')+' meses (escenario base)', cls:escMeses&&escMeses<=3?'vd':escMeses<=6?'am':'rd'},
-      {lbl:'Antigüedad Promedio',   val:avgDias+' días',                      sub:'Desde Fecha Conforme',                  cls:avgDias>60?'rd':avgDias>30?'am':'vd'},
-    ]);
-    body += `<h3>Escenarios de Liquidación</h3>`;
-    const escRows=Object.entries(D_FC.escenarios||{}).map(([k,v])=>{
-      const nombres={pesimista:'📉 Pesimista (50%)',base:'📊 Base (100%)',optimista:'📈 Optimista (150%)',acelerado:'🚀 Acelerado (200%)'};
-      const tasas={pesimista:promPagoFC*0.5,base:promPagoFC,optimista:promPagoFC*1.5,acelerado:promPagoFC*2};
-      const cls2=v.meses<=3?'vd':v.meses<=6?'am':'rd';
-      return [nombres[k]||k,'$'+Math.round((tasas[k]||0)/1e6).toLocaleString('es-CL')+'M/mes',v.meses+' meses',v.fecha_fin||'—',`<span class="tag tag-${cls2}">${cls2==='vd'?'🟢':cls2==='am'?'🟡':'🔴'} ${v.meses} meses</span>`];
-    });
-    body += tbl([{t:'Escenario'},{t:'Tasa Mensual',cls:'r'},{t:'Meses',cls:'c'},{t:'Fecha Fin',cls:'c'},{t:'Resultado',cls:'c'}], escRows);
-    body += `<h3>Distribución de Deuda por Antigüedad</h3>`;
-    body += tbl(
-      [{t:'Tramo'},{t:'Monto',cls:'r'},{t:'Docs',cls:'c'},{t:'% Total',cls:'c'},{t:'Prioridad',cls:'c'}],
-      agBuckets.map((b,i)=>[b.lbl,`<span class="r">${U.fmtM(b.monto)}</span>`,`<span class="c">${b.docs}</span>`,`<span class="c">${totD>0?(b.monto/totD*100).toFixed(1):0}%</span>`,`<span class="tag ${i>=2?'tag-rd':i===1?'tag-am':'tag-vd'}">${i>=2?'🔴 Alta':i===1?'🟡 Media':'🟢 Normal'}</span>`])
-    );
-  }
-
-  // ── 10. RECOMENDACIONES ──
+  // ── 9. RECOMENDACIONES ──
   if(sec('recomend')){
-    body += `<h2 class="page-break">10. Diagnóstico y Recomendaciones</h2>`;
+    body += `<h2 class="page-break">9. Diagnóstico y Recomendaciones</h2>`;
     const recs=[
       {cls:'rd',ic:'🎯',t:'Acción Prioritaria — Pago de Deuda Antigua',txt:`Existe un saldo de <strong>${U.fmtM(agBuckets.slice(2).reduce((a,b)=>a+b.monto,0))}</strong> con antigüedad superior a 60 días. Se recomienda priorizar el pago de estos documentos para evitar intereses y deterioro de relaciones comerciales.`},
       {cls:'am',ic:'🏢',t:'Concentración de Proveedor',txt:`El proveedor de mayor deuda concentra <strong>${(grpProv[0]?.disponible/Math.max(totD,1)*100).toFixed(1)}%</strong> del total pendiente (<strong>${U.fmtM(grpProv[0]?.disponible||0)}</strong>). Se recomienda negociar un plan de pago escalonado.`},
-      {cls:'az',ic:'📅',t:'Plan de Liquidación',txt:`Al ritmo de pago histórico de <strong>$${Math.round((D_FC.prom_mensual||promPago||0)/1e6).toLocaleString('es-CL')}M/mes</strong>, la deuda se liquidaría en <strong>${D_FC.escenarios?.base?.meses||'—'} meses</strong>. Para acelerar a 2 meses se requieren <strong>$${Math.round(totD/2/1e6).toLocaleString('es-CL')}M/mes</strong>.`},
       {cls:'vd',ic:'✅',t:'Fortaleza Detectada',txt:`La tasa de ejecución global es de <strong>${pctEjec.toFixed(1)}%</strong>, con <strong>${U.fmtM(totC)}</strong> pagado sobre <strong>${U.fmtM(totV)}</strong> vigente. La deuda actual representa el <strong>${pctDeuda.toFixed(1)}%</strong> del presupuesto total.`},
     ];
     body += recs.map(r=>`<div class="alert alert-${r.cls}" style="margin-bottom:8px"><span style="font-size:16px">${r.ic}</span><div><strong>${r.t}</strong><br>${r.txt}</div></div>`).join('');
@@ -3379,454 +3363,6 @@ function closeCpDrawer(){
   _drawerSearch='';
 }
 
-
-// ════════════════════════════════════════════════════════════════════
-// PRONÓSTICO PREDICTIVO — DATA + RENDER
-// ════════════════════════════════════════════════════════════════════
-const D_FC = {};
-
-function renderPronostico(){
-  const esc = document.getElementById('fc-escenario')?.value||'base';
-  const showCI = document.getElementById('fc-show-ci')?.checked??true;
-  const fc = D_FC;
-  const escData = fc.escenarios[esc];
-  const deudaTotal = fc.deuda_total;
-  const promMensual = fc.prom_mensual;
-
-  // KPIs ─────────────────────────────────────────────────────────────
-  const escLabels={pesimista:'Pesimista',base:'Base',optimista:'Optimista',acelerado:'Acelerado'};
-  const meses = escData.meses;
-  const today  = new Date(fc.today);
-  const fechaFin = new Date(today); fechaFin.setMonth(fechaFin.getMonth()+meses);
-  const MN = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const fechaStr = MN[fechaFin.getMonth()]+' '+fechaFin.getFullYear();
-
-  const totV_f = S.filtered.reduce((a,r)=>a+r.vg,0);
-  const totC_f = S.filtered.reduce((a,r)=>a+r.co,0);
-  const pctEjec = totV_f>0?(totC_f/totV_f*100):0;
-
-  const urgCls  = meses<=2?'vd':meses<=4?'am':meses<=6?'am':'rd';
-  const urgLbl  = meses<=2?'🟢 Baja':meses<=4?'🟡 Media':meses<=6?'🟠 Alta':'🔴 Crítica';
-  const tasaLbl = '$'+Math.round(escData.tasa/1e6).toLocaleString('es-CL')+'M/mes';
-
-  document.getElementById('fc-kpis').innerHTML=[
-    {ic:'💸',lbl:'Deuda Total Activa',   val:U.fmtM(deudaTotal),      sub:'3.726 documentos activos',cls:'rd',
-     tip:'Suma de todo el Monto Disponible pendiente de pago. Base del modelo predictivo.||Σ Monto Disponible donde Disponible > 0'},
-    {ic:'⚡',lbl:'Capacidad de Pago',    val:'$'+Math.round(promMensual/1e6).toLocaleString('es-CL')+'M/mes',sub:'Promedio oct25–feb26',cls:'az',
-     tip:'Promedio mensual de pagos ejecutados en los últimos 5 meses con actividad. Tasa base del escenario.||Promedio(Pagos oct-25, nov-25, dic-25, ene-26, feb-26)'},
-    {ic:'📅',lbl:'Liquidación Estimada', val:fechaStr,                 sub:meses+' meses · escenario '+escLabels[esc],cls:meses<=3?'vd':meses<=5?'am':'rd',
-     tip:'Fecha estimada de liquidación total al ritmo del escenario activo. Cambia dinámicamente.||Fecha hoy + ⌈Deuda ÷ Tasa mensual⌉ meses'},
-    {ic:'⚠️',lbl:'Nivel de Urgencia',   val:urgLbl,                   sub:'Basado en antigüedad de deuda',cls:urgCls,
-     tip:'Urgencia según meses para liquidar: Baja ≤2m · Media ≤4m · Alta ≤6m · Crítica >6m.||Meses: ≤2→Baja | ≤4→Media | ≤6→Alta | >6→Crítica'},
-    {ic:'✅',lbl:'Ejecución Global',     val:pctEjec.toFixed(1)+'%',   sub:'Pagado / Vigente total',cls:'vd',
-     tip:'Porcentaje del presupuesto total ya pagado sobre todos los registros filtrados.||(Σ Monto Consumido ÷ Σ Monto Vigente) × 100'},
-  ].map(k=>{
-    const parts=(k.tip||'').split('||');
-    const dataTip=k.tip?' data-tip="'+k.lbl+'||'+parts[0]+'||'+(parts[1]||'').replace(/^📐\s*/,'')+'"':'';
-    return '<div class="kpi '+k.cls+'"'+dataTip+'><div class="kpi-ic">'+k.ic+'</div><div class="kpi-lbl">'+k.lbl+'</div><div class="kpi-val" style="font-size:16px">'+k.val+'</div><div class="kpi-sub">'+k.sub+'</div></div>';
-  }).join('');
-
-  // Curva de liquidación ─────────────────────────────────────────────
-  const baseVals = fc.escenarios.base.curva;
-  const labels   = baseVals.map(p=>p.mes);
-  const cfgs = {
-    pesimista:{color:'rgba(220,38,38,.75)', dash:[5,3], w:1.5, lbl:'📉 Pesimista'},
-    base:     {color:'rgba(11,90,143,.95)',  dash:[],    w:2.5, lbl:'📊 Base'},
-    optimista:{color:'rgba(22,163,74,.8)',   dash:[3,3], w:1.5, lbl:'📈 Optimista'},
-    acelerado:{color:'rgba(6,148,162,.8)',   dash:[2,2], w:1.5, lbl:'🚀 Acelerado'},
-  };
-  const datasets = Object.entries(fc.escenarios).map(([k,v])=>{
-    const c=cfgs[k];
-    return {
-      label:c.lbl, borderColor:c.color,
-      backgroundColor:k==='base'?'rgba(11,90,143,.07)':'transparent',
-      fill:k==='base', borderWidth:k===esc?c.w+1:c.w,
-      borderDash:c.dash, tension:.35, pointRadius:k===esc?3:1,
-      data:labels.map((_,i)=>v.curva[i]?v.curva[i].saldo:null), order:k===esc?0:1,
-    };
-  });
-  if(showCI){
-    const hi=baseVals.map(p=>p.saldo*1.15), lo=baseVals.map(p=>Math.max(0,p.saldo*0.85));
-    datasets.push({label:'IC+',data:hi,borderColor:'rgba(11,90,143,.15)',
-      backgroundColor:'rgba(11,90,143,.07)',fill:'+1',tension:.35,pointRadius:0,borderWidth:1,borderDash:[2,3],order:9});
-    datasets.push({label:'IC-',data:lo,borderColor:'rgba(11,90,143,.15)',
-      backgroundColor:'transparent',fill:false,tension:.35,pointRadius:0,borderWidth:1,borderDash:[2,3],order:9});
-  }
-  U.mkChart('ch-fc-curva',{type:'line',data:{labels,datasets},options:{
-    responsive:true,maintainAspectRatio:false,
-    interaction:{mode:'index',intersect:false},
-    plugins:{
-      legend:{labels:{font:{size:10.5},color:'#475569',filter:i=>!i.text.startsWith('IC')}},
-      tooltip:{callbacks:{label:c=>c.raw!=null?c.dataset.label.replace(/[📉📊📈🚀] /,'')+': '+U.fmtM(c.raw):null}}
-    },
-    scales:{
-      x:{ticks:{font:{size:9.5},color:'#94a3b8',maxRotation:40},grid:{display:false}},
-      y:{ticks:{callback:v=>'$'+(v/1e9).toFixed(1)+'B',font:{size:9},color:'#94a3b8'},grid:{color:'#f1f5f9'}}
-    }
-  }});
-
-  // Donut antigüedad ─────────────────────────────────────────────────
-  const ag = fc.dist_antiguedad;
-  const agTot = ag.reduce((a,b)=>a+b.monto,0);
-  U.mkChart('ch-fc-donut',{type:'doughnut',
-    data:{labels:ag.map(b=>b.lbl),datasets:[{data:ag.map(b=>b.monto),
-      backgroundColor:ag.map(b=>b.color),borderWidth:2,borderColor:'#fff'}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'68%',
-      plugins:{legend:{display:false},
-        tooltip:{callbacks:{label:c=>c.label+': '+U.fmtM(c.raw)+' ('+( agTot>0?(c.raw/agTot*100).toFixed(1):0 )+'%)'}}}
-    }
-  });
-  const elLeg = document.getElementById('fc-ag-legend');
-  if(elLeg) elLeg.innerHTML=ag.map(b=>'<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><div style="width:10px;height:10px;border-radius:2px;background:'+b.color+';flex-shrink:0"></div><span style="font-size:10.5px;color:var(--gris6);flex:1">'+b.lbl+'</span><span style="font-size:10.5px;font-family:var(--fm);color:var(--gris5)">'+b.pct.toFixed(1)+'%</span></div>').join('');
-  const elAg = document.getElementById('fc-ag-sub');
-  if(elAg) elAg.textContent = ag.reduce((a,b)=>a+b.docs,0)+' docs';
-  const maxAg = Math.max(...ag.map(b=>b.monto),1);
-  const elBars = document.getElementById('fc-ag-bars');
-  if(elBars) elBars.innerHTML = ag.map(b=>'<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:10px;color:var(--gris6)">'+b.lbl+'</span><span style="font-size:10px;font-family:var(--fm);color:var(--gris5)">'+U.fmtM(b.monto)+' · '+b.docs+' docs</span></div><div style="height:6px;background:var(--gris2);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+(b.monto/maxAg*100).toFixed(0)+'%;background:'+b.color+';border-radius:3px"></div></div></div>').join('');
-
-  // Historial pagos ──────────────────────────────────────────────────
-  const hist = fc.serie_hist;
-  U.mkChart('ch-fc-hist',{type:'bar',data:{
-    labels:hist.map(h=>h.mes),
-    datasets:[
-      {label:'Pago ejecutado (M$)',data:hist.map(h=>h.pagado/1e6),
-       backgroundColor:hist.map(h=>h.pagado>=promMensual?'rgba(22,163,74,.7)':'rgba(220,38,38,.65)'),
-       borderRadius:4,borderWidth:0,order:2},
-      {label:'Promedio base',data:hist.map(()=>promMensual/1e6),
-       type:'line',borderColor:'rgba(11,90,143,.8)',borderDash:[4,3],
-       pointRadius:0,borderWidth:2,fill:false,order:1,tension:0},
-    ]
-  },options:{
-    responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{labels:{font:{size:10},color:'#64748b'}},
-      tooltip:{callbacks:{label:c=>'$'+c.raw?.toFixed(0)+'M'}}},
-    scales:{
-      x:{ticks:{font:{size:9.5},color:'#94a3b8'},grid:{display:false}},
-      y:{ticks:{callback:v=>v+'M$',font:{size:9},color:'#94a3b8'},grid:{color:'#f1f5f9'}}
-    }
-  }});
-
-  // Texto tendencia
-  const slope = fc.slope;
-  const slopeM = Math.abs(slope)/1e6;
-  const trendDir = slope>=0?'creciente':'decreciente';
-  const elTend = document.getElementById('fc-tendencia-txt');
-  if(elTend) elTend.innerHTML =
-    '<strong>Tendencia:</strong> La capacidad de pago histórica muestra una tasa '+trendDir+
-    ' de <strong>$'+slopeM.toFixed(0)+'M/mes</strong>. '+
-    'El mes con mayor pago registrado fue <strong>Dic 2025 ($7.302M)</strong> correspondiente al cierre de ejercicio. '+
-    'El ritmo sostenible de operación normal (ene–feb 2026) es de <strong>$'+
-    Math.round((fc.serie_hist[3].pagado+fc.serie_hist[4].pagado)/2/1e6)+'M/mes</strong>.';
-
-  // Top proveedores ──────────────────────────────────────────────────
-  const maxProv = fc.top_prov[0]?.deuda||1;
-  const elProv = document.getElementById('fc-top-prov');
-  if(elProv) elProv.innerHTML = fc.top_prov.map((p,i)=>{
-    const w=(p.deuda/maxProv*100).toFixed(0);
-    const cls2=p.pct>8?'rd':p.pct>=4?'am':'vd';
-    return '<div style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'+
-      '<span style="font-size:10px;color:var(--gris4);font-family:var(--fm);min-width:16px">'+(i+1)+'</span>'+
-      '<span style="font-size:11px;color:var(--gris7);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+p.prov+'">'+p.prov.replace(/^\d+-\d+\s+/,'')+'</span>'+
-      '<span class="sem '+cls2+'" style="font-size:9.5px;padding:1px 5px">'+p.pct.toFixed(1)+'%</span></div>'+
-      '<div style="height:5px;background:var(--gris2);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+w+'%;background:var(--'+(cls2==='rd'?'rd':cls2==='am'?'am':'az')+');border-radius:3px"></div></div>'+
-      '<div style="font-size:9.5px;color:var(--gris4);font-family:var(--fm);text-align:right;margin-top:1px">'+U.fmtM(p.deuda)+'</div></div>';
-  }).join('');
-
-  // Por establecimiento ──────────────────────────────────────────────
-  const maxUE = fc.by_ue[0]?.deuda||1;
-  const elUE  = document.getElementById('fc-by-ue');
-  if(elUE) elUE.innerHTML = fc.by_ue.map(u=>{
-    const w=(u.deuda/maxUE*100).toFixed(0);
-    const cls3=u.pct>50?'rd':u.pct>=20?'am':'az';
-    return '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:3px">'+
-      '<span style="font-size:11px;color:var(--gris7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%">'+u.ue.replace(/^\d+\s+/,'')+'</span>'+
-      '<span class="sem '+cls3+'" style="font-size:9.5px;padding:1px 5px">'+u.pct.toFixed(1)+'%</span></div>'+
-      '<div style="height:5px;background:var(--gris2);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+w+'%;background:var(--'+(cls3==='rd'?'rd':cls3==='am'?'am':'az')+');border-radius:3px"></div></div>'+
-      '<div style="font-size:9.5px;color:var(--gris4);font-family:var(--fm);text-align:right;margin-top:1px">'+U.fmtM(u.deuda)+' · '+u.docs+' docs</div></div>';
-  }).join('');
-
-  // Simulador
-  updateSimulador();
-
-  // Diagnóstico ──────────────────────────────────────────────────────
-  renderDiagnostico(meses, promMensual, deudaTotal, esc);
-}
-
-function updateSimulador(){
-  const pagoSlider = document.getElementById('fc-slider-pago');
-  const crecSlider = document.getElementById('fc-slider-crec');
-  const nuevaSlider= document.getElementById('fc-slider-nueva');
-  if(!pagoSlider) return;
-
-  const pagoBase = parseInt(pagoSlider.value)*1e6;
-  const crecPct  = parseInt(crecSlider.value)/100;
-  const nuevaM   = parseInt(nuevaSlider.value)*1e6;
-
-  const elV = document.getElementById('fc-slider-val');
-  const elC = document.getElementById('fc-crec-val');
-  const elN = document.getElementById('fc-nueva-val');
-  if(elV) elV.textContent = '$'+Math.round(pagoBase/1e6).toLocaleString('es-CL')+'M';
-  if(elC) elC.textContent = (crecPct>=0?'+':'')+Math.round(crecPct*100)+'%';
-  if(elN) elN.textContent = '$'+Math.round(nuevaM/1e6).toLocaleString('es-CL')+'M';
-
-  // Simular curva
-  const deudaTotal = D_FC.deuda_total;
-  let saldo = deudaTotal;
-  const simLabels=[], simSaldo=[], simPagos=[], simNueva=[];
-  const today2 = new Date(D_FC.today);
-  let mes2 = new Date(today2);
-  let pago = pagoBase;
-  let m = 0;
-  while(saldo>0 && m<36){
-    mes2 = new Date(mes2); mes2.setMonth(mes2.getMonth()+1);
-    const pagoReal = Math.min(pago, saldo);
-    saldo = Math.max(0, saldo - pagoReal + nuevaM);
-    pago = pago*(1+crecPct);
-    const MN2=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    simLabels.push(MN2[mes2.getMonth()]+' '+mes2.getFullYear().toString().slice(2));
-    simSaldo.push(saldo/1e6);
-    simPagos.push(pagoReal/1e6);
-    simNueva.push(nuevaM/1e6);
-    m++;
-  }
-
-  const mesesSim = m;
-  const fechaSimFin = new Date(today2); fechaSimFin.setMonth(fechaSimFin.getMonth()+mesesSim);
-  const MN3=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const fStr = MN3[fechaSimFin.getMonth()]+' '+fechaSimFin.getFullYear();
-  const saldoFinal = simSaldo.length?simSaldo[simSaldo.length-1]:deudaTotal/1e6;
-  const infinito = saldo>0&&m>=36;
-
-  const simCls = mesesSim<=3?'vd':mesesSim<=6?'am':'rd';
-  const elSim = document.getElementById('fc-sim-resultado');
-  if(elSim) elSim.innerHTML=[
-    {ic:'📅',lbl:'Liquidación simulada',val:infinito?'⚠️ No converge':fStr,sub:infinito?'Deuda crece más rápido':mesesSim+' meses',cls:infinito?'rd':simCls},
-    {ic:'💰',lbl:'Pago final mes',val:'$'+Math.round(pago/1e6).toLocaleString('es-CL')+'M',sub:crecPct>0?'Con crecimiento acumulado':'Sin crecimiento',cls:'az'},
-    {ic:'🏦',lbl:'Deuda nueva total',val:U.fmtM(nuevaM*mesesSim),sub:'Acumulada en período',cls:nuevaM>0?'rd':'vd'},
-    {ic:'📊',lbl:'Saldo final',val:U.fmtM(Math.round(saldoFinal*1e6)),sub:infinito?'Deuda no se liquida':'Al último mes',cls:saldoFinal>0?'rd':'vd'},
-  ].map(k=>'<div class="kpi '+k.cls+'" style="padding:10px 12px"><div style="font-size:14px">'+k.ic+'</div><div class="kpi-lbl">'+k.lbl+'</div><div class="kpi-val" style="font-size:14px">'+k.val+'</div><div class="kpi-sub">'+k.sub+'</div></div>').join('');
-
-  U.mkChart('ch-fc-sim',{type:'bar',data:{labels:simLabels,datasets:[
-    {label:'Saldo deuda (M$)',data:simSaldo,
-     backgroundColor:simSaldo.map(v=>v>deudaTotal/2e6?'rgba(220,38,38,.55)':v>deudaTotal/4e6?'rgba(202,138,4,.55)':'rgba(22,163,74,.55)'),
-     borderRadius:3,order:2},
-    {label:'Pago aplicado (M$)',data:simPagos,
-     type:'line',borderColor:'rgba(11,90,143,.8)',backgroundColor:'transparent',
-     pointRadius:2,borderWidth:2,fill:false,tension:.3,order:1},
-    ...(nuevaM>0?[{label:'Deuda nueva (M$)',data:simNueva,
-      type:'line',borderColor:'rgba(220,38,38,.7)',borderDash:[3,3],
-      pointRadius:0,borderWidth:1.5,fill:false,tension:0,order:0}]:[]),
-  ]},options:{
-    responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{labels:{font:{size:9.5},color:'#64748b'}},
-      tooltip:{callbacks:{label:c=>'$'+c.raw?.toFixed(0)+'M'}}},
-    scales:{
-      x:{ticks:{font:{size:9},color:'#94a3b8'},grid:{display:false}},
-      y:{ticks:{callback:v=>v+'M$',font:{size:9},color:'#94a3b8'},grid:{color:'#f1f5f9'}}
-    }
-  }});
-}
-
-function renderDiagnostico(meses, promMensual, deudaTotal, esc){
-  const el = document.getElementById('fc-recomendaciones');
-  if(!el) return;
-
-  const ag = D_FC.dist_antiguedad;
-  const pct30_60 = ag[1]?.pct||0;
-  const pct60p   = (ag[2]?.pct||0)+(ag[3]?.pct||0);
-  const topProv  = D_FC.top_prov[0];
-  const hcOsorno = D_FC.by_ue[0];
-
-  const semMap = {vd:'🟢',am:'🟡',rd:'🔴'};
-  const mesesCls = meses<=3?'vd':meses<=6?'am':'rd';
-
-  const items = [
-    {
-      ic:'📊', title:'Estado General de la Deuda',
-      cls: meses<=3?'vd':meses<=6?'am':'rd',
-      txt: `La deuda activa asciende a <strong>${U.fmtM(deudaTotal)}</strong> con una concentración del
-            <strong>${pct30_60.toFixed(1)}%</strong> en el tramo 31–60 días. Al ritmo de pago histórico de
-            <strong>$${Math.round(promMensual/1e6).toLocaleString('es-CL')}M/mes</strong>, se estima
-            la liquidación en <strong>${meses} meses</strong> (escenario ${esc}).
-            ${meses<=3?'El nivel de urgencia es BAJO.':meses<=6?'Se requiere monitoreo activo.':'Se recomienda acción inmediata.'}`
-    },
-    {
-      ic:'⚠️', title:'Concentración de Riesgo — Antigüedad',
-      cls: pct60p>15?'rd':pct60p>5?'am':'vd',
-      txt: `El <strong>${(ag[1]?.pct||0).toFixed(1)}%</strong> de la deuda (<strong>${U.fmtM(ag[1]?.monto||0)}</strong>)
-            tiene entre 31 y 60 días de antigüedad. El <strong>${pct60p.toFixed(1)}%</strong> supera los 60 días.
-            ${pct60p>10?'⚠️ <strong>Acción recomendada:</strong> Priorizar pago de documentos >60 días para evitar intereses y multas.':
-            '✅ La mayoría de la deuda es reciente y manejable.'}`
-    },
-    {
-      ic:'🏢', title:'Concentración de Proveedor',
-      cls: topProv?.pct>15?'rd':topProv?.pct>8?'am':'vd',
-      txt: `El proveedor de mayor deuda es <strong>${topProv?.prov.replace(/^\d+-\d+\s+/,'')||'—'}</strong> con
-            <strong>${U.fmtM(topProv?.deuda||0)}</strong> (<strong>${(topProv?.pct||0).toFixed(1)}%</strong> del total).
-            ${(topProv?.pct||0)>15?'⚠️ Alta concentración: negociar plan de pago prioritario.':
-            'Concentración de proveedor dentro de rangos aceptables.'}`
-    },
-    {
-      ic:'🏥', title:'Concentración por Establecimiento',
-      cls: (hcOsorno?.pct||0)>85?'rd':'am',
-      txt: `<strong>${hcOsorno?.ue.replace(/^\d+\s+/,'')||'—'}</strong> concentra el
-            <strong>${(hcOsorno?.pct||0).toFixed(1)}%</strong> de la deuda total (<strong>${U.fmtM(hcOsorno?.deuda||0)}</strong>).
-            Esta concentración es estructural al tamaño del establecimiento. Se recomienda
-            un plan de pago escalonado mes a mes.`
-    },
-    {
-      ic:'🎯', title:'Recomendaciones de Acción',
-      cls:'az',
-      txt: '<ol style="margin:0;padding-left:18px;line-height:1.9">'+
-           '<li>Priorizar pago de <strong>documentos con >60 días</strong> de antigüedad ($'+U.fmtM((ag[2]?.monto||0)+(ag[3]?.monto||0))+')</li>'+
-           '<li>Negociar con <strong>'+topProv?.prov.replace(/^\d+-\d+\s+/,'').slice(0,40)+'</strong> un plan de pago en cuotas</li>'+
-           '<li>Mantener <strong>$2.000–3.000M/mes</strong> de capacidad de pago sostenida para liquidar en &lt;3 meses</li>'+
-           '<li>Monitorear deuda nueva: si supera <strong>$500M/mes</strong>, ajustar proyección</li>'+
-           '<li>Revisar concentración en Hospital de Osorno: implementar reportería semanal de saldos</li>'+
-           '</ol>'
-    },
-  ];
-
-  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px">'+items.map(item=>`
-    <div style="display:flex;gap:12px;padding:12px 14px;border-radius:var(--r);
-                border-left:4px solid var(--${item.cls==='rd'?'rd':item.cls==='am'?'am':item.cls==='vd'?'vd':'az'});
-                background:var(--${item.cls==='rd'?'rd2':item.cls==='am'?'am2':item.cls==='vd'?'vd2':'az4'})">
-      <span style="font-size:20px;flex-shrink:0;margin-top:1px">${item.ic}</span>
-      <div>
-        <div style="font-size:12px;font-weight:700;color:var(--gris7);margin-bottom:4px">${item.title}</div>
-        <div style="font-size:11.5px;color:var(--gris6);line-height:1.6">${item.txt}</div>
-      </div>
-    </div>`).join('')+'</div>';
-}
-
-
-// ════════════════════════════════════════════════════════════
-// WELCOME SCREEN (sin datos)
-// ════════════════════════════════════════════════════════════
-function showWelcome(){
-  // Ya no hay tab de carga manual — los datos llegan exclusivamente desde
-  // api_sigfe_devengo_anual vía el botón "Actualizar desde SIGFE" de la app
-  // anfitriona. Este fallback solo se activa si la tabla llega vacía.
-  document.getElementById('hdr-cnt').textContent = 'Sin datos cargados';
-  document.querySelectorAll('.tab-view').forEach(e=>e.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(e=>e.classList.remove('active'));
-  const tabResumen = document.getElementById('tab-resumen');
-  if(tabResumen){
-    tabResumen.classList.add('active');
-    const banner = document.createElement('div');
-    banner.id = 'welcome-banner';
-    banner.style.cssText = 'background:linear-gradient(135deg,var(--az3),var(--az2));border-radius:var(--r2);padding:32px;text-align:center;margin-bottom:16px;color:#fff';
-    banner.innerHTML = `
-      <div style="font-size:52px;margin-bottom:12px">📊</div>
-      <div style="font-size:20px;font-weight:700;margin-bottom:8px">Sin datos sincronizados todavía</div>
-      <div style="font-size:13px;opacity:.85;line-height:1.6">
-        Servicio de Salud Osorno · Sistema de Gestión Institucional<br>
-        Usa el botón <strong>"Actualizar desde SIGFE"</strong> para sincronizar los devengos.
-      </div>`;
-    tabResumen.insertBefore(banner, tabResumen.firstChild);
-  }
-  document.querySelectorAll('.tab-btn').forEach(b=>{
-    if(b.textContent.includes('Resumen')) b.classList.add('active');
-  });
-}
-
-// ════════════════════════════════════════════════════════════
-// RECALCULAR FORECAST DESDE DATOS CARGADOS
-// ════════════════════════════════════════════════════════════
-function recalcForecast(){
-  // Recalculate D_FC dynamically from S.all
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0,10);
-  const deudaRows = S.all.filter(r=>r.di>0);
-  const deudaTotal = deudaRows.reduce((a,r)=>a+r.di,0);
-  if(deudaTotal === 0){ return; }
-
-  // Payment capacity: average of last months with payments
-  const byMes = {};
-  S.all.filter(r=>r.co>0&&r.m).forEach(r=>{
-    if(!byMes[r.m]) byMes[r.m]=0;
-    byMes[r.m]+=r.co;
-  });
-  const mesesPago = Object.entries(byMes).sort((a,b)=>a[0]>b[0]?1:-1);
-  const recentPayments = mesesPago.slice(-5).map(([,v])=>v);
-  const promMensual = recentPayments.length ?
-    recentPayments.reduce((a,v)=>a+v,0)/recentPayments.length : deudaTotal/12;
-
-  // Payment slope
-  const n=recentPayments.length;
-  const xArr=recentPayments.map((_,i)=>i), sumX=xArr.reduce((a,x)=>a+x,0);
-  const sumY=recentPayments.reduce((a,y)=>a+y,0);
-  const sumXY=xArr.reduce((a,x,i)=>a+x*recentPayments[i],0);
-  const sumX2=xArr.reduce((a,x)=>a+x*x,0);
-  const slope=n>1?(n*sumXY-sumX*sumY)/(n*sumX2-sumX*sumX||1):0;
-
-  // Build scenarios
-  const buildCurva=(tasa)=>{
-    let saldo=deudaTotal; const curva=[]; let mes=new Date(today); let m=0;
-    while(saldo>0&&m<36){
-      mes=new Date(mes); mes.setMonth(mes.getMonth()+1);
-      const pago=Math.min(tasa,saldo); saldo-=pago;
-      curva.push({mes:mes.toISOString().slice(0,7),saldo:Math.max(0,saldo),pago});
-      m++;
-    }
-    return {tasa,meses:m,fecha_fin:curva[curva.length-1]?.mes||'—',curva:curva.slice(0,24)};
-  };
-
-  // Antigüedad de deuda
-  const distAg=[
-    {lo:0,hi:30, lbl:'0–30 días',  color:'#16a34a'},
-    {lo:31,hi:60, lbl:'31–60 días', color:'#ca8a04'},
-    {lo:61,hi:90, lbl:'61–90 días', color:'#ea580c'},
-    {lo:91,hi:180,lbl:'91–180 días',color:'#dc2626'},
-    {lo:181,hi:9999,lbl:'+180 días',color:'#7f1d1d'},
-  ].map(b=>{
-    const sub=deudaRows.filter(r=>{
-      if(!r.f)return false;
-      const dias=Math.round((today-new Date(r.f))/86400000);
-      return dias>=b.lo&&dias<=b.hi;
-    });
-    const monto=sub.reduce((a,r)=>a+r.di,0);
-    return{lbl:b.lbl,color:b.color,monto,docs:sub.length,pct:deudaTotal>0?monto/deudaTotal*100:0};
-  });
-
-  // Top proveedores
-  const provMap={};
-  deudaRows.forEach(r=>{
-    if(!provMap[r.pr])provMap[r.pr]={deuda:0,vigente:0,docs:0};
-    provMap[r.pr].deuda+=r.di; provMap[r.pr].vigente+=r.vg; provMap[r.pr].docs++;
-  });
-  const topProv=Object.entries(provMap).sort((a,b)=>b[1].deuda-a[1].deuda).slice(0,10)
-    .map(([p,v])=>({prov:p,deuda:v.deuda,vigente:v.vigente,docs:v.docs,pct:deudaTotal>0?v.deuda/deudaTotal*100:0}));
-
-  // By UE
-  const ueMap={};
-  deudaRows.forEach(r=>{
-    if(!ueMap[r.u])ueMap[r.u]={deuda:0,vigente:0,docs:0};
-    ueMap[r.u].deuda+=r.di; ueMap[r.u].vigente+=r.vg; ueMap[r.u].docs++;
-  });
-  const byUE=Object.entries(ueMap).sort((a,b)=>b[1].deuda-a[1].deuda)
-    .map(([u,v])=>({ue:u,deuda:v.deuda,vigente:v.vigente,docs:v.docs,pct:deudaTotal>0?v.deuda/deudaTotal*100:0}));
-
-  // Serie histórica
-  const serieHist=mesesPago.slice(-6).map(([mes,pagado])=>({mes,pagado,deuda_nueva:0}));
-
-  // Update D_FC in place
-  Object.assign(D_FC,{
-    deuda_total:deudaTotal, prom_mensual:Math.round(promMensual),
-    slope:Math.round(slope), today:todayStr,
-    escenarios:{
-      pesimista: buildCurva(promMensual*0.5),
-      base:      buildCurva(promMensual),
-      optimista: buildCurva(promMensual*1.5),
-      acelerado: buildCurva(promMensual*2),
-    },
-    dist_antiguedad:distAg, top_prov:topProv, by_ue:byUE,
-    serie_hist:serieHist,
-    pagos_hist:mesesPago.slice(-5).map(([mes,pagado],idx)=>({mes,pagado,idx})),
-  });
-  console.log('D_FC recalculated: deuda=$'+Math.round(deudaTotal/1e6)+'M prom=$'+Math.round(promMensual/1e6)+'M');
-}
-
 // ════════════════════════════════════════════════════════════
 // ÁRBOL PRESUPUESTARIO — DRILL-DOWN JERÁRQUICO
 // ════════════════════════════════════════════════════════════
@@ -4242,10 +3778,6 @@ const CHART_TIPS = {
     'Composición por Nivel Jerárquico||Distribución de la deuda según el nivel presupuestario seleccionado (N1 Subtítulo, N2 Ítem, N3 Asignación). Permite navegar la estructura presupuestaria y entender dónde se concentra la deuda en cada nivel.||Σ Disponible y Σ Consumido agrupados por nivel seleccionado',
   'Distribución Porcentual':
     'Distribución Porcentual||Gráfico de dona mostrando la participación relativa de cada concepto en la deuda total del nivel seleccionado. Identifica concentración: si pocos conceptos representan la mayoría de la deuda.||% = Disponible_concepto ÷ Σ Disponible_nivel × 100',
-
-  // ── PRONÓSTICO ──
-  'Curva de Liquidación — 4 Escenarios':
-    'Curva de Liquidación||Proyección de la deuda bajo 4 escenarios de capacidad de pago (Pesimista, Base, Optimista, Acelerado). Muestra cuántos meses tardará en liquidarse la deuda y el saldo residual. La banda ±15% indica incertidumbre. Impacto: planificación financiera a mediano plazo.||Modelo: saldo_t+1 = saldo_t − pago_mensual, con variantes de velocidad',
 };
 
 function applyChartTips(){
@@ -4463,8 +3995,6 @@ window.addEventListener('load',()=>{
             <input type="checkbox" id="pdf-sec-antiguedad" checked onchange="updatePdfPreview()" style="accent-color:#0B5A8F;width:14px;height:14px"> ⏳ Antigüedad Deuda</label>
           <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:7px;cursor:pointer;font-size:12px;color:#334155">
             <input type="checkbox" id="pdf-sec-concepto" checked onchange="updatePdfPreview()" style="accent-color:#0B5A8F;width:14px;height:14px"> 📂 Concepto Presup.</label>
-          <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:7px;cursor:pointer;font-size:12px;color:#334155">
-            <input type="checkbox" id="pdf-sec-pronostico" checked onchange="updatePdfPreview()" style="accent-color:#0B5A8F;width:14px;height:14px"> 🔮 Pronóstico</label>
           <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:7px;cursor:pointer;font-size:12px;color:#334155">
             <input type="checkbox" id="pdf-sec-recomend" checked onchange="updatePdfPreview()" style="accent-color:#0B5A8F;width:14px;height:14px"> 🩺 Recomendaciones</label>
         </div>

@@ -307,6 +307,138 @@ def calcular_anexo1_resumen(codigo_ue=None, anho=None, mes_desde=None, mes_hasta
 
 
 # =============================================================================
+# Serie temporal Nivel 1 por establecimiento (drill-down desde "Base de datos")
+# =============================================================================
+
+def calcular_anexo1_serie_nivel1_establecimiento(codigo_ue, excluir_34_35=True):
+    """Serie temporal continua (no por año, a diferencia de calcular_anexo1_tendencias)
+    de Devengado/Efectivo para UNA unidad ejecutora, con el desglose mes a mes por
+    concepto en TODOS los niveles (1-5) y la jerarquía resuelta (_enriquecer_jerarquia,
+    igual que calcular_anexo1_detallado) — usado por el árbol expandible del drill-down
+    al hacer clic en un establecimiento dentro del tab "Base de datos". El total
+    (`total.devengado`/`efectivo`) se calcula solo con nivel=1: niveles 2-5 son el
+    desglose de nivel 1, no montos adicionales — sumarlos todos duplicaría el total,
+    mismo criterio que calcular_anexo1_resumen/calcular_anexo1_guia_simple."""
+    vacio = {'periodos': [], 'total': {'devengado': [], 'efectivo': []}, 'por_concepto': []}
+    if not codigo_ue or codigo_ue == 'todas':
+        return vacio
+
+    qs = SigfeAnexo1.objects.filter(codigo_ue=codigo_ue)
+    if excluir_34_35:
+        qs = qs.exclude(concepto_presupuestario__startswith='34').exclude(concepto_presupuestario__startswith='35')
+    filas = list(qs.values('anho', 'mes', 'concepto_presupuestario', 'nivel').annotate(dev=Sum('devengado'), efec=Sum('efectivo')))
+    if not filas:
+        return vacio
+
+    periodos = sorted({f"{f['anho']}-{f['mes']:02d}" for f in filas})
+    idx = {p: i for i, p in enumerate(periodos)}
+    total_dev = [0.0] * len(periodos)
+    total_efec = [0.0] * len(periodos)
+    acc = {}
+    for f in filas:
+        i = idx[f"{f['anho']}-{f['mes']:02d}"]
+        dev, efec = float(f['dev'] or 0), float(f['efec'] or 0)
+        concepto = f['concepto_presupuestario']
+        if concepto not in acc:
+            codigo, _, nombre = concepto.partition(' ')
+            acc[concepto] = {
+                'codigo': codigo, 'nombre': nombre.strip(), 'nivel': f['nivel'],
+                'valores': [0.0] * len(periodos), 'valores_efectivo': [0.0] * len(periodos),
+            }
+        acc[concepto]['valores'][i] += dev
+        acc[concepto]['valores_efectivo'][i] += efec
+        if f['nivel'] == 1:
+            total_dev[i] += dev
+            total_efec[i] += efec
+
+    por_concepto = sorted(acc.values(), key=lambda r: r['codigo'])
+    for r in por_concepto:
+        r['total'] = sum(r['valores'])
+        r['total_efectivo'] = sum(r['valores_efectivo'])
+    _enriquecer_jerarquia(por_concepto)
+
+    return {'periodos': periodos, 'total': {'devengado': total_dev, 'efectivo': total_efec}, 'por_concepto': por_concepto}
+
+
+# =============================================================================
+# Guía Rápida — explicación en lenguaje simple, sin tecnicismos (por columnas:
+# Nivel, Concepto Presupuestario, Nivel Cruce, Catálogo Cruce, Ley de
+# Presupuestos, Requerimiento, Saldo por Aplicar, Compromiso, Saldo por
+# Comprometer, Devengado, Saldo por Devengar, Efectivo, Deuda Flotante).
+# `nivel_cruce`/`catalogo_cruce` no se usaban en ningún otro análisis — se
+# agregan acá directo sobre las filas crudas porque `_agregar()` los descarta.
+# =============================================================================
+
+def calcular_anexo1_guia_simple(codigo_ue=None, anho=None, mes_desde=None, mes_hasta=None, excluir_34_35=True):
+    base = _filtrar_base(codigo_ue, anho, mes_desde, mes_hasta, excluir_34_35)
+    filas_n1 = _agregar(base.filter(nivel=1), nivel=1)
+
+    t_ley = sum(f['ley'] for f in filas_n1)
+    t_req = sum(f['req'] for f in filas_n1)
+    t_comp = sum(f['comp'] for f in filas_n1)
+    t_dev = sum(f['dev'] for f in filas_n1)
+    t_efec = sum(f['efec'] for f in filas_n1)
+
+    por_concepto = sorted(
+        [
+            {
+                'codigo': f['codigo'], 'nombre': f['nombre'],
+                'ley': f['ley'], 'devengado': f['dev'], 'efectivo': f['efec'],
+                'deuda': f['dev'] - f['efec'],
+            }
+            for f in filas_n1
+        ],
+        key=lambda x: x['deuda'], reverse=True,
+    )
+
+    filas_todos_nivel = _agregar(base)
+    por_nivel_acc = defaultdict(lambda: {'n_conceptos': 0, 'devengado': 0.0})
+    for f in filas_todos_nivel:
+        acc = por_nivel_acc[f['nivel']]
+        acc['n_conceptos'] += 1
+        acc['devengado'] += f['dev']
+    por_nivel = [
+        {'nivel': n, 'n_conceptos': por_nivel_acc[n]['n_conceptos'], 'devengado': por_nivel_acc[n]['devengado']}
+        for n in sorted(por_nivel_acc)
+    ]
+
+    filas_cruce = (
+        base.exclude(catalogo_cruce__isnull=True).exclude(catalogo_cruce='')
+        .values('nivel_cruce', 'catalogo_cruce')
+        .annotate(devengado=Sum('devengado'), efectivo=Sum('efectivo'))
+    )
+    por_cruce = sorted(
+        [
+            {
+                'nivel_cruce': f['nivel_cruce'] or 'Sin especificar',
+                'catalogo_cruce': f['catalogo_cruce'],
+                'devengado': float(f['devengado'] or 0),
+                'efectivo': float(f['efectivo'] or 0),
+            }
+            for f in filas_cruce
+        ],
+        key=lambda x: x['devengado'], reverse=True,
+    )[:15]
+
+    return {
+        'kpis': {
+            'ley_presupuestos': t_ley,
+            'requerimiento': t_req,
+            'saldo_por_aplicar': t_ley - t_req,
+            'compromiso': t_comp,
+            'saldo_por_comprometer': t_req - t_comp,
+            'devengado': t_dev,
+            'saldo_por_devengar': t_comp - t_dev,
+            'efectivo': t_efec,
+            'deuda_flotante': t_dev - t_efec,
+        },
+        'por_concepto': por_concepto,
+        'por_nivel': por_nivel,
+        'por_cruce': por_cruce,
+    }
+
+
+# =============================================================================
 # Alertas y Anomalías (rAl)
 # =============================================================================
 

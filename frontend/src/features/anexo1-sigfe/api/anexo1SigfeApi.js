@@ -17,6 +17,12 @@ export const fetchAnexo1 = (params = {}) =>
 export const fetchResumenAnexo1 = (params = {}) =>
     apiClient.get('sigfe-anexo1/resumen/', { params });
 
+export const fetchGuiaSimpleAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/guia-simple/', { params });
+
+export const fetchSerieNivel1Anexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/serie-nivel1/', { params });
+
 export const fetchAlertasAnexo1 = (params = {}) =>
     apiClient.get('sigfe-anexo1/alertas/', { params });
 
