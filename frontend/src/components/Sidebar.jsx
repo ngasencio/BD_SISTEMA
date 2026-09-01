@@ -10,14 +10,14 @@ export default function Sidebar() {
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
-        abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac') || path.startsWith('/compra-agil'),
+        abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac') || path.startsWith('/compra-agil') || path.startsWith('/fsc-oc-pac'),
         finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas') || path.startsWith('/facturas'),
         admin: path.startsWith('/admin'),
     });
     const [openMods, setOpenMods] = useState({
         mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra') || path.startsWith('/compra-agil') || path.startsWith('/abastecimiento/contratos'),
         formularios: path.startsWith('/abastecimiento/formularios'),
-        pac: path.startsWith('/pac'),
+        pac: path.startsWith('/pac') || path.startsWith('/fsc-oc-pac'),
         inventario: false,
         garantias: path.startsWith('/abastecimiento/boletas'),
         finReportes: path.startsWith('/anexo') || path.startsWith('/finanzas') || path.startsWith('/facturas'),
@@ -141,6 +141,13 @@ export default function Sidebar() {
                                 >
                                     <span>✅</span>
                                     <span className="nav-item-text">Cumplimiento Interno PAC</span>
+                                </div>
+                                <div
+                                    className={`nav-item ${isActive('/fsc-oc-pac') ? 'active' : ''}`}
+                                    onClick={() => goTo('/fsc-oc-pac', 'abast', 'pac')}
+                                >
+                                    <span>🔗</span>
+                                    <span className="nav-item-text">Enlace FSC-OC-PAC</span>
                                 </div>
                             </div>
                         </div>

@@ -1,0 +1,138 @@
+/* ==========================================================================
+   01 · TOKENS
+   Única fuente de verdad del sistema. Ningún otro archivo debe escribir
+   un color, un tamaño de fuente o una sombra literal: todo sale de aquí.
+   Cambiar la marca = cambiar este archivo y nada más.
+   ========================================================================== */
+
+:root {
+
+  /* ---------- Marca ---------------------------------------------------- */
+  --dv-navy:        #132C48;   /* azul institucional, fondo de sidebar y modales */
+  --dv-navy-soft:   #1B3D63;   /* extremo claro del degradado del sidebar        */
+  --dv-accent:      #2E86DE;   /* acento vivo: barra activa, foco, subrayados    */
+  --dv-primary:     #0F69B4;   /* azul de datos: barras, enlaces, series         */
+  --dv-secondary:   #C97F2B;   /* ámbar de datos: contraste de la serie primaria */
+
+  /* ---------- Superficies ---------------------------------------------- */
+  --dv-bg:          #F4F6F9;   /* lienzo de la aplicación */
+  --dv-surface:     #FFFFFF;   /* tarjetas, paneles, tablas */
+  --dv-surface-alt: #FAFBFD;   /* zebra de tabla, tarjetas inactivas */
+  --dv-surface-sel: #F3F8FC;   /* fila seleccionada / expandida */
+
+  /* ---------- Texto ------------------------------------------------------
+     Cuatro niveles. Nunca inventes un quinto: si un texto no encaja en
+     ninguno, probablemente el problema es la jerarquía, no el color.     */
+  --dv-ink:         #0F1722;   /* títulos y cifras */
+  --dv-ink-2:       #48546A;   /* cuerpo de texto */
+  --dv-ink-3:       #7C8798;   /* metadatos, etiquetas, subtítulos */
+  --dv-ink-4:       #A6AFBE;   /* notas al pie, texto deshabilitado */
+
+  /* ---------- Líneas ---------------------------------------------------- */
+  --dv-line:        #E7EAF0;   /* bordes visibles, separadores de sección */
+  --dv-line-2:      #F1F3F7;   /* separadores internos, muy tenues */
+  --dv-line-hover:  #CBD3DE;   /* borde de control en hover */
+
+  /* ---------- Estados de cumplimiento -----------------------------------
+     Cada estado es un par: color de texto + fondo del chip.
+     El nombre describe el significado, no el color, para que un cambio de
+     paleta no obligue a renombrar clases.                                */
+  --dv-ok:          #1B7A45;  --dv-ok-bg:     #E6F4EC;   /* cumplido            */
+  --dv-warn:        #AC6A1C;  --dv-warn-bg:   #FAEFDF;   /* cumplido parcial    */
+  --dv-watch:       #836618;  --dv-watch-bg:  #F9F2DA;   /* en seguimiento      */
+  --dv-draft:       #6A7486;  --dv-draft-bg:  #EEF0F4;   /* en elaboración      */
+  --dv-none:        #8A94A6;  --dv-none-bg:   #EEF0F4;   /* sin dato            */
+
+  /* ---------- Ejes temáticos --------------------------------------------
+     Color de categoría. Se inyecta por instancia con --dv-group-color.   */
+  --dv-group-1:     #0F69B4;
+  --dv-group-2:     #009B8A;
+  --dv-group-3:     #C97F2B;
+  --dv-group-4:     #6B4FA0;
+
+  /* ---------- Escalas de datos -------------------------------------------
+     Extremos para interpolar en JS. La escala divergente va de ámbar
+     (lejos de la meta) a azul (sobre la meta), pasando por gris neutro.  */
+  --dv-scale-low:   #8A5518;   /* rgb(138, 85, 24)  */
+  --dv-scale-mid:   #E8EAEE;   /* rgb(232,234,238)  */
+  --dv-scale-high:  #0A4A80;   /* rgb(10, 74,128)   */
+  --dv-scale-pale:  #E2EBF4;   /* rgb(226,235,244) — inicio de la escala secuencial */
+  --dv-scale-empty: #EDEFF2;   /* sin dato */
+
+  /* ---------- Tipografía --------------------------------------------------
+     El original usaba 30+ tamaños distintos (10.2, 10.4, 10.5, 10.6, 10.7…).
+     Aquí se consolidan en 10 pasos. Si un componente "necesita" un tamaño
+     intermedio, casi siempre es señal de que debe usar el paso vecino.   */
+  --dv-font: 'Inter', 'InterV', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --dv-fs-3xs:   9.5px;   /* micro-etiquetas dentro de gráficos */
+  --dv-fs-2xs:  10.5px;   /* eyebrows, etiquetas en versalitas, chips */
+  --dv-fs-xs:   11.5px;   /* metadatos, leyendas, notas al pie */
+  --dv-fs-sm:   12.5px;   /* texto secundario, celdas de tabla, botones */
+  --dv-fs-base:   13px;   /* cuerpo por defecto */
+  --dv-fs-md:   14.5px;   /* títulos de panel */
+  --dv-fs-lg:     18px;   /* títulos de sección e indicador */
+  --dv-fs-xl:     22px;   /* cifra mediana */
+  --dv-fs-2xl:    28px;   /* cifra de tile */
+  --dv-fs-3xl:    42px;   /* cifra de portada */
+
+  --dv-fw-regular: 400;
+  --dv-fw-medium:  550;
+  --dv-fw-semi:    600;
+  --dv-fw-bold:    650;
+  --dv-fw-heavy:   700;
+
+  --dv-lh-tight:  1.25;
+  --dv-lh-snug:   1.40;
+  --dv-lh-base:   1.50;
+  --dv-lh-loose:  1.65;
+
+  --dv-ls-tight:  -.035em;   /* cifras grandes */
+  --dv-ls-title:  -.018em;   /* títulos */
+  --dv-ls-caps:    .10em;    /* versalitas */
+
+  /* ---------- Espaciado ---------------------------------------------------
+     Escala de 8 pasos. Todo padding y todo gap sale de aquí.             */
+  --dv-sp-1:   4px;
+  --dv-sp-2:   6px;
+  --dv-sp-3:   9px;
+  --dv-sp-4:  12px;
+  --dv-sp-5:  16px;
+  --dv-sp-6:  20px;
+  --dv-sp-7:  24px;
+  --dv-sp-8:  32px;
+
+  /* ---------- Radios ----------------------------------------------------- */
+  --dv-r-xs:   3px;   /* muestras de color, marcadores */
+  --dv-r-sm:   7px;   /* tags */
+  --dv-r-md:   9px;   /* botones, selects, chips */
+  --dv-r-lg:  11px;   /* tarjetas compactas, cajas de fórmula */
+  --dv-r-xl:  16px;   /* tarjetas y paneles — el radio característico */
+  --dv-r-2xl: 20px;   /* modal */
+  --dv-r-pill: 999px;
+
+  /* ---------- Elevación ---------------------------------------------------
+     Solo tres niveles. Más niveles no aportan jerarquía, solo ruido.     */
+  --dv-shadow-1: 0 1px 2px rgba(15,23,34,.04), 0 1px 3px rgba(15,23,34,.06);
+  --dv-shadow-2: 0 2px 4px rgba(15,23,34,.04), 0 6px 18px rgba(15,23,34,.09);
+  --dv-shadow-3: 0 18px 60px rgba(15,23,34,.28);
+
+  /* ---------- Movimiento --------------------------------------------------
+     Tres curvas con propósito distinto. No mezclar.                      */
+  --dv-ease-standard: cubic-bezier(.4, 0, .2, 1);      /* cambios de estado neutros  */
+  --dv-ease-out:      cubic-bezier(.16, 1, .3, 1);     /* entradas, apariciones      */
+  --dv-ease-spring:   cubic-bezier(.34, 1.3, .5, 1);   /* micro-interacciones vivas  */
+
+  --dv-dur-instant: 140ms;
+  --dv-dur-fast:    200ms;
+  --dv-dur-base:    340ms;
+  --dv-dur-slow:    600ms;
+
+  /* ---------- Layout ------------------------------------------------------ */
+  --dv-sidebar-w:  250px;
+  --dv-content-max: 1320px;
+  --dv-gutter:      30px;
+  --dv-topbar-z:     20;
+  --dv-overlay-z:    80;
+  --dv-tooltip-z:    99;
+}

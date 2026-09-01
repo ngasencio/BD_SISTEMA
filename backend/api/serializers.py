@@ -14,8 +14,9 @@ from .models import (
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
     PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
     SigfeAnexo1,
+    FscOcLink, CompradorInicial,
 )
-from .services import generar_id_formulario
+from .services import generar_id_formulario, _pac_match_estado
 
 ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
 
@@ -337,6 +338,53 @@ class RevisionOCCorregibleSerializer(serializers.ModelSerializer):
         model = RevisionOCCorregible
         fields = '__all__'
         read_only_fields = ['revisado_por', 'fecha_revision']
+
+
+# =============================================================================
+# Enlace FSC-OC-PAC
+# =============================================================================
+
+class CompradorInicialSerializer(serializers.ModelSerializer):
+    nombre_usuario = serializers.CharField(source='usuario.first_name', read_only=True)
+
+    class Meta:
+        model = CompradorInicial
+        fields = ['codigo', 'usuario', 'nombre_usuario']
+
+
+class FscOcLinkSerializer(serializers.ModelSerializer):
+    id_formulario = serializers.SerializerMethodField()
+    folio = serializers.IntegerField(source='formulario_derivado.folio', read_only=True)
+    anho = serializers.IntegerField(source='formulario_derivado.anho', read_only=True)
+    unidad_requirente = serializers.CharField(source='formulario_derivado.unidad_requirente', read_only=True)
+    id_plan_fsc = serializers.CharField(source='formulario_derivado.id_plan', read_only=True)
+    nombre_oc = serializers.CharField(source='orden_compra.NombreOC', read_only=True)
+    revisado_por_nombre = serializers.CharField(source='revisado_por.first_name', read_only=True)
+    pac_estado = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FscOcLink
+        fields = [
+            'id', 'formulario_derivado', 'orden_compra', 'confianza', 'estado',
+            'score_similitud', 'criterios_match', 'motivo_rechazo', 'observaciones',
+            'revisado_por', 'revisado_por_nombre', 'fecha_revision',
+            'creado_en', 'actualizado_en',
+            'id_formulario', 'folio', 'anho', 'unidad_requirente', 'nombre_oc',
+            'id_plan_fsc', 'pac_estado',
+        ]
+        read_only_fields = ['revisado_por', 'fecha_revision', 'creado_en', 'actualizado_en']
+
+    def get_id_formulario(self, obj):
+        fsc = obj.formulario_derivado
+        return generar_id_formulario(fsc.folio, fsc.anho, formulario_texto=fsc.formulario)
+
+    def get_pac_estado(self, obj):
+        if not obj.orden_compra:
+            return None
+        oc = obj.orden_compra
+        oc_dict = {'codigo_oc': oc.codigo_oc, 'EnlacePAC': oc.EnlacePAC, 'ID_Proyecto': oc.ID_Proyecto}
+        overrides = self.context.get('pac_overrides', {})
+        return _pac_match_estado(obj.formulario_derivado.id_plan, oc_dict, overrides)
 
 
 # =============================================================================

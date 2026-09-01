@@ -55,6 +55,12 @@ from .views import (
     pac_cumplimiento_actualizar_maestro, pac_cumplimiento_actualizar_jerarquia,
     pac_cumplimiento_reporte_word, pac_cumplimiento_reporte_ppt, pac_cumplimiento_reporte_pdf,
     pac_indicadores_reporte_word, pac_indicadores_reporte_ppt, pac_indicadores_reporte_pdf,
+    FscOcLinkViewSet, CompradorInicialViewSet,
+    fsc_oc_pac_resumen_view, fsc_oc_pac_pendientes_view, fsc_oc_pac_pivote_view,
+    fsc_oc_pac_compraagil_view, fsc_oc_pac_confirmar_view, fsc_oc_pac_rechazar_view,
+    fsc_oc_pac_enlazar_manual_view, fsc_oc_pac_recalcular_view,
+    fsc_oc_pac_fsc_detalle_view, fsc_oc_pac_oc_detalle_view, fsc_oc_pac_corregir_pac_view,
+    fsc_oc_pac_corregidas_view, fsc_oc_pac_impacto_view,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -90,6 +96,10 @@ router.register(r'contratos', GestionContratoViewSet, basename='contrato')
 router.register(r'formularios-fsc', FormularioFSCViewSet, basename='formulariofsc')
 router.register(r'formularios-fsc-derivados', FormularioFSCDerivadoViewSet, basename='formulariofscderivado')
 router.register(r'formularios-fsc-productos', FormularioFSCProductoViewSet, basename='formulariofscproducto')
+
+# Módulo Enlace FSC-OC-PAC
+router.register(r'fsc-oc-links', FscOcLinkViewSet, basename='fscoclink')
+router.register(r'compradores-iniciales', CompradorInicialViewSet, basename='compradorinicial')
 
 # Módulo Usuarios
 router.register(r'usuarios', UsuarioViewSet, basename='usuario')
@@ -229,6 +239,21 @@ urlpatterns = [
     path('pac/reporte/word/', pac_indicadores_reporte_word, name='pac_indicadores_reporte_word'),
     path('pac/reporte/ppt/', pac_indicadores_reporte_ppt, name='pac_indicadores_reporte_ppt'),
     path('pac/reporte/pdf/', pac_indicadores_reporte_pdf, name='pac_indicadores_reporte_pdf'),
+
+    # Módulo Enlace FSC-OC-PAC
+    path('fsc-oc-pac/resumen/', fsc_oc_pac_resumen_view, name='fsc_oc_pac_resumen'),
+    path('fsc-oc-pac/pendientes/', fsc_oc_pac_pendientes_view, name='fsc_oc_pac_pendientes'),
+    path('fsc-oc-pac/pivote/', fsc_oc_pac_pivote_view, name='fsc_oc_pac_pivote'),
+    path('fsc-oc-pac/compraagil-resumen/', fsc_oc_pac_compraagil_view, name='fsc_oc_pac_compraagil'),
+    path('fsc-oc-pac/confirmar/', fsc_oc_pac_confirmar_view, name='fsc_oc_pac_confirmar'),
+    path('fsc-oc-pac/rechazar/', fsc_oc_pac_rechazar_view, name='fsc_oc_pac_rechazar'),
+    path('fsc-oc-pac/enlazar-manual/', fsc_oc_pac_enlazar_manual_view, name='fsc_oc_pac_enlazar_manual'),
+    path('fsc-oc-pac/recalcular/', fsc_oc_pac_recalcular_view, name='fsc_oc_pac_recalcular'),
+    path('fsc-oc-pac/fsc-detalle/', fsc_oc_pac_fsc_detalle_view, name='fsc_oc_pac_fsc_detalle'),
+    path('fsc-oc-pac/oc-detalle/', fsc_oc_pac_oc_detalle_view, name='fsc_oc_pac_oc_detalle'),
+    path('fsc-oc-pac/corregir-pac/', fsc_oc_pac_corregir_pac_view, name='fsc_oc_pac_corregir_pac'),
+    path('fsc-oc-pac/corregidas/', fsc_oc_pac_corregidas_view, name='fsc_oc_pac_corregidas'),
+    path('fsc-oc-pac/impacto/', fsc_oc_pac_impacto_view, name='fsc_oc_pac_impacto'),
 
     # Router ViewSets
     path('', include(router.urls)),

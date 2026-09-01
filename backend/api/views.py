@@ -48,6 +48,7 @@ from .models import (
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
     PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
     SigfeAnexo1,
+    FscOcLink, CompradorInicial,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
@@ -61,6 +62,7 @@ from .serializers import (
     FormularioFSCSerializer, FormularioFSCDerivadoSerializer, FormularioFSCProductoSerializer,
     UserAdminSerializer, UserMeSerializer,
     DepartamentoSerializer, EstablecimientoSerializer,
+    FscOcLinkSerializer, CompradorInicialSerializer,
     DevengoSigfeAnualSerializer, SigfeAnexo1Serializer,
 )
 
@@ -1775,6 +1777,214 @@ class RevisionOCCorregibleViewSet(viewsets.ModelViewSet):
 
 
 # =============================================================================
+# Enlace FSC-OC-PAC
+# =============================================================================
+
+class FscOcLinkViewSet(viewsets.ReadOnlyModelViewSet):
+    """Listado/detalle de enlaces FSC-OC — usado por el tab 'Detalle/Explorador'."""
+    queryset = FscOcLink.objects.select_related(
+        'formulario_derivado', 'orden_compra', 'revisado_por'
+    ).all()
+    serializer_class = FscOcLinkSerializer
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
+    filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
+    filterset_fields = ['confianza', 'estado', 'formulario_derivado__anho']
+    ordering_fields = ['score_similitud', 'creado_en', 'actualizado_en']
+    ordering = ['-actualizado_en']
+
+    def get_serializer_context(self):
+        from .services import _mapa_overrides_pac
+        context = super().get_serializer_context()
+        context['pac_overrides'] = _mapa_overrides_pac()
+        return context
+
+
+class CompradorInicialViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CompradorInicial.objects.select_related('usuario').all()
+    serializer_class = CompradorInicialSerializer
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
+    pagination_class = None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_resumen_view(request):
+    from .services import calcular_fsc_oc_resumen
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    cache_key = f'fsc_oc_pac_resumen_{anho_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_fsc_oc_resumen(anho=anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_pendientes_view(request):
+    """Cola de revisión (sin cache — el usuario confirma/rechaza en vivo)."""
+    from .services import calcular_fsc_oc_pendientes
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    return Response(calcular_fsc_oc_pendientes(anho=anho_int))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_pivote_view(request):
+    from .services import calcular_fsc_oc_pivote
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    cache_key = f'fsc_oc_pac_pivote_{anho_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_fsc_oc_pivote(anho=anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_compraagil_view(request):
+    from .services import calcular_fsc_oc_compraagil_resumen
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    cache_key = f'fsc_oc_pac_compraagil_{anho_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_fsc_oc_compraagil_resumen(anho=anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_confirmar_view(request):
+    from .services import confirmar_fsc_oc_link
+    link_id = request.data.get('link_id')
+    if not link_id:
+        return Response({'error': 'link_id es requerido'}, status=400)
+    try:
+        link = confirmar_fsc_oc_link(link_id, request.user)
+    except FscOcLink.DoesNotExist:
+        return Response({'error': 'Enlace no encontrado'}, status=404)
+    cache.clear()
+    return Response(FscOcLinkSerializer(link).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_rechazar_view(request):
+    from .services import rechazar_fsc_oc_link
+    link_id = request.data.get('link_id')
+    motivo = request.data.get('motivo', '')
+    if not link_id:
+        return Response({'error': 'link_id es requerido'}, status=400)
+    try:
+        link = rechazar_fsc_oc_link(link_id, request.user, motivo)
+    except FscOcLink.DoesNotExist:
+        return Response({'error': 'Enlace no encontrado'}, status=404)
+    cache.clear()
+    return Response(FscOcLinkSerializer(link).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_enlazar_manual_view(request):
+    from .services import enlazar_fsc_oc_manual
+    formulario_derivado_id = request.data.get('formulario_derivado_id')
+    codigo_oc = request.data.get('codigo_oc')
+    observaciones = request.data.get('observaciones', '')
+    if not formulario_derivado_id or not codigo_oc:
+        return Response({'error': 'formulario_derivado_id y codigo_oc son requeridos'}, status=400)
+    try:
+        link = enlazar_fsc_oc_manual(formulario_derivado_id, codigo_oc, request.user, observaciones)
+    except ValueError as exc:
+        return Response({'error': str(exc)}, status=400)
+    cache.clear()
+    return Response(FscOcLinkSerializer(link).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_recalcular_view(request):
+    """Relanza el matching automático a demanda. Sincrónico (unos segundos
+    sobre el volumen actual) — respeta decisiones humanas ya tomadas."""
+    from .services import recalcular_fsc_oc_matching
+    resultado = recalcular_fsc_oc_matching()
+    cache.clear()
+    return Response(resultado)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_fsc_detalle_view(request):
+    from .services import calcular_fsc_oc_detalle_fsc
+    fsc_id = request.GET.get('id')
+    if not fsc_id:
+        return Response({'error': 'id es requerido'}, status=400)
+    try:
+        return Response(calcular_fsc_oc_detalle_fsc(fsc_id))
+    except FormularioFSCDerivado.DoesNotExist:
+        return Response({'error': 'FSC no encontrado'}, status=404)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_oc_detalle_view(request):
+    from .services import calcular_fsc_oc_detalle_oc
+    codigo_oc = request.GET.get('codigo_oc')
+    if not codigo_oc:
+        return Response({'error': 'codigo_oc es requerido'}, status=400)
+    try:
+        return Response(calcular_fsc_oc_detalle_oc(codigo_oc))
+    except OrdenCompra.DoesNotExist:
+        return Response({'error': 'OC no encontrada'}, status=404)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_corregir_pac_view(request):
+    from .services import corregir_oc_pac
+    codigo_oc = request.data.get('codigo_oc')
+    formulario_derivado_id = request.data.get('formulario_derivado_id')
+    observaciones = request.data.get('observaciones', '')
+    if not codigo_oc or not formulario_derivado_id:
+        return Response({'error': 'codigo_oc y formulario_derivado_id son requeridos'}, status=400)
+    try:
+        corregir_oc_pac(codigo_oc, formulario_derivado_id, request.user, observaciones)
+    except (ValueError, FormularioFSCDerivado.DoesNotExist) as exc:
+        return Response({'error': str(exc)}, status=400)
+    cache.clear()
+    return Response({'ok': True})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_corregidas_view(request):
+    from .services import calcular_oc_pac_corregidas
+    cache_key = 'fsc_oc_pac_corregidas'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_oc_pac_corregidas()
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def fsc_oc_pac_impacto_view(request):
+    from .services import calcular_fsc_oc_impacto
+    cache_key = 'fsc_oc_pac_impacto'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_fsc_oc_impacto()
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+# =============================================================================
 # Calendario — endpoints autónomos (sin filtro de Estado, año por fechas de evento)
 # =============================================================================
 
@@ -2559,6 +2769,17 @@ def _ejecutar_actualizacion_oc(task_id: str, fecha_desde_str: str, fecha_hasta_s
         # ── Paso 2: subir maestros a Django/MariaDB ──
         with contextlib.redirect_stdout(stream):
             oc.subir_maestros_a_django()
+
+        # ── Enlace FSC-OC-PAC: reengancha automáticamente con la nueva foto de
+        # OC, sin importar el año que traiga el sync. Corre FUERA de cualquier
+        # transacción (igual que _clasificar_dentro_fuera_pac en page_data_panel.py)
+        # y nunca debe tumbar el ETL de OC si falla — solo se loguea.
+        try:
+            from .services import recalcular_fsc_oc_matching
+            with contextlib.redirect_stdout(stream):
+                recalcular_fsc_oc_matching(_avisar=lambda **kw: print(kw.get('log', '')))
+        except Exception:
+            logger.exception("Fallo recalculando enlace FSC-OC tras sync de OC (task_id=%s)", task_id)
 
         # ── Diff post-sync: calcular qué cambió ──
         _tareas_actualizacion_oc[task_id].update(paso_desc="Calculando cambios detectados...")

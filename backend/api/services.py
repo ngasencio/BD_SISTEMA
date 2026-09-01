@@ -2,6 +2,7 @@ import calendar
 import re
 from collections import defaultdict
 from datetime import date, datetime
+from difflib import SequenceMatcher
 
 from django.db.models import Avg, CharField, Count, DecimalField, Max, Q, Sum, Value
 from django.db.models.functions import Cast, Concat, Substr
@@ -14,6 +15,7 @@ from .models import (
     SigfeAnexo1, ConceptoJerarquia,
     PacProyectoMaestro, Departamento, Establecimiento, SsoSubdireccion,
     Factura, FacturaSyncLog,
+    FscOcLink, CompradorInicial, OcPacOverride,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
@@ -4266,4 +4268,890 @@ def calcular_facturas_analisis() -> dict:
         'relacion_oc': relacion_oc,
         'duplicados': duplicados,
         'montos': montos,
+    }
+
+
+# =============================================================================
+# Enlace FSC ↔ OC ↔ PAC — cruza FormularioFSCDerivado (Dentro PAC) con
+# OrdenCompra (TipoOCInterno='Formulario') usando el código embebido en
+# NombreOC ("F1-162-26-NAM" = Tipo-Folio-Año-Comprador). Ver diseño completo
+# en el plan de implementación (2026-08-28) — puntos clave:
+#   - `recalcular_fsc_oc_matching()` es idempotente y NUNCA pisa una fila que
+#     un humano ya marcó CONFIRMADO/RECHAZADO/MANUAL (solo toca SUGERIDO o
+#     crea filas nuevas).
+#   - "Sin match" NO se persiste como fila con orden_compra=NULL (MariaDB
+#     trata cada NULL como distinto en un UniqueConstraint, así que eso
+#     permitiría filas "sin match" duplicadas en cada recálculo) — se
+#     representa por AUSENCIA de filas FscOcLink para ese FormularioFSCDerivado.
+#   - Detecta y marca (sin tocar estado/confianza) links "huérfanos" cuya
+#     orden_compra ya no existe en la tabla api_ordencompra — puede pasar
+#     porque OC_SSO_SERVER.py hace DELETE total + bulk_create en cada sync
+#     (ver FscOcLink.orden_compra en models.py para el detalle del FK).
+# =============================================================================
+
+_RE_NOMBRE_OC = re.compile(
+    r'^\s*F\s*(\d)\s*-\s*(\d+)(?:\s*-\s*(\d{2,4}))?(?:\s*-\s*([A-ZÑ]{2,4}))?',
+    re.IGNORECASE,
+)
+
+
+def _parsear_nombre_oc(nombre_oc):
+    """Extrae {tipo, folio, anho, comprador_codigo} del NombreOC de una OC de
+    tipo 'Formulario' (ej. "F1-299-26-IVO", "F2-100-2026 / ...", "F1-664 Orden
+    de Compra..."). `anho`/`comprador_codigo` pueden venir None (formato
+    legacy, sin esos segmentos). Devuelve None si ni siquiera calza Tipo+Folio."""
+    if not nombre_oc:
+        return None
+    m = _RE_NOMBRE_OC.match(str(nombre_oc).strip())
+    if not m:
+        return None
+    tipo, folio_s, anho_s, comprador = m.groups()
+    anho = None
+    if anho_s:
+        anho = int(anho_s) if len(anho_s) == 4 else 2000 + int(anho_s)
+    return {
+        'tipo': int(tipo),
+        'folio': int(folio_s),
+        'anho': anho,
+        'comprador_codigo': comprador.upper() if comprador else None,
+    }
+
+
+def _extraer_tipo_formulario_fsc(fsc):
+    m = _RE_TIPO_FORMULARIO.search(fsc.formulario or '')
+    return int(m.group(1)) if m else None
+
+
+def _parse_fecha_fsc(s):
+    """fecha_solicitud/fecha_derivado vienen como CharField — normalmente
+    'YYYY-MM-DD', pero el origen (Panel SSO) no garantiza formato estricto."""
+    if not s:
+        return None
+    for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%Y/%m/%d'):
+        try:
+            return datetime.strptime(str(s).strip()[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _fecha_derivacion_fsc(fsc):
+    """Fecha de referencia para 'este FSC no pudo generar una OC antes de
+    esto': `fecha_derivado` si existe (ya derivado a comprador), si no
+    `fecha_solicitud` (más temprana, más laxa — mejor eso que no filtrar nada)."""
+    return _parse_fecha_fsc(fsc.fecha_derivado) or _parse_fecha_fsc(fsc.fecha_solicitud)
+
+
+def _oc_no_es_anterior_al_fsc(fecha_ref_fsc, oc, tolerancia_dias=5):
+    """Descarta candidatas cronológicamente imposibles: una OC no puede
+    emitirse antes de que su FSC se derive a compra. Si falta la fecha en
+    cualquiera de los dos lados, NO filtra (mejor un falso positivo ocasional
+    que perder una candidata válida por datos incompletos). `tolerancia_dias`
+    absorbe ruido de registro (zona horaria, mismo día) sin dejar pasar OC de
+    años/meses anteriores — el caso real reportado: sugerir OC 2023-2024 para
+    un FSC 2026 solo porque el folio coincidía (formato legacy sin año en
+    NombreOC, matching por BAJA_SUGERIDA)."""
+    if not fecha_ref_fsc:
+        return True
+    fecha_oc = oc.get('FechaEnvio') or oc.get('FechaCreacion')
+    if not fecha_oc:
+        return True
+    return (fecha_oc.date() - fecha_ref_fsc).days >= -tolerancia_dias
+
+
+def _construir_indice_oc_formulario():
+    """Indexa OrdenCompra(TipoOCInterno='Formulario') por (tipo,folio,anho) y
+    por (tipo,folio) — la segunda para el fallback de formato legacy sin año."""
+    idx_full, idx_folio = defaultdict(list), defaultdict(list)
+    qs = OrdenCompra.objects.filter(TipoOCInterno='Formulario').values(
+        'codigo_oc', 'NombreOC', 'DescripcionOC', 'FechaEnvio', 'FechaCreacion',
+        'C_Unidad', 'TotalNeto', 'TotalBruto',
+    )
+    for oc in qs:
+        parsed = _parsear_nombre_oc(oc['NombreOC'])
+        if not parsed:
+            continue
+        oc = {**oc, **parsed}
+        if parsed['anho'] is not None:
+            idx_full[(parsed['tipo'], parsed['folio'], parsed['anho'])].append(oc)
+        idx_folio[(parsed['tipo'], parsed['folio'])].append(oc)
+    return idx_full, idx_folio
+
+
+def _score_similitud_fsc_oc(fsc, oc, comprador_lookup=None):
+    """Combina 5 señales (0..1 cada una) para rankear candidatas de formato
+    legacy (solo Tipo+Folio, sin año que desambigüe). Devuelve
+    (score_total, detalle_dict) — el detalle se persiste en criterios_match
+    para que el panel de revisión muestre POR QUÉ se sugiere cada candidata.
+
+    Caso frecuente que motiva la señal de comprador: OC tipo "F1-385-IVO/..."
+    NO trae año (cae en el fallback solo-folio) pero SÍ trae el código de
+    comprador — sin esta señal, esa candidata (folio+comprador exactos) rankeaba
+    igual de bajo que una coincidencia de folio puramente casual entre años.
+    """
+    comprador_lookup = comprador_lookup or {}
+    detalle = {}
+
+    # Fecha: la OC debería emitirse en/después de la solicitud del FSC, idealmente
+    # dentro de los ~6 meses siguientes.
+    fecha_fsc = _parse_fecha_fsc(fsc.fecha_derivado) or _parse_fecha_fsc(fsc.fecha_solicitud)
+    fecha_oc = oc['FechaEnvio'] or oc['FechaCreacion']
+    if fecha_fsc and fecha_oc:
+        delta_dias = (fecha_oc.date() - fecha_fsc).days
+        if delta_dias < 0:
+            score_fecha = max(0.0, 1 + delta_dias / 30)
+        else:
+            score_fecha = max(0.0, 1 - delta_dias / 180)
+        detalle['fecha'] = {'delta_dias': delta_dias, 'score': round(score_fecha, 2)}
+    else:
+        score_fecha = 0.3
+        detalle['fecha'] = {'delta_dias': None, 'score': score_fecha}
+
+    # Unidad/comprador: unidad_requirente del FSC contra C_Unidad de la OC (texto libre).
+    u_fsc = _normalizar_texto_pac(fsc.unidad_requirente)
+    u_oc = _normalizar_texto_pac(oc['C_Unidad'])
+    if u_fsc and u_oc:
+        score_unidad = SequenceMatcher(None, u_fsc, u_oc).ratio()
+    else:
+        score_unidad = 0.3
+    detalle['unidad'] = {'score': round(score_unidad, 2)}
+
+    # Monto: fsc.monto_estimado vs TotalBruto/TotalNeto de la OC.
+    monto_fsc = fsc.monto_estimado
+    monto_oc = oc['TotalBruto'] if oc['TotalBruto'] is not None else oc['TotalNeto']
+    if monto_fsc and monto_oc:
+        diff_rel = abs(float(monto_oc) - float(monto_fsc)) / max(float(monto_fsc), 1.0)
+        score_monto = max(0.0, 1 - diff_rel)
+    else:
+        score_monto = 0.3
+    detalle['monto'] = {'score': round(score_monto, 2)}
+
+    # Texto: objetivo_compra/requerimiento del FSC vs NombreOC+DescripcionOC.
+    txt_fsc = _normalizar_texto_pac(fsc.objetivo_compra or fsc.requerimiento or '')
+    txt_oc = _normalizar_texto_pac(f"{oc['NombreOC'] or ''} {oc['DescripcionOC'] or ''}")
+    if txt_fsc and txt_oc:
+        score_texto = SequenceMatcher(None, txt_fsc[:500], txt_oc[:500]).ratio()
+    else:
+        score_texto = 0.3
+    detalle['texto'] = {'score': round(score_texto, 2)}
+
+    # Comprador: código embebido en NombreOC (ej. "-IVO") contra el nombre
+    # completo del comprador del FSC, vía el catálogo CompradorInicial.
+    comprador_fsc_norm = _normalizar_texto_pac(fsc.comprador)
+    if oc.get('comprador_codigo') and comprador_fsc_norm:
+        nombre_comprador_oc = comprador_lookup.get(oc['comprador_codigo'])
+        if nombre_comprador_oc is None:
+            score_comprador = 0.3  # código presente pero no está en el catálogo (¿comprador nuevo?)
+        elif nombre_comprador_oc == comprador_fsc_norm:
+            score_comprador = 1.0
+        else:
+            score_comprador = 0.0  # código presente y NO coincide — señal negativa fuerte
+    else:
+        score_comprador = 0.4  # sin código en la OC — ausencia no es evidencia en contra
+    detalle['comprador'] = {'score': round(score_comprador, 2)}
+
+    score_total = round(
+        0.20 * score_fecha + 0.15 * score_unidad + 0.25 * score_monto
+        + 0.15 * score_texto + 0.25 * score_comprador, 3
+    )
+    return score_total, detalle
+
+
+def _upsert_fsc_oc_links(fsc, candidatos, confianza, estado_nuevo, criterios_extra_fn=None):
+    """Crea/actualiza FscOcLink para cada candidata SIN tocar filas que un
+    humano ya resolvió (estado != SUGERIDO). Devuelve cuántas filas tocó."""
+    tocadas = 0
+    for oc in candidatos:
+        existente = FscOcLink.objects.filter(
+            formulario_derivado=fsc, orden_compra_id=oc['codigo_oc']
+        ).first()
+        if existente and existente.estado != FscOcLink.SUGERIDO:
+            continue
+
+        criterios = {'tipo': oc['tipo'], 'folio': oc['folio'], 'anho_oc': oc.get('anho')}
+        score = None
+        if criterios_extra_fn:
+            score, detalle = criterios_extra_fn(oc)
+            criterios['similitud'] = detalle
+
+        defaults = {
+            'confianza': confianza,
+            'score_similitud': score,
+            'criterios_match': criterios,
+        }
+        if existente:
+            for k, v in defaults.items():
+                setattr(existente, k, v)
+            existente.save(update_fields=list(defaults.keys()) + ['actualizado_en'])
+        else:
+            FscOcLink.objects.create(
+                formulario_derivado=fsc, orden_compra_id=oc['codigo_oc'],
+                estado=estado_nuevo, **defaults,
+            )
+        tocadas += 1
+    return tocadas
+
+
+def recalcular_fsc_oc_matching(anhos=None, _avisar=None):
+    """Recalcula el enlace FSC↔OC para todos los FormularioFSCDerivado
+    Dentro-PAC (o solo los años en `anhos` si se pasa). Idempotente y seguro
+    de llamar en cada sync de OC o de FSC — ver cabecera de sección para las
+    reglas de no-pisar-decisiones-humanas y el manejo de "sin match"/huérfanos.
+    """
+    _avisar = _avisar or (lambda **kw: None)
+    from django.db import close_old_connections
+    close_old_connections()
+
+    idx_full, idx_folio = _construir_indice_oc_formulario()
+    comprador_lookup = {
+        ci.codigo.upper(): _normalizar_texto_pac(ci.usuario.first_name)
+        for ci in CompradorInicial.objects.select_related('usuario')
+    }
+    codigos_oc_validos = set(OrdenCompra.objects.values_list('codigo_oc', flat=True))
+
+    qs = FormularioFSCDerivado.objects.filter(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)
+    if anhos:
+        qs = qs.filter(anho__in=anhos)
+
+    stats = {'evaluados': 0, 'alta': 0, 'alta_oc': 0, 'media': 0, 'baja': 0, 'sin_match': 0, 'sin_clave': 0}
+
+    for fsc in qs.iterator(chunk_size=200):
+        stats['evaluados'] += 1
+        tipo = _extraer_tipo_formulario_fsc(fsc)
+        if tipo is None or not fsc.folio or not fsc.anho:
+            stats['sin_clave'] += 1
+            continue
+
+        fecha_ref_fsc = _fecha_derivacion_fsc(fsc)
+        candidatos_mismo_periodo = [
+            oc for oc in idx_full.get((tipo, fsc.folio, fsc.anho), [])
+            if _oc_no_es_anterior_al_fsc(fecha_ref_fsc, oc)
+        ]
+        comprador_fsc_norm = _normalizar_texto_pac(fsc.comprador)
+        # Un FSC puede tener varias OC legítimas (varios procesos de compra —
+        # ej. despacho parcial, proveedores distintos). Cada candidata que
+        # calza Tipo+Folio+Año+Comprador se confirma de forma INDEPENDIENTE,
+        # no solo cuando hay una única coincidencia — antes `len(...) == 1`
+        # degradaba a MEDIA/SUGERIDO el caso de 2+ OC igualmente válidas.
+        candidatos_alta = [
+            oc for oc in candidatos_mismo_periodo
+            if comprador_fsc_norm and oc['comprador_codigo']
+            and comprador_lookup.get(oc['comprador_codigo']) == comprador_fsc_norm
+        ]
+        codigos_alta = {oc['codigo_oc'] for oc in candidatos_alta}
+        candidatos_media = [oc for oc in candidatos_mismo_periodo if oc['codigo_oc'] not in codigos_alta]
+
+        tocado = False
+        codigos_candidatos_validos = set()
+        if candidatos_alta:
+            _upsert_fsc_oc_links(fsc, candidatos_alta, FscOcLink.ALTA, FscOcLink.CONFIRMADO)
+            stats['alta'] += 1
+            stats['alta_oc'] += len(candidatos_alta)
+            codigos_candidatos_validos |= {oc['codigo_oc'] for oc in candidatos_alta}
+            tocado = True
+        if candidatos_media:
+            _upsert_fsc_oc_links(fsc, candidatos_media, FscOcLink.MEDIA, FscOcLink.SUGERIDO)
+            stats['media'] += 1
+            codigos_candidatos_validos |= {oc['codigo_oc'] for oc in candidatos_media}
+            tocado = True
+
+        if not tocado:
+            candidatos_baja = [
+                oc for oc in idx_folio.get((tipo, fsc.folio), [])
+                if _oc_no_es_anterior_al_fsc(fecha_ref_fsc, oc)
+            ][:10]
+            if candidatos_baja:
+                _upsert_fsc_oc_links(
+                    fsc, candidatos_baja, FscOcLink.BAJA_SUGERIDA, FscOcLink.SUGERIDO,
+                    criterios_extra_fn=lambda oc: _score_similitud_fsc_oc(fsc, oc, comprador_lookup),
+                )
+                stats['baja'] += 1
+                codigos_candidatos_validos |= {oc['codigo_oc'] for oc in candidatos_baja}
+            else:
+                stats['sin_match'] += 1
+
+        # Limpieza de sugerencias obsoletas: un link SUGERIDO (nunca CONFIRMADO/
+        # RECHAZADO/MANUAL — esos son decisión humana, jamás se tocan) que ya no
+        # aparece entre las candidatas válidas de esta corrida se borra. Es lo
+        # que permite que el filtro de fecha (`_oc_no_es_anterior_al_fsc`) surta
+        # efecto sobre sugerencias creadas en corridas anteriores, y en general
+        # mantiene la cola de revisión libre de sugerencias que ya no califican
+        # (ej. la OC cambió de fecha en un sync, o el criterio de matching cambió).
+        FscOcLink.objects.filter(
+            formulario_derivado=fsc, estado=FscOcLink.SUGERIDO,
+        ).exclude(orden_compra_id__in=codigos_candidatos_validos).delete()
+
+    # Huérfanos: links (cualquier estado) cuya OC ya no existe en la tabla
+    # actual — solo se marca/desmarca en criterios_match, NUNCA se toca
+    # estado/confianza. Se revisan TODOS los links con orden_compra (no solo
+    # los recién detectados) para poder desmarcar el flag si la OC reaparece
+    # en un sync posterior (mismo codigo_oc recreado por el ETL).
+    huerfanos = 0
+    for link in FscOcLink.objects.exclude(orden_compra_id__isnull=True):
+        es_huerfano = link.orden_compra_id not in codigos_oc_validos
+        criterios = dict(link.criterios_match or {})
+        if bool(criterios.get('huerfano')) == es_huerfano:
+            continue
+        if es_huerfano:
+            criterios['huerfano'] = True
+        else:
+            criterios.pop('huerfano', None)
+        link.criterios_match = criterios
+        link.save(update_fields=['criterios_match', 'actualizado_en'])
+        if es_huerfano:
+            huerfanos += 1
+
+    _avisar(log=(
+        f"Enlace FSC-OC: {stats['evaluados']} FSC Dentro-PAC evaluados — "
+        f"{stats['alta']} Alta ({stats['alta_oc']} OC confirmadas — puede haber varias por FSC), "
+        f"{stats['media']} Media, {stats['baja']} Baja-sugerida, "
+        f"{stats['sin_match']} sin candidata, {stats['sin_clave']} sin folio/año/tipo válido, "
+        f"{huerfanos} links huérfanos detectados (OC ya no existe)."
+    ))
+    return {**stats, 'huerfanos': huerfanos}
+
+
+def _estado_enlace_fsc(links):
+    """Reduce la lista de FscOcLink de un FSC a un único estado agregado
+    para KPIs/pivote/tabla. Prioridad: CONFIRMADO > MEDIA/ALTA pendiente >
+    BAJA pendiente > RECHAZADO (todas) > SIN_MATCH (sin filas)."""
+    if not links:
+        return 'SIN_MATCH'
+    if any(l.estado == FscOcLink.CONFIRMADO for l in links):
+        return 'CONFIRMADO'
+    pendientes = [l for l in links if l.estado == FscOcLink.SUGERIDO]
+    if any(l.confianza in (FscOcLink.ALTA, FscOcLink.MEDIA) for l in pendientes):
+        return 'PENDIENTE_MEDIA'
+    if pendientes:
+        return 'PENDIENTE_BAJA'
+    return 'RECHAZADO_TOTAL'
+
+
+def _pac_match_estado(id_plan_fsc, oc, overrides):
+    """Compara el PAC que declara el FSC (`id_plan`) contra el PAC real de la
+    OC — override manual (`OcPacOverride`) primero, si no existe cae a
+    `OrdenCompra.EnlacePAC`/`ID_Proyecto` (recalculados desde CSV en cada sync,
+    ver `OcPacOverride` en models.py). `oc` es un dict con al menos
+    `codigo_oc`/`EnlacePAC`/`ID_Proyecto`, o None si no hay OC que comparar."""
+    if not oc:
+        return None
+    id_proyecto_real = overrides.get(oc['codigo_oc'])
+    if id_proyecto_real is None:
+        if oc.get('EnlacePAC') != 'Enlazada' or not oc.get('ID_Proyecto'):
+            return 'SIN_PAC'
+        id_proyecto_real = oc['ID_Proyecto']
+    if not id_plan_fsc:
+        return None
+    return 'PAC_OK' if id_proyecto_real == id_plan_fsc else 'PAC_DISTINTO'
+
+
+def _mapa_overrides_pac():
+    return dict(OcPacOverride.objects.values_list('orden_compra_id', 'id_proyecto_correcto'))
+
+
+def _mapa_nombres_pac():
+    """id_proyecto → nombre_proyecto, para mostrar junto al ID (más rápido de
+    buscar en Mercado Público que solo el código). PacProyectoMaestro primero
+    (histórico multi-año), PlanerPAC pisa con el nombre del plan vigente si
+    también existe ahí — mismas dos fuentes que usa `_clasificar_dentro_fuera_pac`
+    para decidir Dentro/Fuera, así el nombre siempre está disponible cuando el
+    ID también lo está."""
+    mapa = {}
+    for id_proyecto, nombre in PacProyectoMaestro.objects.exclude(nombre_proyecto__isnull=True).exclude(nombre_proyecto='').values_list('id_proyecto', 'nombre_proyecto'):
+        mapa.setdefault(id_proyecto, nombre)
+    for id_proyecto, nombre in PlanerPAC.objects.exclude(nombre_proyecto__isnull=True).exclude(nombre_proyecto='').values_list('id_proyecto', 'nombre_proyecto'):
+        mapa[id_proyecto] = nombre
+    return mapa
+
+
+def calcular_fsc_oc_resumen(anho=None):
+    """KPIs globales del módulo Enlace FSC-OC-PAC: % enlazado por estado,
+    evolución por año, distribución por confianza, y — entre los CONFIRMADO —
+    cuántas OC tienen realmente el PAC que declara su FSC. Cache 5 min en la vista."""
+    qs = FormularioFSCDerivado.objects.filter(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)
+    if anho:
+        qs = qs.filter(anho=anho)
+
+    fsc_ids = list(qs.values_list('id', flat=True))
+    links_por_fsc = defaultdict(list)
+    for link in FscOcLink.objects.filter(formulario_derivado_id__in=fsc_ids).select_related(None):
+        links_por_fsc[link.formulario_derivado_id].append(link)
+
+    conteo = defaultdict(int)
+    por_anho = defaultdict(lambda: defaultdict(int))
+    anho_por_id = dict(qs.values_list('id', 'anho'))
+    id_plan_por_id = dict(qs.values_list('id', 'id_plan'))
+    for fid in fsc_ids:
+        estado = _estado_enlace_fsc(links_por_fsc.get(fid, []))
+        conteo[estado] += 1
+        por_anho[anho_por_id[fid]][estado] += 1
+
+    total = len(fsc_ids)
+
+    # PAC en confirmados: solo tiene sentido para FSC con link CONFIRMADO.
+    overrides = _mapa_overrides_pac()
+    codigos_confirmados = [
+        l.orden_compra_id for links in links_por_fsc.values() for l in links
+        if l.estado == FscOcLink.CONFIRMADO
+    ]
+    ocs_por_codigo = {
+        oc['codigo_oc']: oc for oc in
+        OrdenCompra.objects.filter(codigo_oc__in=codigos_confirmados)
+        .values('codigo_oc', 'EnlacePAC', 'ID_Proyecto')
+    }
+    # Cuenta por OC confirmada, no por FSC — un FSC con 2 OC confirmadas aporta
+    # 2 al total (cada proceso de compra se evalúa por separado).
+    pac_conteo = defaultdict(int)
+    for fid, links in links_por_fsc.items():
+        for confirmado in (l for l in links if l.estado == FscOcLink.CONFIRMADO):
+            oc = ocs_por_codigo.get(confirmado.orden_compra_id)
+            estado_pac = _pac_match_estado(id_plan_por_id.get(fid), oc, overrides) or 'SIN_PAC'
+            pac_conteo[estado_pac] += 1
+    total_confirmados = sum(pac_conteo.values())
+
+    return {
+        'kpis': {
+            'total_dentro_pac': total,
+            'confirmado': conteo['CONFIRMADO'],
+            'pendiente_media': conteo['PENDIENTE_MEDIA'],
+            'pendiente_baja': conteo['PENDIENTE_BAJA'],
+            'rechazado_total': conteo['RECHAZADO_TOTAL'],
+            'sin_match': conteo['SIN_MATCH'],
+            'pct_enlazado': round(100 * conteo['CONFIRMADO'] / total, 1) if total else 0.0,
+        },
+        'pac_en_confirmados': {
+            # 'total' cuenta OC confirmadas, no FSC — puede ser mayor que
+            # kpis.confirmado (que cuenta FSC con al menos una OC confirmada)
+            # si algún FSC tiene varias OC confirmadas a la vez.
+            'total': total_confirmados,
+            'pac_ok': pac_conteo['PAC_OK'],
+            'sin_pac': pac_conteo['SIN_PAC'],
+            'pac_distinto': pac_conteo['PAC_DISTINTO'],
+            'pct_ok': round(100 * pac_conteo['PAC_OK'] / total_confirmados, 1) if total_confirmados else 0.0,
+        },
+        'por_anho': [
+            {'anho': a, **{k: v for k, v in d.items()}}
+            for a, d in sorted(por_anho.items())
+        ],
+    }
+
+
+def calcular_fsc_oc_pendientes(anho=None):
+    """Cola de revisión del tab 'Revisión Pendientes', con dos secciones:
+    - `enlace_pendiente`: FSC Dentro-PAC con candidatas SUGERIDO por resolver
+      (confirmar/rechazar/enlazar a mano) — incluye FSC que YA tienen una o
+      más OC confirmada, siempre que queden candidatas sin decidir: un FSC
+      puede generar varios procesos de compra (varias OC legítimas a la vez),
+      así que "ya tiene una confirmada" no significa "no hay nada más que
+      revisar" — `n_confirmadas` en cada fila indica cuántas ya están OK.
+    - `pac_pendiente`: una fila POR CADA OC confirmada cuyo PAC no calza con
+      lo que el FSC declara (SIN_PAC o PAC_DISTINTO) — un mismo FSC puede
+      aparecer más de una vez aquí si tiene varias OC confirmadas con
+      problemas de PAC distintos.
+    """
+    qs = FormularioFSCDerivado.objects.filter(
+        dentro_fuera_pac=FormularioFSCDerivado.DENTRO
+    ).select_related('sso_departamento')
+    if anho:
+        qs = qs.filter(anho=anho)
+
+    fsc_ids = list(qs.values_list('id', flat=True))
+    links = (
+        FscOcLink.objects.filter(formulario_derivado_id__in=fsc_ids)
+        .select_related('orden_compra')
+        .order_by('-score_similitud')
+    )
+    links_por_fsc = defaultdict(list)
+    for link in links:
+        links_por_fsc[link.formulario_derivado_id].append(link)
+
+    overrides = _mapa_overrides_pac()
+    nombres_pac = _mapa_nombres_pac()
+
+    enlace_pendiente = []
+    pac_pendiente = []
+    for fsc in qs:
+        fsc_links = links_por_fsc.get(fsc.id, [])
+        confirmadas = [l for l in fsc_links if l.estado == FscOcLink.CONFIRMADO]
+        sugeridas = [l for l in fsc_links if l.estado == FscOcLink.SUGERIDO]
+
+        if sugeridas:
+            enlace_pendiente.append({
+                'id': fsc.id,
+                'id_formulario': generar_id_formulario(fsc.folio, fsc.anho, formulario_texto=fsc.formulario),
+                'folio': fsc.folio, 'anho': fsc.anho,
+                'unidad_requirente': fsc.unidad_requirente,
+                'comprador': fsc.comprador,
+                'monto_estimado': fsc.monto_estimado,
+                'departamento': fsc.sso_departamento.descripcion if fsc.sso_departamento else None,
+                'estado_enlace': _estado_enlace_fsc(fsc_links),
+                'n_confirmadas': len(confirmadas),
+                'candidatas': [
+                    {
+                        'link_id': l.id,
+                        'codigo_oc': l.orden_compra_id,
+                        'nombre_oc': l.orden_compra.NombreOC if l.orden_compra else None,
+                        'total_bruto': float(l.orden_compra.TotalBruto) if l.orden_compra and l.orden_compra.TotalBruto else None,
+                        'confianza': l.confianza,
+                        'estado': l.estado,
+                        'score_similitud': l.score_similitud,
+                        'criterios_match': l.criterios_match,
+                        'estado_pac': _pac_match_estado(
+                            fsc.id_plan,
+                            {'codigo_oc': l.orden_compra_id, 'EnlacePAC': l.orden_compra.EnlacePAC, 'ID_Proyecto': l.orden_compra.ID_Proyecto} if l.orden_compra else None,
+                            overrides,
+                        ),
+                    }
+                    for l in fsc_links
+                ],
+            })
+
+        for confirmado in confirmadas:
+            oc = confirmado.orden_compra
+            oc_dict = {'codigo_oc': oc.codigo_oc, 'EnlacePAC': oc.EnlacePAC, 'ID_Proyecto': oc.ID_Proyecto} if oc else None
+            estado_pac = _pac_match_estado(fsc.id_plan, oc_dict, overrides)
+            if estado_pac in ('SIN_PAC', 'PAC_DISTINTO'):
+                pac_pendiente.append({
+                    'id': fsc.id,
+                    'id_formulario': generar_id_formulario(fsc.folio, fsc.anho, formulario_texto=fsc.formulario),
+                    'folio': fsc.folio, 'anho': fsc.anho,
+                    'unidad_requirente': fsc.unidad_requirente,
+                    'id_plan_fsc': fsc.id_plan,
+                    'nombre_pac_fsc': nombres_pac.get(fsc.id_plan),
+                    'link_id': confirmado.id,
+                    'codigo_oc': oc.codigo_oc if oc else None,
+                    'nombre_oc': oc.NombreOC if oc else None,
+                    'id_proyecto_oc': oc.ID_Proyecto if oc else None,
+                    'enlace_pac_oc': oc.EnlacePAC if oc else None,
+                    'estado_pac': estado_pac,
+                })
+
+    return {'enlace_pendiente': enlace_pendiente, 'pac_pendiente': pac_pendiente}
+
+
+def calcular_fsc_oc_pivote(anho=None):
+    """Pivote Subdirección → Departamento con conteo por estado de enlace,
+    reutilizando `_mapa_departamentos`/`_resolver_depto_raiz` del módulo PAC
+    Cumplimiento (misma jerarquía, mismo criterio de rollup a depto raíz)."""
+    qs = FormularioFSCDerivado.objects.filter(
+        dentro_fuera_pac=FormularioFSCDerivado.DENTRO
+    ).select_related('sso_departamento')
+    if anho:
+        qs = qs.filter(anho=anho)
+
+    fsc_ids = list(qs.values_list('id', flat=True))
+    links_por_fsc = defaultdict(list)
+    for link in FscOcLink.objects.filter(formulario_derivado_id__in=fsc_ids):
+        links_por_fsc[link.formulario_derivado_id].append(link)
+
+    mapa_deptos = _mapa_departamentos()
+    nodos = defaultdict(lambda: defaultdict(int))
+    for fsc in qs:
+        estado = _estado_enlace_fsc(links_por_fsc.get(fsc.id, []))
+        if fsc.sso_departamento_id:
+            depto_raiz_id = _resolver_depto_raiz(fsc.sso_departamento_id, mapa_deptos)
+            nodo_raiz = mapa_deptos.get(depto_raiz_id)
+            clave = nodo_raiz['descripcion'] if nodo_raiz else fsc.sso_departamento.descripcion
+        else:
+            clave = 'Sin Clasificar'
+        nodos[clave][estado] += 1
+        nodos[clave]['total'] += 1
+
+    return [{'departamento': k, **v} for k, v in sorted(nodos.items())]
+
+
+def calcular_fsc_oc_compraagil_resumen(anho=None):
+    """Reporte (solo lectura, sin revisión manual) del enlace ya existente
+    OC↔CompraAgilResumen vía OrdenCompra.CodigoCompraAgil — ese campo ya lo
+    puebla el ETL (`_extraer_codigo_ca()` en OC_SSO_SERVER.py), acá solo se
+    mide cobertura."""
+    qs = OrdenCompra.objects.filter(TipoOC='AG')
+    if anho:
+        qs = qs.filter(FechaEnvio__year=anho)
+
+    total = qs.count()
+    con_codigo = qs.exclude(CodigoCompraAgil__isnull=True).exclude(CodigoCompraAgil='').count()
+    codigos_ca_validos = set(CompraAgilResumen.objects.values_list('codigocompraagil', flat=True))
+    codigos_oc = set(
+        qs.exclude(CodigoCompraAgil__isnull=True).exclude(CodigoCompraAgil='')
+        .values_list('CodigoCompraAgil', flat=True)
+    )
+    enlazadas_validas = len(codigos_oc & codigos_ca_validos)
+
+    return {
+        'kpis': {
+            'total_oc_agil': total,
+            'con_codigo_ca': con_codigo,
+            'enlazadas_a_ca_existente': enlazadas_validas,
+            'pct_enlazado': round(100 * enlazadas_validas / total, 1) if total else 0.0,
+        },
+        'detalle': list(
+            qs.exclude(CodigoCompraAgil__isnull=True).exclude(CodigoCompraAgil='')
+            .values('codigo_oc', 'NombreOC', 'CodigoCompraAgil', 'FechaEnvio', 'TotalBruto')[:500]
+        ),
+    }
+
+
+def confirmar_fsc_oc_link(link_id, usuario):
+    """Confirma una candidata SUGERIDO. Un FSC PUEDE tener varias OC
+    CONFIRMADO a la vez — un mismo FSC puede derivar en varios procesos de
+    compra (despacho parcial, proveedores distintos, etc.), así que confirmar
+    una candidata NO rechaza las demás del mismo formulario; cada una se
+    revisa y decide por separado (confirmar otra más, o rechazarla)."""
+    from django.utils import timezone
+    link = FscOcLink.objects.select_related('formulario_derivado').get(pk=link_id)
+    link.estado = FscOcLink.CONFIRMADO
+    link.revisado_por = usuario
+    link.fecha_revision = timezone.now()
+    link.save(update_fields=['estado', 'revisado_por', 'fecha_revision', 'actualizado_en'])
+    return link
+
+
+def rechazar_fsc_oc_link(link_id, usuario, motivo=''):
+    from django.utils import timezone
+    link = FscOcLink.objects.get(pk=link_id)
+    link.estado = FscOcLink.RECHAZADO
+    link.motivo_rechazo = motivo or ''
+    link.revisado_por = usuario
+    link.fecha_revision = timezone.now()
+    link.save(update_fields=['estado', 'motivo_rechazo', 'revisado_por', 'fecha_revision', 'actualizado_en'])
+    return link
+
+
+def enlazar_fsc_oc_manual(formulario_derivado_id, codigo_oc, usuario, observaciones=''):
+    """Enlace a mano — sobre todo para el formato legacy sin año/comprador
+    confiable, o para agregar una OC adicional a un FSC que ya tiene otra(s)
+    confirmada(s) (varios procesos de compra). Valida que la OC exista y
+    confirma directo; NO toca otras candidatas del mismo FSC — cada una se
+    revisa por separado."""
+    if not OrdenCompra.objects.filter(codigo_oc=codigo_oc).exists():
+        raise ValueError(f"La OC {codigo_oc} no existe en el sistema.")
+
+    from django.utils import timezone
+    link, _creado = FscOcLink.objects.update_or_create(
+        formulario_derivado_id=formulario_derivado_id, orden_compra_id=codigo_oc,
+        defaults={
+            'confianza': FscOcLink.MANUAL, 'estado': FscOcLink.CONFIRMADO,
+            'observaciones': observaciones or '', 'revisado_por': usuario, 'fecha_revision': timezone.now(),
+        },
+    )
+    return link
+
+
+def corregir_oc_pac(codigo_oc, formulario_derivado_id, usuario, observaciones=''):
+    """Corrige el PAC real de una OC usando el `id_plan` declarado por el FSC
+    que se le confirmó — crea/actualiza el `OcPacOverride` (ver models.py para
+    por qué NO se escribe en `OrdenCompra.ID_Proyecto` directamente)."""
+    fsc = FormularioFSCDerivado.objects.get(pk=formulario_derivado_id)
+    if not fsc.id_plan:
+        raise ValueError('Este FSC no declara ningún PAC (id_plan vacío) — nada que copiar a la OC.')
+    if not OrdenCompra.objects.filter(codigo_oc=codigo_oc).exists():
+        raise ValueError(f'La OC {codigo_oc} no existe en el sistema.')
+
+    override, _creado = OcPacOverride.objects.update_or_create(
+        orden_compra_id=codigo_oc,
+        defaults={
+            'id_proyecto_correcto': fsc.id_plan,
+            'formulario_derivado': fsc,
+            'observaciones': observaciones or '',
+            'creado_por': usuario,
+        },
+    )
+    return override
+
+
+def calcular_fsc_oc_detalle_fsc(fsc_id):
+    """Detalle completo de un FormularioFSCDerivado para el modal 'Ver' del
+    tab Enlace FSC-OC-PAC — mismas 8 secciones que `ModalDocumento` en
+    Formularios FSC (identificación/solicitante/nombre/objetivo/especificaciones/
+    plan de compras/adjuntos/carro), más los enlaces OC y su estado PAC."""
+    fsc = FormularioFSCDerivado.objects.select_related('sso_departamento').get(pk=fsc_id)
+    tipo_formulario = _extraer_tipo_formulario_fsc(fsc)
+
+    productos = list(FormularioFSCProducto.objects.filter(
+        folio=fsc.folio, anho=fsc.anho, tipo_formulario=tipo_formulario,
+    ).values('categoria', 'producto', 'descripcion', 'cantidad', 'monto', 'item_presupuestario'))
+
+    overrides = _mapa_overrides_pac()
+    nombre_plan = _mapa_nombres_pac().get(fsc.id_plan)
+    enlaces = []
+    for link in FscOcLink.objects.filter(formulario_derivado=fsc).select_related('orden_compra').order_by('-estado', '-score_similitud'):
+        oc = link.orden_compra
+        oc_dict = {'codigo_oc': oc.codigo_oc, 'EnlacePAC': oc.EnlacePAC, 'ID_Proyecto': oc.ID_Proyecto} if oc else None
+        enlaces.append({
+            'link_id': link.id, 'codigo_oc': link.orden_compra_id,
+            'nombre_oc': oc.NombreOC if oc else None,
+            'confianza': link.confianza, 'estado': link.estado,
+            'estado_pac': _pac_match_estado(fsc.id_plan, oc_dict, overrides),
+        })
+
+    return {
+        'id': fsc.id,
+        'id_formulario': generar_id_formulario(fsc.folio, fsc.anho, formulario_texto=fsc.formulario),
+        'folio': fsc.folio, 'anho': fsc.anho, 'formulario': fsc.formulario,
+        'fecha_solicitud': fsc.fecha_solicitud, 'fecha_entrega': fsc.fecha_entrega,
+        'fecha_derivado': fsc.fecha_derivado, 'estado': fsc.estado, 'estado_compra': fsc.estado_compra,
+        'unidad_requirente': fsc.unidad_requirente, 'usuario_requirente': fsc.usuario_requirente,
+        'anexo': fsc.anexo, 'correo': fsc.correo, 'encargado': fsc.encargado, 'jefe': fsc.jefe,
+        'comprador': fsc.comprador,
+        'requerimiento': fsc.requerimiento,
+        'objetivo_compra': fsc.objetivo_compra,
+        'especificaciones_tecnicas': fsc.especificaciones_tecnicas,
+        'monto_estimado': fsc.monto_estimado, 'moneda': fsc.moneda, 'tipo_monto': fsc.tipo_monto,
+        'plan_anual': fsc.plan_anual, 'id_plan': fsc.id_plan, 'nombre_plan': nombre_plan,
+        'justificacion': fsc.justificacion,
+        'validacion_tecnica': fsc.validacion_tecnica, 'unidad_validadora': fsc.unidad_validadora,
+        'justificacion_no_validacion': fsc.justificacion_no_validacion,
+        'fuente_financiamiento': fsc.fuente_financiamiento,
+        'item_presupuestario': fsc.item_presupuestario, 'folio_requerimiento': fsc.folio_requerimiento,
+        'adj_espec_tecnicas': fsc.adj_espec_tecnicas, 'adj_cotizacion': fsc.adj_cotizacion,
+        'adj_validacion': fsc.adj_validacion, 'adj_form_justificacion': fsc.adj_form_justificacion,
+        'departamento': fsc.sso_departamento.descripcion if fsc.sso_departamento else None,
+        'dentro_fuera_pac': fsc.dentro_fuera_pac,
+        'productos': productos,
+        'enlaces_oc': enlaces,
+    }
+
+
+def calcular_fsc_oc_detalle_oc(codigo_oc):
+    """Detalle completo de una OrdenCompra para el modal 'Ver' del tab Enlace
+    FSC-OC-PAC — cabecera + líneas de detalle + estado PAC (con override si
+    existe) + el/los FSC enlazados a esta OC."""
+    oc = OrdenCompra.objects.get(pk=codigo_oc)
+    detalle = list(oc.detalles.values(
+        'CodigoProducto', 'Producto', 'Categoria', 'Cantidad', 'Unidad', 'PrecioNeto', 'TotalLinea',
+    ))
+
+    overrides = _mapa_overrides_pac()
+    nombres_pac = _mapa_nombres_pac()
+    oc_dict = {'codigo_oc': oc.codigo_oc, 'EnlacePAC': oc.EnlacePAC, 'ID_Proyecto': oc.ID_Proyecto}
+    override = OcPacOverride.objects.filter(pk=codigo_oc).first()
+
+    enlaces_fsc = []
+    for link in FscOcLink.objects.filter(orden_compra_id=codigo_oc).select_related('formulario_derivado'):
+        fsc = link.formulario_derivado
+        enlaces_fsc.append({
+            'link_id': link.id, 'formulario_derivado_id': fsc.id,
+            'id_formulario': generar_id_formulario(fsc.folio, fsc.anho, formulario_texto=fsc.formulario),
+            'id_plan_fsc': fsc.id_plan,
+            'nombre_pac_fsc': nombres_pac.get(fsc.id_plan),
+            'confianza': link.confianza, 'estado': link.estado,
+            'estado_pac': _pac_match_estado(fsc.id_plan, oc_dict, overrides),
+        })
+
+    return {
+        'codigo_oc': oc.codigo_oc, 'nombre_oc': oc.NombreOC, 'descripcion_oc': oc.DescripcionOC,
+        'estado_oc': oc.EstadoOC, 'tipo_oc': oc.TipoOC, 'descripcion_tipo_oc': oc.DescripcionTipoOC,
+        'tipo_oc_interno': oc.TipoOCInterno, 'codigo_licitacion': oc.CodigoLicitacion,
+        'codigo_compra_agil': oc.CodigoCompraAgil,
+        'fecha_creacion': oc.FechaCreacion, 'fecha_envio': oc.FechaEnvio, 'fecha_aceptacion': oc.FechaAceptacion,
+        'total_neto': float(oc.TotalNeto) if oc.TotalNeto is not None else None,
+        'total_bruto': float(oc.TotalBruto) if oc.TotalBruto is not None else None,
+        'unidad_compradora': oc.C_Unidad, 'proveedor': oc.P_Nombre, 'rut_proveedor': oc.P_Rut,
+        'enlace_pac': oc.EnlacePAC, 'id_proyecto': oc.ID_Proyecto, 'nombre_proyecto': oc.Nombre_Proyecto,
+        'id_proyecto_override': override.id_proyecto_correcto if override else None,
+        'link_mp': oc.LinkMP,
+        'detalle_productos': detalle,
+        'enlaces_fsc': enlaces_fsc,
+    }
+
+
+def calcular_oc_pac_corregidas():
+    """Registro de todo lo enlazado manualmente vía Formularios FSC
+    (`OcPacOverride`) — mismo espíritu que `SubtabCorregidas` del tab 'OC
+    Corregibles' (`OrdenesCompraResumen.jsx`): lista + KPIs de
+    sincronizadas/esperando_sync. 'Sincronizada' = el próximo sync de OC ya
+    volvió a matchear esa OC en `OCPAC_Maestro.csv` (`OrdenCompra.ID_Proyecto`
+    coincide con la corrección) — igual criterio que usa `corregidas` dentro
+    de `calcular_oc_stats()` para `RevisionOCCorregible`, pero contra
+    `OcPacOverride`."""
+    overrides = list(
+        OcPacOverride.objects.select_related('formulario_derivado', 'creado_por').all()
+    )
+    codigos = [o.orden_compra_id for o in overrides]
+    ocs = {
+        oc['codigo_oc']: oc for oc in
+        OrdenCompra.objects.filter(codigo_oc__in=codigos)
+        .values('codigo_oc', 'NombreOC', 'ID_Proyecto', 'EnlacePAC', 'TotalBruto')
+    }
+    nombres_pac = _mapa_nombres_pac()
+
+    filas = []
+    sincronizadas = 0
+    monto_regularizado = 0
+    for o in overrides:
+        oc = ocs.get(o.orden_compra_id)
+        sync = bool(oc and oc['EnlacePAC'] == 'Enlazada' and oc['ID_Proyecto'] == o.id_proyecto_correcto)
+        if sync:
+            sincronizadas += 1
+        if oc and oc['TotalBruto']:
+            monto_regularizado += float(oc['TotalBruto'])
+        fsc = o.formulario_derivado
+        filas.append({
+            'codigo_oc': o.orden_compra_id,
+            'nombre_oc': oc['NombreOC'] if oc else None,
+            'id_proyecto_correcto': o.id_proyecto_correcto,
+            'nombre_proyecto': nombres_pac.get(o.id_proyecto_correcto),
+            'id_formulario_origen': generar_id_formulario(fsc.folio, fsc.anho, formulario_texto=fsc.formulario) if fsc else None,
+            'formulario_derivado_id': fsc.id if fsc else None,
+            'observaciones': o.observaciones,
+            'creado_por': o.creado_por.get_full_name() or o.creado_por.username if o.creado_por else None,
+            'creado_en': o.creado_en,
+            'sincronizada': sync,
+        })
+
+    total = len(overrides)
+    return {
+        'kpis': {
+            'total_corregidas': total,
+            'sincronizadas': sincronizadas,
+            'esperando_sync': total - sincronizadas,
+            'monto_regularizado': monto_regularizado,
+        },
+        'filas': filas,
+    }
+
+
+def calcular_fsc_oc_impacto():
+    """Reporte combinado: cuánto está subiendo el indicador de enlace OC↔PAC
+    gracias a las DOS vías de corrección manual que conviven en el sistema —
+    Licitación (`RevisionOCCorregible`, tab 'OC Corregibles' en
+    /ordenes-compra) y Formularios FSC (`OcPacOverride`, este módulo).
+    Recalcula la agregación de `RevisionOCCorregible` de forma independiente
+    (NO llama a `calcular_oc_stats()`, que es la función gigante que ya
+    alimenta /pac — reusar esa función completa solo para esta cifra sería
+    caro e innecesario; aquí se repite el mismo cálculo acotado, ver el bloque
+    'CORREGIDAS' dentro de `calcular_oc_stats()` para el original)."""
+    revisiones = list(RevisionOCCorregible.objects.values('codigo_oc', 'resultado'))
+    revisiones_enlazada = [r for r in revisiones if r['resultado'] == 'Enlazada']
+    codigos_licitacion = {r['codigo_oc'] for r in revisiones_enlazada}
+    sync_licitacion = OrdenCompra.objects.filter(
+        codigo_oc__in=codigos_licitacion, EnlacePAC='Enlazada'
+    ).count()
+
+    formularios = calcular_oc_pac_corregidas()
+    codigos_formularios = {f['codigo_oc'] for f in formularios['filas']}
+
+    total_oc = OrdenCompra.objects.count()
+    enlazadas_automatico = OrdenCompra.objects.filter(EnlacePAC='Enlazada').count()
+    codigos_ambas_vias = codigos_licitacion & codigos_formularios
+
+    return {
+        'via_licitacion': {
+            'oc_unicas_corregidas': len(codigos_licitacion),
+            'sincronizadas': sync_licitacion,
+            'esperando_sync': len(codigos_licitacion) - sync_licitacion,
+        },
+        'via_formularios': {
+            'oc_unicas_corregidas': len(codigos_formularios),
+            'sincronizadas': formularios['kpis']['sincronizadas'],
+            'esperando_sync': formularios['kpis']['esperando_sync'],
+            'monto_regularizado': formularios['kpis']['monto_regularizado'],
+        },
+        'combinado': {
+            'oc_tocadas_por_ambas_vias': len(codigos_ambas_vias),
+            'oc_unicas_totales': len(codigos_licitacion | codigos_formularios),
+            'total_oc_sistema': total_oc,
+            'enlazadas_automatico_pct': round(100 * enlazadas_automatico / total_oc, 1) if total_oc else 0.0,
+        },
     }

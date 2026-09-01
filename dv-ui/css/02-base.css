@@ -1,0 +1,117 @@
+/* ==========================================================================
+   02 · BASE
+   Reset mínimo, tipografía del documento y utilidades transversales.
+   No define ningún componente.
+   ========================================================================== */
+
+/* ---------- Fuente -------------------------------------------------------
+   El dashboard original incrustaba Inter Variable como Data-URI base64
+   (~64 KB dentro del HTML). Para un sistema real, autoalójala:
+
+   @font-face {
+     font-family: 'Inter';
+     src: url('../fonts/InterVariable.woff2') format('woff2-variations');
+     font-weight: 100 900;
+     font-display: swap;
+   }
+
+   Alternativa sin self-hosting (requiere conexión):
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+
+   Si no puedes usar Inter, la pila de respaldo (system-ui / Segoe UI) es
+   visualmente cercana. Lo único que se pierde son las alternativas
+   estilísticas cv05/ss01.
+   ------------------------------------------------------------------------ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--dv-bg);
+  color: var(--dv-ink);
+  font-family: var(--dv-font);
+  font-size: var(--dv-fs-base);
+  line-height: var(--dv-lh-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv05', 'ss01';   /* alternativas de Inter: 'l' con cola, '1' sin serifa */
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: var(--dv-fw-bold);
+  letter-spacing: var(--dv-ls-title);
+  line-height: var(--dv-lh-tight);
+}
+
+p { margin: 0; }
+
+a { color: inherit; text-decoration: none; }
+
+button, input, select, textarea { font-family: inherit; }
+
+/* ---------- Utilidades ---------------------------------------------------
+   Deliberadamente pocas. Este no es un sistema utility-first: si necesitas
+   una quinta utilidad, probablemente lo correcto sea un componente.
+   ------------------------------------------------------------------------ */
+
+/* Cifras alineadas en columna. Obligatorio en toda tabla y todo valor. */
+.dv-num { font-variant-numeric: tabular-nums; }
+
+/* Etiqueta en versalitas: encabeza secciones y agrupa campos. */
+.dv-eyebrow {
+  font-size: var(--dv-fs-2xs);
+  font-weight: var(--dv-fw-bold);
+  letter-spacing: var(--dv-ls-caps);
+  text-transform: uppercase;
+  color: var(--dv-ink-3);
+}
+
+/* Bloque de prosa: interlineado amplio y texto justificado. */
+.dv-prose {
+  font-size: var(--dv-fs-sm);
+  color: var(--dv-ink-2);
+  line-height: var(--dv-lh-loose);
+  max-width: 900px;
+  text-align: justify;
+}
+
+/* Nota al pie / letra chica. */
+.dv-footnote {
+  font-size: var(--dv-fs-xs);
+  color: var(--dv-ink-4);
+  line-height: var(--dv-lh-loose);
+}
+
+/* Muestra de color cuadrada, para leyendas y listas. */
+.dv-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--dv-r-xs);
+  vertical-align: -1px;
+  flex: 0 0 10px;
+}
+
+/* Solo para lectores de pantalla. */
+.dv-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Foco visible -------------------------------------------------
+   El dashboard original no definía ninguno: un usuario de teclado quedaba
+   perdido. Esto lo corrige de forma global.
+   ------------------------------------------------------------------------ */
+:focus-visible {
+  outline: 2px solid var(--dv-accent);
+  outline-offset: 2px;
+  border-radius: var(--dv-r-xs);
+}

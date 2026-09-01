@@ -1,0 +1,51 @@
+/* ==========================================================================
+   05 · IMPRESIÓN
+   Un dashboard que se imprime bien vale el doble en el sector público:
+   la mitad de las reuniones se hacen sobre papel.
+   ========================================================================== */
+
+@media print {
+
+  /* El shell deja de ser flex: el contenido fluye a ancho completo. */
+  .dv-app { display: block; background: #fff; }
+  body    { background: #fff; }
+
+  /* Fuera todo lo que no es contenido. */
+  .dv-sidebar,
+  .dv-topbar,
+  .dv-segmented,
+  .dv-btn,
+  .dv-bg-fx,
+  .dv-sweep,
+  .dv-tooltip { display: none !important; }
+
+  .dv-main { padding: var(--dv-sp-4) var(--dv-sp-5); max-width: none; }
+
+  /* Sombras fuera, bordes dentro: las sombras no se imprimen y dejan las
+     tarjetas flotando sin contorno. */
+  .dv-card,
+  .dv-panel,
+  .dv-tile,
+  .dv-hero {
+    break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid var(--dv-line);
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Las animaciones de entrada dejan elementos en opacity:0 si la página
+     se imprime antes de que corran. Esto lo desactiva. */
+  .dv-enter, .dv-reveal { opacity: 1; transform: none; animation: none; }
+
+  .dv-rank { columns: 2; }
+
+  /* Las tablas anchas no pueden hacer scroll en papel. */
+  .dv-table-scroll { overflow: visible; }
+  .dv-table-scroll .dv-table { min-width: 0; font-size: 10px; }
+
+  /* Evita que una fila quede partida entre páginas. */
+  .dv-table tr { break-inside: avoid; }
+  .dv-table thead { display: table-header-group; }
+}

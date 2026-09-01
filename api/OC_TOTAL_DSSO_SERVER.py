@@ -916,6 +916,16 @@ def subir_maestros_a_django():
         print(f"   📊 TOTAL EN BD: {count_oc} Órdenes de Compra (Resumen) y {count_det} Detalles.")
     except Exception as e:
         print(f"   ❌ Error en la sincronización masiva: {e}")
+        return
+
+    # Enlace FSC-OC-PAC: reengancha automáticamente contra la foto actual de OC
+    # (carga histórica = justo el caso donde entran años nuevos/viejos de golpe).
+    try:
+        from api.services import recalcular_fsc_oc_matching
+        print("   🔗 Recalculando enlace FSC-OC-PAC...")
+        recalcular_fsc_oc_matching(_avisar=lambda **kw: print("      " + kw.get('log', '')))
+    except Exception as e:
+        print(f"   ⚠️ No se pudo recalcular el enlace FSC-OC: {e}")
 
 # =========================
 # MENÚ PRINCIPAL

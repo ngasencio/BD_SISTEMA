@@ -1,0 +1,111 @@
+/* ==========================================================================
+   COMPONENTE · Tabla de datos
+   Alineación a la derecha por defecto (son cifras), primera columna a la
+   izquierda (es el nombre). Cifras tabulares siempre.
+
+   <div class="dv-table-scroll">
+     <table class="dv-table">
+       <thead><tr><th>Servicio</th><th>Planificado</th>…</tr></thead>
+       <tbody>
+         <tr class="dv-row is-expandable"> … </tr>
+         <tr class="dv-row-sub"> … </tr>
+       </tbody>
+     </table>
+   </div>
+   ========================================================================== */
+
+.dv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--dv-fs-base);
+}
+
+.dv-table th {
+  padding: var(--dv-sp-3) 11px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--dv-line);
+  color: var(--dv-ink-3);
+  font-size: var(--dv-fs-2xs);
+  font-weight: var(--dv-fw-heavy);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.dv-table td {
+  padding: var(--dv-sp-3) 11px;
+  text-align: right;
+  border-bottom: 1px solid var(--dv-line-2);
+  font-size: var(--dv-fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.dv-table th:first-child,
+.dv-table td:first-child { text-align: left; }
+.dv-table td:first-child { font-variant-numeric: normal; font-size: 12.8px; }
+
+/* Fila total. */
+.dv-table tr.dv-row-total td {
+  background: #F4F7FA;
+  font-weight: var(--dv-fw-bold);
+  color: var(--dv-ink);
+  border-top: 1px solid var(--dv-line);
+  border-bottom: none;
+}
+
+/* ---------- Fila expandible ---------------------------------------------
+   El detalle: en hover crece una barra de 3px en el canto izquierdo.
+   Es más barato que un borde y no desplaza el contenido.
+   ------------------------------------------------------------------------ */
+.dv-row.is-expandable { cursor: pointer; }
+.dv-row.is-expandable td { position: relative; transition: background var(--dv-dur-instant); }
+.dv-row.is-expandable:hover    { background: var(--dv-surface-alt); }
+.dv-row.is-expandable.is-open  { background: var(--dv-surface-sel); }
+
+.dv-row.is-expandable td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 0; top: var(--dv-sp-1); bottom: var(--dv-sp-1);
+  width: 0;
+  border-radius: 0 3px 3px 0;
+  background: var(--dv-primary);
+  transition: width var(--dv-dur-fast) var(--dv-ease-spring);
+}
+.dv-row.is-expandable:hover td:first-child::before { width: 3px; }
+
+/* Chevron que rota al abrir. */
+.dv-caret {
+  display: inline-block;
+  width: 11px;
+  font-size: var(--dv-fs-3xs);
+  color: var(--dv-ink-4);
+  transition: transform var(--dv-dur-fast) var(--dv-ease-spring);
+}
+.dv-caret.is-open { transform: rotate(90deg); }
+
+/* ---------- Fila de detalle --------------------------------------------- */
+.dv-row-sub { animation: dv-row-in var(--dv-dur-base) var(--dv-ease-out) both; }
+.dv-row-sub td {
+  background: #FBFCFE;
+  font-size: 12px;
+  color: var(--dv-ink-2);
+}
+.dv-row-sub td:first-child { padding-left: 36px; }
+.dv-row-sub .dv-link {
+  color: var(--dv-primary);
+  cursor: pointer;
+  font-size: 11.4px;
+}
+.dv-row-sub .dv-link:hover { text-decoration: underline; }
+
+@keyframes dv-row-in {
+  from { opacity: 0; transform: translateY(-7px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- Envoltorio con scroll ----------------------------------------
+   Obligatorio para tablas anchas: el scroll horizontal vive aquí, nunca
+   en el <body>.
+   ------------------------------------------------------------------------ */
+.dv-table-scroll { overflow-x: auto; }
+.dv-table-scroll .dv-table    { min-width: 840px; }
+.dv-table-scroll .dv-table th { font-size: 9.6px; padding: 8px; }
+.dv-table-scroll .dv-table td { padding: 8px; }

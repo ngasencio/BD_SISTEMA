@@ -1,0 +1,124 @@
+/* ==========================================================================
+   COMPONENTE · Capas flotantes
+   Modal y tooltip.
+   ========================================================================== */
+
+/* ---------- Modal --------------------------------------------------------
+   <div class="dv-overlay is-open">
+     <div class="dv-modal">
+       <header class="dv-modal__header"> … </header>
+       <div class="dv-modal__body"> … </div>
+     </div>
+   </div>
+   ------------------------------------------------------------------------ */
+
+.dv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--dv-overlay-z);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 38px var(--dv-sp-6);
+  overflow-y: auto;
+  background: rgba(15,23,34,.42);
+  backdrop-filter: blur(3px);
+}
+.dv-overlay.is-open { display: flex; animation: dv-fade var(--dv-dur-fast) ease; }
+@keyframes dv-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.dv-modal {
+  width: 100%;
+  max-width: 1220px;
+  overflow: hidden;
+  border-radius: var(--dv-r-2xl);
+  background: var(--dv-surface);
+  box-shadow: var(--dv-shadow-3);
+  transform-origin: center top;
+  animation: dv-pop .26s var(--dv-ease-out);
+}
+@keyframes dv-pop {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+.dv-modal__header {
+  display: flex;
+  align-items: center;
+  gap: var(--dv-sp-5);
+  flex-wrap: wrap;
+  padding: 18px var(--dv-sp-7);
+  background: linear-gradient(180deg, var(--dv-navy-soft), var(--dv-navy));
+  color: #fff;
+}
+.dv-modal__header h2       { font-size: var(--dv-fs-lg); }
+.dv-modal__header .dv-sub  { margin-top: 3px; font-size: 11.8px; opacity: .66; text-align: justify; }
+.dv-modal__actions         { margin-left: auto; display: flex; gap: var(--dv-sp-3); align-items: center; }
+
+.dv-modal__body {
+  padding: var(--dv-sp-6) var(--dv-sp-7) 26px;
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+}
+@media (max-width: 900px) { .dv-modal__body { max-height: none; } }
+
+/* Tablas dentro del modal: un punto más compactas. */
+.dv-modal .dv-table td              { padding: 7px var(--dv-sp-3); }
+.dv-modal .dv-table th              { padding: 8px var(--dv-sp-3); font-size: 10px; }
+.dv-modal .dv-table td:first-child  { font-size: 12.4px; line-height: 1.35; min-width: 150px; }
+.dv-modal .dv-meter                 { width: 62px; }
+
+/* ---------- Tira de mini-tarjetas seleccionables ------------------------ */
+.dv-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: var(--dv-sp-3);
+  margin-bottom: var(--dv-sp-6);
+}
+.dv-mini {
+  position: relative;
+  padding: 10px var(--dv-sp-4);
+  border: 1px solid var(--dv-line);
+  border-radius: var(--dv-r-lg);
+  background: var(--dv-surface);
+  cursor: pointer;
+  transition: border-color var(--dv-dur-instant),
+              box-shadow  var(--dv-dur-instant),
+              transform   var(--dv-dur-instant);
+}
+.dv-mini:hover      { border-color: #B9C6D6; box-shadow: var(--dv-shadow-1); transform: translateY(-2px); }
+.dv-mini.is-active  { border-color: var(--dv-primary); box-shadow: 0 0 0 2px rgba(15,105,180,.16); }
+.dv-mini.is-active::after {
+  content: '';
+  position: absolute;
+  top: 8px; right: var(--dv-sp-3);
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--dv-primary);
+}
+.dv-mini.is-empty   { opacity: .72; }
+.dv-mini__name  { min-height: 26px; font-size: 10.6px; font-weight: var(--dv-fw-medium); color: var(--dv-ink-3); line-height: 1.3; }
+.dv-mini__value { margin: 3px 0 5px; font-size: 19px; font-weight: var(--dv-fw-bold); letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.dv-mini__value u { text-decoration: none; font-size: 11px; font-weight: var(--dv-fw-medium); color: var(--dv-ink-3); }
+.dv-mini__figures { margin: -1px 0 var(--dv-sp-2); font-size: 10.4px; color: var(--dv-ink-3); line-height: 1.35; }
+.dv-mini__figures b { color: var(--dv-ink-2); font-variant-numeric: tabular-nums; }
+
+/* ---------- Tooltip ------------------------------------------------------
+   Un solo nodo reutilizado para toda la página. Se posiciona con
+   left/top desde el evento mousemove. Nunca uno por elemento.
+   ------------------------------------------------------------------------ */
+.dv-tooltip {
+  position: fixed;
+  z-index: var(--dv-tooltip-z);
+  padding: 8px var(--dv-sp-4);
+  border-radius: 8px;
+  background: var(--dv-ink);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .1s;
+  box-shadow: 0 4px 16px rgba(0,0,0,.22);
+}
+.dv-tooltip.is-visible { opacity: 1; }

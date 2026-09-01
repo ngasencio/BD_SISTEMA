@@ -15,9 +15,9 @@ Subagente de frontend. Lee esto antes de tocar cualquier archivo en `frontend/`.
 | xlsx | 0.18.5 | Exportación Excel |
 | Vite | 5.4.10 | Build tool |
 
-**Base URL:** `VITE_API_URL=http://10.8.153.227:8000/api/` (`.env`)
-**Desplegado en:** `/bd_sistema/` → `vite.config.js: base: '/bd_sistema/'`
-**BrowserRouter:** `basename="/bd_sistema"`
+**Base URL:** `VITE_API_URL` sin definir en `.env` (comentado) — usa detección dinámica de hostname en `src/lib/axios.js`: `http://${window.location.hostname}:8000/api/` (funciona igual desde `localhost` o desde la IP de red `10.8.153.227`).
+**Desplegado en:** `/gestion-sso/` → `vite.config.js: base: '/gestion-sso/'` (renombrado desde `/bd_sistema/` — no quedan referencias vivas al nombre viejo, verificar `vite.config.js`/`App.jsx` si esto vuelve a cambiar)
+**BrowserRouter:** `basename="/gestion-sso"`
 
 ---
 
@@ -279,7 +279,26 @@ Si necesitas una clase nueva → agregarla en `frontend/src/index.css`.
 | Dashboard Finanzas | `/finanzas/dashboard` | ⚠️ En desarrollo | Hook mapeado a API real, construcción activa |
 | Gestión Contratos SSO | `/abastecimiento/contratos` | ✅ Fase 2 lista | ETL + 4 tabs analíticos: Evaluaciones, Seguimiento Financiero (RadiografiaContrato), Plazos y Vigencia (Resumen Visual + Carta Gantt + Patrón de Uso), Cruce PAC |
 | Formularios FSC | `/abastecimiento/formularios` | ✅ Completo | Reemplaza el Excel `FSC 2025.xlsx` — datos sincronizados en vivo desde Panel SSO vía Selenium. Botón "Actualizar" pide credenciales (rut/dv/clave) por modal. **Estado actual (2026-06-10):** 5 tabs: Solicitudes / Derivados / **Compras Conjuntas🔗** / Alertas⏰ / **📦 Historial de Compras**. **`ModalDocumento`:** botón "🖨️ Imprimir ficha" en footer izquierdo — abre ventana HTML A4 con todos los campos + tabla de productos, llama `window.print()`. **Tab Historial de Compras:** `TabHistorial` carga `GET /api/formularios/historial/?anho=` (excluye R y P), filtra client-side por Unidad/Usuario. 3 sub-tabs: `SubTabRepeticiones` (productos agrupados con badge ⚠️×N, expandible por FSC, checkbox "solo repetidos", KpiMini), `SubTabPivote` (mapa de calor ítem/categoría/producto × mes con 3 métricas y sticky column), `SubTabCronologico` (FSC cronológico expandible con carro de productos). "Carro de Productos" fue reemplazado por "Compras Conjuntas". **`TabUnificacion`**: grafo D3 force-simulation (clusters por item_presupuestario, nodos=FSC coloreados por estado, tamaño=monto, drag+zoom); sidebar derecho con lista de grupos rankeados; segunda capa de cards por categoría. Usa D3 v7 (`import * as d3 from 'd3'`). `GrafoUnificacion` gestiona 2 `useEffect` separados: uno para construcción del grafo (deps: nodos/grupos) y otro para highlight (dep: grupoResaltado) — sin reiniciar simulación. `GET /api/formularios/unificacion/?anho=` (5 min cache, invalidado al sincronizar). `filtroBandeja` es `string[]` (multi-select); backend acepta `?estado=DC,AA` (CSV). `ModalDocumento` (720px): 8 secciones; header muestra badge `👤 destino_actual` al lado del estado; sección Identificación incluye "Actualmente en bandeja de" (destino_actual), "Ítem Presupuestario" y "Folio Requerimiento". **`FlujoVisacion`:** al seleccionar un estado muestra sub-fila "Actualmente en bandeja de:" con chips `👤 NOMBRE (n)` calculados desde `flujo.estados_pipeline[i].formularios` (sin llamada adicional; `destino_actual` incluido en el flujo response). **Tabla Solicitudes:** columna "Destino Actual" ordenable con `👤 nombre` truncado. **`PanelCambiosFSC`:** drawer 680px post-sync con 4 tabs. **`DiasBadge`:** verde <5, amarillo 5-10, naranja 10-30, rojo >30. **Tab Alertas:** `GET /api/formularios/alertas/` incluye `destino_actual` en respuesta. |
+| Enlace FSC-OC-PAC | `/fsc-oc-pac` | ✅ Completo | Agregado 2026-08-28. 7 tabs: Resumen, Jerarquía, Revisión Pendientes, Corregidas, Impacto, Detalle, Compra Ágil. Sidebar bajo Abastecimiento → submódulo PAC (junto a "Cumplimiento Interno PAC"). **Único módulo con el sistema de diseño DV-UI** (`features/fsc-oc-pac/styles/dv-ui.css`) — ver sección "Sistema de diseño DV-UI" más abajo antes de tocar sus componentes o de extenderlo a otro módulo. Modales `DetalleFscModal`/`DetalleOcModal` son el primer visor de detalle de OC genérico del sistema — considerar extraerlos a `components/` compartido si se necesitan en otro lado. |
 | Gestión Inventario | — | 🔲 Próximo | Placeholder en Sidebar |
+
+---
+
+## Sistema de diseño DV-UI (agregado 2026-08-28)
+
+Segundo sistema visual del proyecto — coexiste con las clases `.card`/`.panel`/`.btn`/`.kpi-grid` de `index.css` usadas en el resto del frontend, **no las reemplaza**. Fuente: `dv-ui/` en la raíz del repo (`dv-ui/README.md`, `dv-ui/demo.html`, `dv-ui/css/*.css`) — sistema de diseño standalone (tokens + componentes CSS puros + SVG inline, cero dependencias JS).
+
+**Hoy solo está integrado en `features/fsc-oc-pac/`** (ver su fila en "Estado de los módulos" arriba). Integración: `features/fsc-oc-pac/styles/dv-ui.css` es una copia concatenada de `dv-ui/css/*.css` que **omite a propósito el reset global de `02-base.css`** (`body`, `h1-h6`, `a`, `:focus-visible` sin scopear a una clase) — Vite no scopea CSS por componente, así que cualquier import es global para toda la app, y ese reset repintaría Sidebar/Topbar/el resto de páginas. Todo lo que sí se incluyó usa prefijo `.dv-*`, así que es inerte en cualquier página que no use esas clases — seguro de tener cargado globalmente.
+
+**Clases principales:** `.dv-card`/`.dv-card__title/__value/__meta/__footer` (KPI card, usa `--dv-card-accent` inline), `.dv-chip`/`.dv-chip--ok|warn|watch|draft|none` (5 estados, sin rojo de alarma — ver nota abajo), `.dv-panel`/`.dv-panel__title/__subtitle` (contenedor genérico), `.dv-table`/`.dv-table-scroll` (tabla, cifras a la derecha por defecto), `.dv-btn`/`.dv-btn--primary/--sm/--on-dark`, `.dv-overlay`/`.dv-modal`/`.dv-modal__header/__body` (modal), `.dv-select`, `.dv-hero`, `.dv-callout`/`.dv-callout--warn`, `.dv-formula` (caja de metodología), `.dv-strip`/`.dv-mini` (tira de mini-cards seleccionables), `.dv-progress-group` (barras de progreso etiquetadas). Todos los tokens (`--dv-*`) están en la cabecera del archivo — nunca escribir un color/tamaño/radio literal, siempre un token.
+
+**Antes de extenderlo a otro módulo:**
+1. Mover `features/fsc-oc-pac/styles/dv-ui.css` a `src/styles/dv-ui.css` e importarlo una sola vez en `main.jsx`, no repetir el import por feature.
+2. Componente `Chip.jsx` (`features/fsc-oc-pac/components/Chip.jsx`) envuelve el markup `.dv-chip`/`.dv-chip__dot` — moverlo a `components/ui/` si se reutiliza fuera de `fsc-oc-pac`.
+3. **No inventar una variante roja/de alarma para `Chip`** — DV-UI define deliberadamente solo 5 estados sin rojo (filosofía institucional del sistema). Reusar `warn` (ámbar) para "necesita atención"; ver `PAC_ESTADO_CHIP`/`ESTADO_CHIP` en `features/fsc-oc-pac/utils/format.js` como ejemplo del patrón (mapear el enum del backend a una variante de chip en un solo lugar).
+4. Clases agregadas en esta integración que NO existen en `dv-ui/` original (evaluar si conviene aportarlas de vuelta al sistema fuente): `.dv-btn--primary`, `.dv-btn--sm`, `.dv-modal__footer`, y `.dv-select` con `min-width` reducido a 140px (el original trae 184px).
+5. `dv-ui/README.md` documenta 3 snippets JS opcionales (halo de `.dv-card--compact` al mousemove, `.dv-reveal` vía `IntersectionObserver`, tooltip único delegado por `data-tip`) — no se usaron en esta integración (solo `.dv-card` normal, sin variante compacta ni tooltips). Portarlos si un módulo nuevo los necesita.
+6. Antes de adoptar el reset de `02-base.css` (tipografía/color de `body` a nivel de toda la app) hay que decidirlo a propósito — hoy el resto del sistema depende de sus propios estilos base en `index.css`.
 
 ---
 

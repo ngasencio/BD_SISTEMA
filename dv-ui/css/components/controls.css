@@ -1,0 +1,86 @@
+/* ==========================================================================
+   COMPONENTE · Controles
+   Botón, select, control segmentado y tag.
+   ========================================================================== */
+
+/* ---------- Botón ------------------------------------------------------- */
+.dv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dv-sp-2);
+  padding: 7px var(--dv-sp-4);
+  border: 1px solid var(--dv-line);
+  border-radius: var(--dv-r-md);
+  background: var(--dv-surface);
+  color: var(--dv-ink-2);
+  font-size: var(--dv-fs-sm);
+  cursor: pointer;
+  transition: border-color var(--dv-dur-fast), color var(--dv-dur-fast);
+}
+.dv-btn:hover { border-color: var(--dv-primary); color: var(--dv-primary); }
+.dv-btn svg   { width: 13px; height: 13px; }
+
+/* Variante sobre fondo oscuro (cabecera de modal, sidebar). */
+.dv-btn--on-dark {
+  background: rgba(255,255,255,.11);
+  border-color: rgba(255,255,255,.17);
+  color: #fff;
+  padding: 8px var(--dv-sp-4);
+  font-weight: var(--dv-fw-medium);
+}
+.dv-btn--on-dark:hover { background: rgba(255,255,255,.19); border-color: rgba(255,255,255,.17); color: #fff; }
+.dv-btn--icon { padding: 8px 10px; }
+
+/* ---------- Select -------------------------------------------------------
+   La flecha es un SVG inline como Data-URI: evita un icono extra y
+   sobrevive a cualquier CSP. Para cambiar su color, edita el %237C8798
+   (que es #7C8798 con el # escapado).
+   ------------------------------------------------------------------------ */
+.dv-select {
+  min-width: 184px;
+  padding: 7px 30px 7px 11px;
+  border: 1px solid var(--dv-line);
+  border-radius: var(--dv-r-md);
+  background-color: var(--dv-surface);
+  color: var(--dv-ink);
+  font-size: 12.8px;
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%237C8798' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  transition: border-color var(--dv-dur-fast);
+}
+.dv-select:hover { border-color: var(--dv-line-hover); }
+
+/* ---------- Control segmentado ------------------------------------------ */
+.dv-segmented {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--dv-line);
+  border-radius: var(--dv-r-md);
+  background: var(--dv-surface);
+}
+.dv-segmented button {
+  border: none;
+  background: none;
+  padding: var(--dv-sp-2) 13px;
+  font-size: 12px;
+  font-weight: var(--dv-fw-semi);
+  color: var(--dv-ink-3);
+  cursor: pointer;
+  transition: background var(--dv-dur-fast), color var(--dv-dur-fast);
+}
+.dv-segmented button.is-active { background: var(--dv-navy); color: #fff; }
+
+/* ---------- Tag ---------------------------------------------------------- */
+.dv-tag {
+  display: inline-block;
+  padding: 3px var(--dv-sp-3);
+  border-radius: var(--dv-r-sm);
+  background: var(--dv-line-2);
+  color: var(--dv-ink-2);
+  font-size: var(--dv-fs-2xs);
+  font-weight: var(--dv-fw-bold);
+}
+.dv-tag-list { display: flex; gap: 7px; flex-wrap: wrap; }

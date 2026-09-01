@@ -1,0 +1,40 @@
+/* ==========================================================================
+   COMPONENTE · Chip de estado
+   Píldora que comunica el estado de cumplimiento de un indicador.
+   Cinco variantes, una por estado. El icono es opcional.
+
+   <span class="dv-chip dv-chip--ok">
+     <svg …></svg> Cumplido
+   </span>
+   ========================================================================== */
+
+.dv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: var(--dv-sp-1) var(--dv-sp-3) var(--dv-sp-1) 7px;
+  border-radius: 8px;
+  font-size: var(--dv-fs-2xs);
+  font-weight: var(--dv-fw-bold);
+  white-space: nowrap;
+  transition: transform var(--dv-dur-instant);
+}
+.dv-chip svg { flex: 0 0 11px; width: 11px; height: 11px; }
+
+/* Punto de color, alternativa al icono SVG. */
+.dv-chip__dot {
+  flex: 0 0 6px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+  transition: box-shadow var(--dv-dur-base);
+}
+
+/* Variantes. `currentColor` hace que punto e icono hereden el color
+   del estado sin declararlo dos veces. */
+.dv-chip--ok    { background: var(--dv-ok-bg);    color: var(--dv-ok);    }
+.dv-chip--warn  { background: var(--dv-warn-bg);  color: var(--dv-warn);  }
+.dv-chip--watch { background: var(--dv-watch-bg); color: var(--dv-watch); }
+.dv-chip--draft { background: var(--dv-draft-bg); color: var(--dv-draft); }
+.dv-chip--none  { background: var(--dv-none-bg);  color: var(--dv-none);  }

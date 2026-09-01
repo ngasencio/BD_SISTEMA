@@ -48,7 +48,7 @@ backend/
 
 ## Configuración clave (`core/settings.py`)
 
-- `DEBUG = True`, `ALLOWED_HOSTS = ['*']` — solo desarrollo
+- `DEBUG = False`, `ALLOWED_HOSTS = ['10.8.153.227', 'localhost', '127.0.0.1']`
 - DB: MariaDB `127.0.0.1:3306`, base `bd_sistema`, usuario `root`
 - `TIME_ZONE = 'America/Santiago'`
 - JWT: access 1 día / refresh 7 días
@@ -76,7 +76,7 @@ backend/
 |---|---|---|---|
 | `Licitacion` | `api_licitacion` | `codigo_licitacion` | PascalCase legacy |
 | `DetalleLicitacion` | `api_detallelicitacion` | `id` | FK → Licitacion |
-| `OrdenCompra` | `api_ordencompra` | `codigo_oc` | PascalCase legacy. `TotalNeto`/`TotalBruto` son **TextField** — convertir con `Number()` / `Decimal()` |
+| `OrdenCompra` | `api_ordencompra` | `codigo_oc` | PascalCase legacy. `TotalNeto`/`TotalBruto` son **DecimalField** (ya migrado desde TextField). `EnlacePAC`/`ID_Proyecto`/`Nombre_Proyecto` se recalculan desde cero contra `OCPAC_Maestro.csv` en cada sync (`enlazar_con_pac()`) — nunca escribir una corrección manual ahí directo, ver `OcPacOverride` |
 | `DetalleOrdenCompra` | `api_detalleordencompra` | `id` | FK → OrdenCompra |
 | `Factura` | `data_facturas` | `id` | `emision` almacenado como string DD-MM-YYYY |
 | `PlanerPAC` | (auto) | `id` | Datos de planificación PAC cargados desde Excel |
@@ -97,6 +97,9 @@ backend/
 | `FormularioFSCDerivado` | `data_formularios_fsc_derivados` | `id` | snake_case. Superset de columnas de `FormularioFSC` + `comprador`/`estado_compra`/`fecha_derivado`. Misma regla de clave compuesta para upsert. También tiene los 4 campos `adj_*`. |
 | `FormularioFSCProducto` | `data_formularios_fsc_productos` | `id` | snake_case. Líneas de producto del "carro" de cada FSC. `tipo_formulario` usa `db_column='t_form'`. Clave de upsert: `folio+anho+tipo_formulario+categoria+producto+descripcion`. |
 | `FormularioFSCEstadoLog` | `data_formularios_fsc_estado_log` | `id` | snake_case. Agregado 2026-06-08. Historial diferencial de bandejas de visación: FK→`FormularioFSC` (`related_name='historial_estados'`), `(estado, fecha_registro)`. Una fila nueva **solo** cuando `estado` difiere del último registrado para ese FSC — append-only, escrito por `_registrar_cambio_estado()` en `page_data_panel.py` tras cada upsert. Confiable solo desde `2026-06-08` (el origen no expone transiciones pasadas). |
+| `CompradorInicial` | `data_comprador_inicial` | `codigo` (PK) | snake_case. Catálogo fijo iniciales de comprador → `auth.User`, lista cerrada mantenida a mano (`python manage.py cargar_compradores_iniciales`). |
+| `FscOcLink` | `data_fsc_oc_link` | `id` | snake_case. Enlace FSC↔OC (módulo `/fsc-oc-pac`). `orden_compra` FK con `on_delete=DO_NOTHING, db_constraint=False` a propósito — sobrevive el `DELETE`+`bulk_create` completo que hace `OC_SSO_SERVER.py` en cada sync. Ver `agent-arquitectura.md` para el algoritmo de matching completo. |
+| `OcPacOverride` | `data_oc_pac_override` | `orden_compra` (PK) | snake_case. Corrección manual del PAC real de una OC — mismo patrón soft-FK que `FscOcLink`. Nunca escribir en `OrdenCompra.ID_Proyecto`/`PacProyectoMaestro` directamente, se pisan solos en el próximo sync/recarga. |
 
 ---
 
@@ -183,6 +186,23 @@ POST   /api/formularios/actualizar/            {rut, dv, clave} → {task_id} (c
 GET    /api/formularios/actualizar-estado/<id>/  Devuelve diff:{nuevos,cambiaron_estado,derivados_nuevos,pegados,*_count} al completar
 POST   /api/formularios/actualizar-cancelar/<id>/
 
+# Enlace FSC-OC-PAC (/fsc-oc-pac) — cruza FSC Dentro-PAC ↔ OC ↔ su PAC real
+GET    /api/fsc-oc-pac/resumen/                ?anho= KPIs enlace + KPI "PAC en confirmados" (cache 5min)
+GET    /api/fsc-oc-pac/pendientes/             ?anho= {enlace_pendiente, pac_pendiente} — sin cache
+GET    /api/fsc-oc-pac/pivote/                 ?anho= Jerarquía por estado de enlace (cache 5min)
+GET    /api/fsc-oc-pac/compraagil-resumen/     ?anho= Reporte OC↔CompraAgilResumen (cache 5min)
+GET    /api/fsc-oc-pac/corregidas/             Registro OcPacOverride + KPIs sincronizadas/esperando_sync (cache 5min)
+GET    /api/fsc-oc-pac/impacto/                Impacto combinado vía Licitación + vía Formularios (cache 5min)
+GET    /api/fsc-oc-pac/fsc-detalle/            ?id= Detalle FormularioFSCDerivado (modal "Ver FSC")
+GET    /api/fsc-oc-pac/oc-detalle/             ?codigo_oc= Detalle OrdenCompra + estado PAC (modal "Ver OC")
+POST   /api/fsc-oc-pac/confirmar/              {link_id}
+POST   /api/fsc-oc-pac/rechazar/               {link_id, motivo}
+POST   /api/fsc-oc-pac/enlazar-manual/         {formulario_derivado_id, codigo_oc, observaciones}
+POST   /api/fsc-oc-pac/corregir-pac/           {codigo_oc, formulario_derivado_id, observaciones} → OcPacOverride
+POST   /api/fsc-oc-pac/recalcular/             Relanza recalcular_fsc_oc_matching() (sincrónico)
+GET    /api/fsc-oc-links/                      ?confianza=&estado=&formulario_derivado__anho=
+GET    /api/compradores-iniciales/             Catálogo iniciales de comprador
+
 # ETL — Actualización desde dashboard (hilo daemon, polling)
 POST   /api/licitaciones/actualizar/           {fecha_desde, fecha_hasta} YYYY-MM-DD → {task_id}
 GET    /api/licitaciones/actualizar-estado/<id>/  Estado del ETL + diff de cambios
@@ -247,6 +267,11 @@ Funciones clave — nunca duplicar en views:
 | `calcular_formularios_stats(anho=None)` | Formularios FSC — KPIs (total, derivados, monto estimado, % derivados) + distribuciones por estado/unidad/estado_compra |
 | `calcular_formularios_flujo(anho=None)` | Formularios FSC — pipeline de bandejas P→AC + rechazados, con `dias_en_tramite`/`dias_en_estado_actual` por formulario (usa `FormularioFSCEstadoLog`). Alimenta el sub-tab "Flujo de Visación" |
 | `generar_id_formulario(folio, anho, tipo_formulario=None, formulario_texto=None)` | Formularios FSC — construye el ID corto `Fn-XXX-AA` (tipo+folio+año); usado por los 3 serializers FSC vía `SerializerMethodField` |
+| `recalcular_fsc_oc_matching(anhos=None, _avisar=None)` | Enlace FSC-OC-PAC — matching idempotente FSC↔OC, nunca pisa decisión humana. Enganchado automáticamente tras el ETL de OC (`views.py`), el ETL de FSC (`page_data_panel.py`) y la carga histórica (`OC_TOTAL_DSSO_SERVER.py`) |
+| `_pac_match_estado(id_plan_fsc, oc, overrides)` | Enlace FSC-OC-PAC — PAC_OK/SIN_PAC/PAC_DISTINTO, override de `OcPacOverride` primero, si no `OrdenCompra.EnlacePAC`/`ID_Proyecto` |
+| `calcular_fsc_oc_resumen/pendientes/pivote/detalle_fsc/detalle_oc/compraagil_resumen` | Enlace FSC-OC-PAC — KPIs, cola de revisión, jerarquía, detalle para modales, reporte Compra Ágil |
+| `confirmar_fsc_oc_link/rechazar_fsc_oc_link/enlazar_fsc_oc_manual/corregir_oc_pac` | Enlace FSC-OC-PAC — acciones de revisión humana (confirmar auto-rechaza hermanos SUGERIDO del mismo FSC) |
+| `calcular_oc_pac_corregidas()` / `calcular_fsc_oc_impacto()` | Enlace FSC-OC-PAC — registro de correcciones (tab "Corregidas") y reporte combinado con la vía Licitación/`RevisionOCCorregible` (tab "Impacto") — `calcular_fsc_oc_impacto` NO llama a `calcular_oc_stats()` completa, recalcula el mismo agregado acotado a propósito (más barato) |
 
 **Helpers de diff ETL (en `views.py`, NO en services):**
 | Función | Propósito |

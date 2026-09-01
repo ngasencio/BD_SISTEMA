@@ -1,0 +1,189 @@
+/* ==========================================================================
+   COMPONENTE · Visualización de datos
+   Bullet chart, medidor en línea, barra de progreso, columnas, leyenda,
+   lista de ranking y estilos para SVG generado por código.
+   ========================================================================== */
+
+/* ---------- Bullet chart ------------------------------------------------
+   Una banda de contexto, una barra de medida y una marca de meta.
+   Posicionar con left/width en % desde JS.
+
+   <div class="dv-bullet">
+     <i class="dv-bullet__band" style="left:0;width:100%;background:#EEF0F4"></i>
+     <i class="dv-bullet__measure" style="left:0;width:62%;background:#0F69B4"></i>
+     <i class="dv-bullet__target" style="left:75%"></i>
+   </div>
+   <div class="dv-bullet__scale"><span>0</span><span>100%</span></div>
+   ------------------------------------------------------------------------ */
+.dv-bullet { position: relative; height: 19px; }
+.dv-bullet__band    { position: absolute; top: var(--dv-sp-2); height: 8px; border-radius: 2px; }
+.dv-bullet__measure { position: absolute; top: 7px; height: 6px; border-radius: 3px;
+                      transition: width var(--dv-dur-slow) var(--dv-ease-standard); }
+.dv-bullet__target  { position: absolute; top: 2px; width: 2.5px; height: 16px;
+                      background: var(--dv-ink); border-radius: 2px; }
+.dv-bullet__scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -2px;
+  font-size: var(--dv-fs-3xs);
+  color: var(--dv-ink-4);
+}
+
+/* ---------- Medidor en línea (para celdas de tabla) --------------------- */
+.dv-meter {
+  position: relative;
+  display: inline-block;
+  width: 80px;
+  height: 7px;
+  border-radius: var(--dv-sp-1);
+  background: var(--dv-line-2);
+  vertical-align: middle;
+}
+.dv-meter i { position: absolute; top: 0; height: 7px; border-radius: var(--dv-sp-1); display: block; }
+.dv-meter u { position: absolute; top: -2px; width: 2px; height: 11px; background: var(--dv-ink-3); border-radius: 1px; }
+
+/* ---------- Barra de progreso etiquetada -------------------------------- */
+.dv-progress-group { display: flex; flex-direction: column; gap: var(--dv-sp-5); margin: var(--dv-sp-2) 0 var(--dv-sp-1); }
+.dv-progress__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--dv-sp-4);
+  margin-bottom: var(--dv-sp-2);
+  font-size: 12.6px;
+}
+.dv-progress__label { color: var(--dv-ink-2); font-weight: var(--dv-fw-semi); }
+.dv-progress__value { color: var(--dv-ink); font-weight: var(--dv-fw-bold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dv-progress__track { height: 14px; background: var(--dv-line-2); border-radius: 5px; overflow: hidden; }
+.dv-progress__bar   { height: 100%; border-radius: 5px; transition: width var(--dv-dur-slow) var(--dv-ease-standard); }
+.dv-progress__note  { margin-top: 5px; font-size: 11px; color: var(--dv-ink-4); text-align: justify; }
+
+/* ---------- Columnas mensuales ------------------------------------------ */
+.dv-columns {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--dv-sp-4);
+  margin-top: 14px;
+  max-width: 640px;
+}
+.dv-columns__col   { display: flex; flex-direction: column; align-items: center; gap: var(--dv-sp-2); }
+.dv-columns__value { font-size: 11.6px; font-weight: var(--dv-fw-bold); color: var(--dv-ink); font-variant-numeric: tabular-nums; }
+.dv-columns__track {
+  position: relative;
+  width: 100%;
+  height: 96px;
+  display: flex;
+  align-items: flex-end;
+  overflow: visible;
+  background: var(--dv-line-2);
+  border-radius: var(--dv-sp-2);
+}
+.dv-columns__bar   { width: 100%; border-radius: var(--dv-sp-1) var(--dv-sp-1) 0 0;
+                     transition: height var(--dv-dur-slow) var(--dv-ease-out); }
+.dv-columns__target{ position: absolute; left: -3px; right: -3px; height: 2px; background: var(--dv-ink-3); border-radius: 1px; }
+.dv-columns__label { font-size: 10.6px; color: var(--dv-ink-3); }
+
+/* ---------- Leyenda ------------------------------------------------------ */
+.dv-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--dv-sp-5);
+  flex-wrap: wrap;
+  margin-bottom: var(--dv-sp-4);
+  font-size: 11.4px;
+  color: var(--dv-ink-2);
+}
+.dv-legend i { display: inline-block; width: 10px; height: 10px; border-radius: var(--dv-r-xs); margin-right: 5px; vertical-align: -1px; }
+
+/* Leyenda de escala continua: rectángulos pegados formando un degradado. */
+.dv-scale-legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: var(--dv-sp-3);
+  font-size: 10.2px;
+  color: var(--dv-ink-3);
+}
+.dv-scale-legend i { width: 15px; height: 9px; border-radius: 2px; display: inline-block; }
+.dv-scale-legend__na { margin-left: 10px; display: inline-flex; align-items: center; gap: 5px; }
+
+/* ---------- Lista de ranking --------------------------------------------
+   Dos columnas tipográficas. `break-inside:avoid` evita que una fila
+   quede partida entre columnas.
+   ------------------------------------------------------------------------ */
+.dv-rank { columns: 2; column-gap: var(--dv-sp-7); }
+@media (max-width: 1250px) { .dv-rank { columns: 1; } }
+
+.dv-rank__row {
+  display: flex;
+  align-items: center;
+  gap: var(--dv-sp-3);
+  padding: 5px var(--dv-sp-1);
+  border-bottom: 1px solid var(--dv-line-2);
+  border-radius: var(--dv-sp-2);
+  font-size: 12.2px;
+  break-inside: avoid;
+  cursor: pointer;
+  transition: background var(--dv-dur-instant),
+              padding-left var(--dv-dur-fast) var(--dv-ease-spring);
+}
+.dv-rank__row:hover { background: var(--dv-surface-alt); padding-left: var(--dv-sp-3); }
+.dv-rank__swatch { flex: 0 0 11px; width: 11px; height: 11px; border-radius: var(--dv-r-xs); }
+.dv-rank__name   { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-rank__value  { font-weight: var(--dv-fw-bold); font-variant-numeric: tabular-nums; }
+
+/* ---------- SVG generado por código -------------------------------------
+   Estas reglas aplican a los <svg> que construyes desde JS. Son la razón
+   por la que los gráficos se ven "del mismo sistema" que el resto.
+   ------------------------------------------------------------------------ */
+
+/* Etiqueta de categoría dentro del gráfico. */
+svg text.dv-svg-label { font-size: 11px; fill: var(--dv-ink); font-family: inherit; }
+
+/* Etiqueta de valor: contorno blanco para leerse sobre cualquier fondo.
+   `paint-order:stroke` dibuja el contorno DEBAJO del relleno — sin eso,
+   el trazo se comería el texto. */
+svg text.dv-svg-value {
+  font-size: 11px;
+  fill: var(--dv-ink-2);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Barra horizontal: crece desde su origen (izquierda si es positiva,
+   derecha si es negativa). transform-box:fill-box hace que el origen
+   se calcule sobre la caja del propio path, no sobre el viewBox. */
+svg rect.dv-svg-bar {
+  transform-box: fill-box;
+  animation: dv-grow .7s cubic-bezier(.22, 1, .32, 1) both;
+  transition: width var(--dv-dur-slow) var(--dv-ease-standard);
+}
+svg rect.dv-svg-bar.is-positive { transform-origin: left center; }
+svg rect.dv-svg-bar.is-negative { transform-origin: right center; }
+@keyframes dv-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+svg .dv-svg-row:hover rect.dv-svg-bar { opacity: .82; }
+
+/* Región de mapa: se levanta al pasar el cursor. */
+svg .dv-svg-region {
+  cursor: pointer;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: filter var(--dv-dur-fast),
+              transform var(--dv-dur-fast) var(--dv-ease-spring);
+}
+svg .dv-svg-region:hover                { transform: translateY(-3px); }
+svg .dv-svg-region:hover .dv-svg-face   { filter: brightness(1.13); }
+
+/* Contenedor del mapa ampliado. */
+.dv-map-box {
+  padding: 10px;
+  border: 1px solid var(--dv-line);
+  border-radius: 13px;
+  background: #F7F9FB;
+}

@@ -31,7 +31,7 @@ python manage.py createsuperuser
 
 # Frontend — from BD_SISTEMA/frontend/
 npm run dev        # Vite dev server on :5173
-npm run build      # Outputs to dist/ (served by Django at /bd_sistema/)
+npm run build      # Outputs to dist/ (served by Django at /gestion-sso/)
 
 # ETL scripts — from BD_SISTEMA/api/  (run manually or via cron)
 python LI_SSO_SERVER.py        # Licitaciones ETL
@@ -47,9 +47,9 @@ No linting configured. Tests aún no implementados — ver `agent-testing.md` pa
 ```
 BD_SISTEMA/
 ├── backend/          # Django 4.2 + DRF 3.16 — REST API on :8000
-│   ├── core/         # settings.py, urls.py (mounts /api/ and /bd_sistema/ SPA)
+│   ├── core/         # settings.py, urls.py (mounts /api/ and /gestion-sso/ SPA)
 │   └── api/          # ALL active models, views, serializers, services, urls
-├── frontend/         # React 18 + Vite SPA — served at /bd_sistema/
+├── frontend/         # React 18 + Vite SPA — served at /gestion-sso/
 │   └── src/
 │       ├── App.jsx              # Router + RequireAuth/RequireRole guards
 │       ├── components/ui/AppLayout.jsx  # Shell: Topbar + Sidebar + <Outlet>
@@ -70,7 +70,7 @@ Mercado Público API (HTTPS, SSL disabled — known issue)
   → api/ ETL scripts (import Django ORM directly, no HTTP)
   → MariaDB :3306  bd_sistema
   → backend/ Django :8000  /api/*  (JWT required)
-  → frontend/ React  /bd_sistema/
+  → frontend/ React  /gestion-sso/
 ```
 
 ETL scripts call `bulk_create` / `all().delete()` on the ORM directly — no intermediate HTTP. Modifying a model requires checking the corresponding ETL script for compatibility.
@@ -90,7 +90,7 @@ Two naming conventions coexist — **do not mix them in new code**:
 |---|---|---|---|
 | `Licitacion` | `api_licitacion` | `codigo_licitacion` | PascalCase legacy |
 | `DetalleLicitacion` | `api_detallicitacion` | `id` | FK→Licitacion |
-| `OrdenCompra` | `api_ordencompra` | `codigo_oc` | PascalCase legacy. `TotalNeto`/`TotalBruto` are **TextField** — convert with `Number()` / `Decimal()` |
+| `OrdenCompra` | `api_ordencompra` | `codigo_oc` | PascalCase legacy. `TotalNeto`/`TotalBruto` are **DecimalField** (migrated from the earlier TextField — convert defensively with `Number()`/`Decimal()` only if you hit an old raw dump). `EnlacePAC`/`ID_Proyecto`/`Nombre_Proyecto` are recalculated from scratch against `api/data/data_pac/OCPAC_Maestro.csv` on every OC sync (`enlazar_con_pac()` in `OC_SSO_SERVER.py`) — never write a manual correction directly into these columns, it'll be silently overwritten on the next sync (see `OcPacOverride` for the soft-FK pattern that survives this) |
 | `DetalleOrdenCompra` | `api_detalleordencompra` | `id` | FK→OrdenCompra |
 | `Factura` | (auto) | `id` | `emision` stored as DD-MM-YYYY string |
 | `PlanerPAC` | `data_planerpac` | `id` | snake_case. PAC plan vigente, cargado desde `PlanificacionPACxxxx.xlsx` vía `api/data/data_planificacionPac/cargar_pac_servidor.py` (upsert por `id_proyecto+nombre_item+pac+fecha_inicio_compra` — un mismo ítem puede repetirse en tramos con distinta fecha). `managed=True` desde que se retrofiteó la PK (antes el loader hacía `DROP TABLE`+`to_sql` crudo sin `id`). Se acumula año sobre año, nunca se borra. `cantidad_oc`/`meses_envio_oc` (TextField) agregados para el módulo PAC Cumplimiento. |
@@ -113,6 +113,9 @@ Two naming conventions coexist — **do not mix them in new code**:
 | `FormularioFSCProducto` | `data_formularios_fsc_productos` | `id` | snake_case. `tipo_formulario` usa `db_column='t_form'`. Clave de upsert: `folio+anho+tipo_formulario+categoria+producto+descripcion` |
 | `DevengoSigfeAnual` | `api_sigfe_devengo_anual` | `id` | snake_case. Reemplaza por completo al viejo modelo `Devengo` (tabla `devengo`, eliminada). Histórico consolidado de devengo SIGFE por establecimiento — sincronización incremental (upsert por `row_hash`, nunca borra) vía `api/data/data_devengo/sigfe_descarga_devengos_Completo.py` + `consolidar_devengo_anual.py`, disparable desde el dashboard (`/api/devengo-sigfe-anual/actualizar/`). Todo el módulo Anexo N°3 (Control de Deuda) corre sobre esta tabla. |
 | `ConceptoJerarquia` | `concepto_jerarquia` | `id` | snake_case. Jerarquía de 5 niveles (Subtítulo→Ítem→Asignación→Sub-asignación→Detalle) de conceptos presupuestarios, 702 registros, prácticamente estática. Se carga con `python manage.py cargar_jerarquia`. Usada para enriquecer el reporte HTML jerárquico de Anexo N°3. |
+| `CompradorInicial` | `data_comprador_inicial` | `codigo` (PK) | snake_case. Catálogo fijo iniciales de comprador (código embebido en `OrdenCompra.NombreOC`, ej. "F1-162-26-NAM") → `auth.User`. Lista cerrada mantenida a mano (no se derivan de nombres — no hay regla fija), cargada con `python manage.py cargar_compradores_iniciales`. |
+| `FscOcLink` | `data_fsc_oc_link` | `id` | snake_case. Enlace FSC (`FormularioFSCDerivado` Dentro-PAC) ↔ `OrdenCompra`, calculado por `recalcular_fsc_oc_matching()` (services.py) y ajustable a mano vía `/fsc-oc-pac`. `confianza` (ALTA/MEDIA/BAJA_SUGERIDA/MANUAL) + `estado` (SUGERIDO/CONFIRMADO/RECHAZADO). **`orden_compra` es FK con `on_delete=DO_NOTHING, db_constraint=False`** — a propósito: `OC_SSO_SERVER.py` hace `OrdenCompra.objects.all().delete()`+`bulk_create()` en cada sync (snapshot completo), y un FK con CASCADE borraría toda revisión humana cada sync; con este ajuste el link sobrevive porque `codigo_oc` es estable entre syncs. `formulario_derivado` sí usa CASCADE normal (esa tabla se sincroniza por upsert, fila estable). "Sin match" NO se persiste como fila con `orden_compra=NULL` (MariaDB trata cada NULL como distinto en el `UniqueConstraint`, permitiría duplicados) — se representa por ausencia de filas para ese FSC. Ver detalle completo del algoritmo de matching (5 señales de score, hooks de recálculo automático) en `agent-arquitectura.md`. |
+| `OcPacOverride` | `data_oc_pac_override` | `orden_compra` (PK, OneToOne) | snake_case. Corrección manual del PAC real de una OC cuando `OrdenCompra.EnlacePAC`/`ID_Proyecto` (recalculados desde cero contra `OCPAC_Maestro.csv` en cada sync de OC, ver `enlazar_con_pac()` en `OC_SSO_SERVER.py`) están vacíos o equivocados frente al `id_plan` que declara el FSC que originó la compra. Mismo patrón de soft-FK que `FscOcLink.orden_compra`. Nunca se escribe en `OrdenCompra.ID_Proyecto` ni en `PacProyectoMaestro` (ambos son pipelines derivados que se pisarían solos) — este override es la única fuente de verdad para "el PAC real de esta OC", aplicado por encima al calcular `estado_pac` (`_pac_match_estado()` en services.py). |
 
 ---
 
@@ -204,11 +207,30 @@ GET   formularios/actualizar-estado/{task_id}/    Polls ETL progress {status, pa
 GET   formularios-fsc/                    ?anho=&unidad_requirente=&estado=DC,AA (CSV multi-select)&search=
 GET   formularios-fsc-derivados/          ?anho=&estado_compra=&search=
 GET   formularios-fsc-productos/          ?anho=&categoria=
+
+# Enlace FSC-OC-PAC (cruza FSC Dentro-PAC ↔ OC ↔ su PAC real — /fsc-oc-pac)
+GET   fsc-oc-pac/resumen/                 ?anho= KPIs enlace + KPI "PAC en confirmados" (PAC_OK/SIN_PAC/PAC_DISTINTO) (cache 5min)
+GET   fsc-oc-pac/pendientes/              ?anho= {enlace_pendiente:[...], pac_pendiente:[...]} — sin cache. Un FSC puede tener varias OC CONFIRMADO a la vez (varios procesos de compra); `enlace_pendiente` incluye el FSC si le quedan candidatas SUGERIDO aunque ya tenga confirmadas (`n_confirmadas` indica cuántas), y `pac_pendiente` trae una fila por CADA OC confirmada con PAC incorrecto
+GET   fsc-oc-pac/pivote/                  ?anho= Jerarquía Subdirección→Departamento con conteo por estado de enlace (cache 5min)
+GET   fsc-oc-pac/compraagil-resumen/      ?anho= Reporte solo-lectura OC↔CompraAgilResumen vía CodigoCompraAgil (cache 5min)
+GET   fsc-oc-pac/corregidas/              Registro de OcPacOverride + KPIs sincronizadas/esperando_sync (cache 5min)
+GET   fsc-oc-pac/impacto/                 Reporte combinado: impacto vía Licitación (RevisionOCCorregible) + vía Formularios (OcPacOverride) (cache 5min)
+GET   fsc-oc-pac/fsc-detalle/             ?id= Detalle completo de un FormularioFSCDerivado (8 secciones, para modal "Ver FSC")
+GET   fsc-oc-pac/oc-detalle/              ?codigo_oc= Detalle completo de una OrdenCompra + estado PAC + líneas (modal "Ver OC")
+POST  fsc-oc-pac/confirmar/               {link_id} → confirma candidata SUGERIDO; rechaza automáticamente las demás del mismo FSC
+POST  fsc-oc-pac/rechazar/                {link_id, motivo}
+POST  fsc-oc-pac/enlazar-manual/          {formulario_derivado_id, codigo_oc, observaciones} → confianza=MANUAL, estado=CONFIRMADO
+POST  fsc-oc-pac/corregir-pac/            {codigo_oc, formulario_derivado_id, observaciones} → crea/actualiza OcPacOverride con id_plan del FSC
+POST  fsc-oc-pac/recalcular/              Relanza recalcular_fsc_oc_matching() a demanda (sincrónico, respeta decisiones humanas)
+GET   fsc-oc-links/                       ?confianza=&estado=&formulario_derivado__anho= Listado paginado (tab "Detalle/Explorador")
+GET   compradores-iniciales/              Catálogo de iniciales de comprador
 ```
 
 **Lógica de negocio compleja** → always in `api/services.py`, never in views. Key service functions: `obtener_kpis_devengo`, `calcular_indicadores_res188`, `calcular_oc_stats`, `calcular_oc_productos`, `calcular_compraagil_ahorro_stats`, `calcular_contratos_evaluaciones`, `calcular_contratos_financiero`, `calcular_contratos_oc_detalle`, `calcular_contratos_plazos`, `calcular_contratos_pac`, `calcular_formularios_stats`, `calcular_formularios_unificacion`, `calcular_formularios_historial`. **Helpers en views.py (NO en services):** `_snapshot_fsc()` (captura estado pre-ETL), `_diff_fsc()` (compara snapshots y produce diff con 4 categorías: nuevos/cambiaron_estado/derivados_nuevos/pegados).
 
 **Módulo PAC Cumplimiento** (`api/services.py`): `calcular_pac_dentro_fuera_stats`, `calcular_pac_comparativa_periodos`, `calcular_pac_cumplimiento_temporal`, `calcular_pac_jerarquia`, `calcular_pac_rankings` — todas aceptan `fecha_desde`/`fecha_hasta` (ISO, prioridad) o `anho`. `calcular_pac_jerarquia` resuelve sub-departamentos vía `_resolver_depto_raiz()`: sube la cadena `Departamento.parent_id` (hasta 3 niveles reales observados) hasta el departamento de primer nivel dentro de la misma subdirección/establecimiento — `es_depto == 'SI'` es la señal autoritativa de "soy de primer nivel" y corta la cadena ahí aunque `parent_id` apunte a otro lado (hay departamentos reales, ej. PRAIS, cuyo `parent_id` apunta al nodo que representa la propia Subdirección, no a un par). Sin este rollup, sub-departamentos (ej. "AYEKAN" bajo "DEPARTAMENTO DE SALUD MENTAL") aparecían como hermanos sueltos fragmentando las métricas — ver `_mapa_departamentos()`/`_resolver_depto_raiz()`. Generación de reportes en `api/services_reportes.py` (`generar_informe_word`/`generar_presentacion_ppt`/`generar_reporte_pdf`, matplotlib backend `Agg`) + `api/plantillas_narrativas.py` (frases condicionales, sin IA — usar `_n()`/`_money()` para formatear números, nunca `str.replace(',', '.')` sobre un párrafo completo, corrompe comas de la prosa).
+
+**Módulo Enlace FSC-OC-PAC** (`api/services.py`): cruza `FormularioFSCDerivado` (Dentro-PAC) con `OrdenCompra` (`TipoOCInterno='Formulario'`) usando el código embebido en `NombreOC` ("F1-162-26-NAM" = Tipo-Folio-Año-Comprador). `recalcular_fsc_oc_matching()` es el corazón: idempotente, indexa OC por (tipo,folio,año) y por (tipo,folio) para el fallback legacy sin año, combina 5 señales de score para las candidatas BAJA_SUGERIDA (`_score_similitud_fsc_oc`: fecha, unidad, monto, texto, **comprador** — esta última crítica porque muchas OC legacy traen comprador pero no año), y **nunca pisa una fila que un humano ya marcó CONFIRMADO/RECHAZADO/MANUAL** (solo toca SUGERIDO o crea filas nuevas). Se engancha automáticamente al final del ETL de OC (`views.py`, tras `oc.subir_maestros_a_django()`), del ETL de FSC (`page_data_panel.py`, tras `_clasificar_dentro_fuera_pac()`) y de la carga histórica (`OC_TOTAL_DSSO_SERVER.py`) — siempre en un `try/except` que solo loguea, nunca tumba el ETL. `_pac_match_estado()` calcula PAC_OK/SIN_PAC/PAC_DISTINTO comparando `id_plan` del FSC contra el PAC real de la OC (override de `OcPacOverride` primero, si no `OrdenCompra.EnlacePAC`/`ID_Proyecto`). `calcular_fsc_oc_impacto()` combina esta vía con la vía histórica de "OC Corregibles" (`RevisionOCCorregible`, ver bloque `corregidas` dentro de `calcular_oc_stats()`) SIN llamar a esa función completa (recalcula el mismo agregado acotado, más barato). Frontend: `frontend/src/features/fsc-oc-pac/` — ver tabla de rutas y `frontend/CLAUDE.md`.
 
 **Cache pattern** — all stat endpoints use `LocMemCache` (volatile — lost on restart, not shared across workers):
 ```python
@@ -267,6 +289,7 @@ Feature pages (`features/*/components/*Page.jsx`) use `<div className="feature-p
 | `/compra-agil` | `features/compra-agil/components/CompraAgilPage` | Authenticated |
 | `/pac` | `features/pac/components/PacDashboardPage` | Authenticated |
 | `/pac-cumplimiento` | `features/pac-cumplimiento/components/PacCumplimientoPage` | Authenticated — feature separada de `/pac` (Res.188/OC/Compra Ágil); 5 tabs: Resumen, Jerarquía, Rankings, Cumplimiento Temporal, Reportes |
+| `/fsc-oc-pac` | `features/fsc-oc-pac/components/FscOcPacPage` | admin, abastecimiento, general — 7 tabs: Resumen, Jerarquía, Revisión Pendientes, Corregidas, Impacto, Detalle, Compra Ágil. Único módulo del sistema con el sistema de diseño DV-UI aplicado (`features/fsc-oc-pac/styles/dv-ui.css`) — ver nota abajo |
 | `/abastecimiento/*` | `features/abastecimiento/` | admin, abastecimiento, viewer |
 | `/finanzas/*` | `features/finanzas/` | admin, finanzas |
 
@@ -279,7 +302,7 @@ New modules go in `src/features/<domain>/` with `api/`, `components/`, `hooks/`,
 | Priority | Issue | Location |
 |---|---|---|
 | 🔴 | `SECRET_KEY` and DB password hardcoded in source | `backend/core/settings.py` |
-| 🔴 | `DEBUG = True` and `ALLOWED_HOSTS = ['*']` | `backend/core/settings.py` |
+| 🟢 | ~~`DEBUG = True` and `ALLOWED_HOSTS = ['*']`~~ — already fixed: `DEBUG = False`, `ALLOWED_HOSTS = ['10.8.153.227', 'localhost', '127.0.0.1']` | `backend/core/settings.py` |
 | 🔴 | DB user is `root` — needs least-privilege user | MariaDB |
 | 🟠 | `CORS_ALLOW_ALL_ORIGINS = True` | `backend/core/settings.py` |
 | 🟠 | SSL verification disabled in Mercado Público API calls | `api/*.py` ETL scripts |

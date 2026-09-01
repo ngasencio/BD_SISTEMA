@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>DV-UI · Guía de componentes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./css/dv-ui.css">
+<style>
+  /* Estilos exclusivos de esta página de demostración. No forman parte del sistema. */
+  .doc-section { margin: 44px 0 0; }
+  .doc-h { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+  .doc-h h2 { font-size:20px; color:var(--dv-navy); }
+  .doc-h code { font-size:11.5px; color:var(--dv-ink-3); background:var(--dv-line-2);
+                padding:2px 7px; border-radius:5px; font-family:ui-monospace,'SF Mono',Menlo,monospace; }
+  .doc-lead { font-size:12.8px; color:var(--dv-ink-2); line-height:1.65; max-width:760px;
+              margin-bottom:18px; text-align:justify; }
+  .doc-strip { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .doc-swatches { display:grid; grid-template-columns:repeat(auto-fill,minmax(126px,1fr)); gap:10px; }
+  .doc-sw { border:1px solid var(--dv-line); border-radius:var(--dv-r-lg); overflow:hidden; background:#fff; }
+  .doc-sw b { display:block; height:52px; }
+  .doc-sw span { display:block; padding:7px 9px; font-size:10.4px; line-height:1.4; color:var(--dv-ink-3); }
+  .doc-sw span i { display:block; font-style:normal; color:var(--dv-ink); font-weight:600; font-size:10.8px; }
+  .doc-type { display:flex; flex-direction:column; gap:9px; }
+  .doc-type div { display:flex; align-items:baseline; gap:14px; border-bottom:1px solid var(--dv-line-2); padding-bottom:8px; }
+  .doc-type code { flex:0 0 96px; font-size:10.5px; color:var(--dv-ink-3);
+                   font-family:ui-monospace,'SF Mono',Menlo,monospace; }
+</style>
+</head>
+<body>
+
+<div class="dv-bg-fx" aria-hidden="true">
+  <svg viewBox="0 0 1400 900" preserveAspectRatio="xMidYMid slice">
+    <g class="dv-bg-fx__layer-1" fill="none" stroke="#132C48" stroke-width="1" opacity=".055">
+      <path d="M-100 200 C 190 120, 390 292, 630 212 S 1090 82, 1500 182"/>
+      <path d="M-100 262 C 190 182, 390 354, 630 274 S 1090 144, 1500 244"/>
+      <path d="M-100 324 C 190 244, 390 416, 630 336 S 1090 206, 1500 306"/>
+      <path d="M-100 386 C 190 306, 390 478, 630 398 S 1090 268, 1500 368"/>
+    </g>
+    <g class="dv-bg-fx__layer-2" fill="none" stroke="#0F69B4" stroke-width="1" opacity=".05">
+      <path d="M-100 615 C 245 695, 465 515, 705 635 S 1145 755, 1500 615"/>
+      <path d="M-100 677 C 245 757, 465 577, 705 697 S 1145 817, 1500 677"/>
+      <path d="M-100 739 C 245 819, 465 639, 705 759 S 1145 879, 1500 739"/>
+    </g>
+  </svg>
+</div>
+
+<div class="dv-sweep" id="sweep"></div>
+
+<div class="dv-app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="dv-sidebar">
+    <div class="dv-sidebar__brand">
+      <div class="dv-sidebar__mark">
+        <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
+          <path d="M3 15.5V8.2l7-5 7 5v7.3" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" opacity=".9"/>
+          <path d="M7.4 15.5v-4.1h5.2v4.1" stroke="#7FC0FF" stroke-width="1.6" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="dv-sidebar__title">DV-UI</h1>
+        <div class="dv-sidebar__subtitle">Sistema de diseño · Guía de componentes</div>
+      </div>
+    </div>
+
+    <span class="dv-nav-pill" id="pill" style="height:0"></span>
+    <nav id="nav">
+      <a class="dv-nav-item dv-nav-item--home is-active" href="#fundamentos"><span class="dv-nav-item__dot" style="background:#2E86DE"></span>Fundamentos</a>
+      <div class="dv-sidebar__group">Contenido</div>
+      <a class="dv-nav-item" href="#tarjetas"><span class="dv-nav-item__dot" style="background:#0F69B4"></span>Tarjetas KPI</a>
+      <a class="dv-nav-item" href="#superficies"><span class="dv-nav-item__dot" style="background:#0F69B4"></span>Paneles y cajas</a>
+      <a class="dv-nav-item" href="#tablas"><span class="dv-nav-item__dot" style="background:#0F69B4"></span>Tablas</a>
+      <div class="dv-sidebar__group">Datos</div>
+      <a class="dv-nav-item" href="#dataviz"><span class="dv-nav-item__dot" style="background:#009B8A"></span>Visualización</a>
+      <a class="dv-nav-item" href="#escalas"><span class="dv-nav-item__dot" style="background:#009B8A"></span>Escalas de color</a>
+      <div class="dv-sidebar__group">Interacción</div>
+      <a class="dv-nav-item" href="#controles"><span class="dv-nav-item__dot" style="background:#C97F2B"></span>Controles</a>
+      <a class="dv-nav-item" href="#capas"><span class="dv-nav-item__dot" style="background:#C97F2B"></span>Modal y tooltip</a>
+      <a class="dv-nav-item is-disabled"><span class="dv-nav-item__dot" style="background:#6A7486"></span>Modo oscuro</a>
+    </nav>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="dv-shell-main">
+
+    <div class="dv-topbar">
+      <div class="dv-breadcrumb">
+        <span class="dv-breadcrumb__link">Sistema</span>
+        <span class="dv-breadcrumb__sep">›</span>
+        <b>Guía de componentes</b>
+      </div>
+      <div class="dv-topbar__actions">
+        <select class="dv-select">
+          <option>Todos los componentes</option>
+          <option>Solo contenido</option>
+          <option>Solo datos</option>
+        </select>
+        <button class="dv-btn" onclick="window.print()">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M4.5 6V2.5h7V6M4.5 12H3V7h10v5h-1.5M4.5 10h7v3.5h-7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+          Imprimir
+        </button>
+      </div>
+    </div>
+
+    <main class="dv-main">
+
+      <!-- ---------- HERO ---------- -->
+      <div class="dv-hero dv-enter">
+        <div>
+          <div class="dv-hero__value">12<em> componentes</em></div>
+          <div class="dv-hero__caption">Extraídos del Dashboard Consolidado DIVPRE y reestructurados en capas.</div>
+        </div>
+        <div class="dv-hero__rule"></div>
+        <div>
+          <div class="dv-eyebrow">Qué contiene</div>
+          <p class="dv-prose" style="margin-top:8px">Tokens, tipografía, espaciado, elevación y curvas de movimiento, más los componentes de contenido, datos e interacción. Cada pieza está documentada en su propio archivo y usa exclusivamente valores del archivo de tokens.</p>
+        </div>
+      </div>
+
+      <!-- ================= FUNDAMENTOS ================= -->
+      <section class="doc-section dv-reveal" id="fundamentos">
+        <div class="doc-h"><h2>Fundamentos</h2><code>01-tokens.css</code></div>
+        <p class="doc-lead">Toda decisión visual del sistema sale de aquí. Ningún componente escribe un color, un tamaño o una sombra literal.</p>
+
+        <div class="dv-section"><span class="dv-section__rule"></span><h2>Marca y superficies</h2><span class="dv-section__line"></span></div>
+        <div class="doc-swatches">
+          <div class="doc-sw"><b style="background:#132C48"></b><span><i>--dv-navy</i>#132C48</span></div>
+          <div class="doc-sw"><b style="background:#1B3D63"></b><span><i>--dv-navy-soft</i>#1B3D63</span></div>
+          <div class="doc-sw"><b style="background:#2E86DE"></b><span><i>--dv-accent</i>#2E86DE</span></div>
+          <div class="doc-sw"><b style="background:#0F69B4"></b><span><i>--dv-primary</i>#0F69B4</span></div>
+          <div class="doc-sw"><b style="background:#C97F2B"></b><span><i>--dv-secondary</i>#C97F2B</span></div>
+          <div class="doc-sw"><b style="background:#F4F6F9;border-bottom:1px solid #E7EAF0"></b><span><i>--dv-bg</i>#F4F6F9</span></div>
+        </div>
+
+        <div class="dv-section" style="--dv-group-color:#1B7A45"><span class="dv-section__rule"></span><h2>Estados de cumplimiento</h2><span class="dv-section__line"></span></div>
+        <div class="doc-strip" style="margin-bottom:16px">
+          <span class="dv-chip dv-chip--ok"><span class="dv-chip__dot"></span>Cumplido</span>
+          <span class="dv-chip dv-chip--warn"><span class="dv-chip__dot"></span>Cumplido parcialmente</span>
+          <span class="dv-chip dv-chip--watch"><span class="dv-chip__dot"></span>En seguimiento</span>
+          <span class="dv-chip dv-chip--draft"><span class="dv-chip__dot"></span>En elaboración</span>
+          <span class="dv-chip dv-chip--none"><span class="dv-chip__dot"></span>Sin corte aún</span>
+        </div>
+        <p class="dv-footnote">Cinco estados, cinco pares de tokens. El nombre describe el significado — <code>--dv-ok</code>, no <code>--dv-green</code> — para que un cambio de paleta no obligue a renombrar clases.</p>
+
+        <div class="dv-section" style="--dv-group-color:#6B4FA0"><span class="dv-section__rule"></span><h2>Escala tipográfica</h2><span class="dv-section__line"></span></div>
+        <div class="doc-type">
+          <div><code>--dv-fs-3xl</code><span style="font-size:42px;font-weight:660;letter-spacing:-.035em;line-height:1;color:var(--dv-navy)">42 · Cifra de portada</span></div>
+          <div><code>--dv-fs-2xl</code><span style="font-size:28px;font-weight:650;letter-spacing:-.035em">28 · Cifra de tile</span></div>
+          <div><code>--dv-fs-xl</code><span style="font-size:22px;font-weight:650">22 · Cifra mediana</span></div>
+          <div><code>--dv-fs-lg</code><span style="font-size:18px;font-weight:650">18 · Título de indicador</span></div>
+          <div><code>--dv-fs-md</code><span style="font-size:14.5px;font-weight:650">14,5 · Título de panel</span></div>
+          <div><code>--dv-fs-base</code><span style="font-size:13px">13 · Cuerpo por defecto</span></div>
+          <div><code>--dv-fs-sm</code><span style="font-size:12.5px;color:var(--dv-ink-2)">12,5 · Texto secundario y celdas</span></div>
+          <div><code>--dv-fs-xs</code><span style="font-size:11.5px;color:var(--dv-ink-3)">11,5 · Metadatos y leyendas</span></div>
+          <div><code>--dv-fs-2xs</code><span style="font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dv-ink-3)">10,5 · Versalitas</span></div>
+        </div>
+        <p class="dv-footnote" style="margin-top:12px">El original usaba más de 30 tamaños distintos (10,2 · 10,4 · 10,6 · 10,7 · 10,8…). Aquí son 10 pasos. Si un componente parece necesitar un tamaño intermedio, casi siempre corresponde usar el paso vecino.</p>
+
+        <div class="dv-section" style="--dv-group-color:#7C8798"><span class="dv-section__rule"></span><h2>Elevación</h2><span class="dv-section__line"></span></div>
+        <div class="dv-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+          <div style="background:#fff;border-radius:16px;padding:20px;box-shadow:var(--dv-shadow-1)"><div class="dv-eyebrow">Nivel 1</div><div class="dv-footnote" style="margin-top:6px">Reposo. Tarjetas, paneles, tiles.</div></div>
+          <div style="background:#fff;border-radius:16px;padding:20px;box-shadow:var(--dv-shadow-2)"><div class="dv-eyebrow">Nivel 2</div><div class="dv-footnote" style="margin-top:6px">Hover. Solo elementos interactivos.</div></div>
+          <div style="background:#fff;border-radius:16px;padding:20px;box-shadow:var(--dv-shadow-3)"><div class="dv-eyebrow">Nivel 3</div><div class="dv-footnote" style="margin-top:6px">Modal. Nada más lo usa.</div></div>
+        </div>
+      </section>
+
+      <!-- ================= TARJETAS ================= -->
+      <section class="doc-section dv-reveal" id="tarjetas">
+        <div class="doc-h"><h2>Tarjetas KPI</h2><code>components/card.css</code></div>
+        <p class="doc-lead">La pieza central. Dos tamaños: la normal para rejillas de 3–4 columnas, la compacta para filas densas de 4–5. Pasa el cursor por encima de las compactas: el halo sigue al puntero y la barra de acento crece desde el centro.</p>
+
+        <div class="dv-grid" style="margin-bottom:26px">
+          <article class="dv-card dv-enter" style="--dv-card-accent:#0F69B4;animation-delay:0ms">
+            <div class="dv-card__title">Planificación vs Devengo ST 22</div>
+            <div class="dv-card__value">-5,9<u>%</u></div>
+            <div class="dv-bullet">
+              <i class="dv-bullet__band" style="left:0;width:100%;background:#EEF0F4"></i>
+              <i class="dv-bullet__measure" style="left:0;width:47%;background:#0F69B4"></i>
+              <i class="dv-bullet__target" style="left:66%"></i>
+            </div>
+            <div class="dv-card__meta">Meta: devengo ≤ 100% de lo planificado</div>
+            <div class="dv-card__footer">
+              <span class="dv-chip dv-chip--ok"><span class="dv-chip__dot"></span>Cumplido</span>
+              <span class="dv-card__cut">Corte junio</span>
+            </div>
+          </article>
+
+          <article class="dv-card dv-enter" style="--dv-card-accent:#C97F2B;animation-delay:45ms">
+            <div class="dv-card__title">DTE Pendientes Devengo ST 22</div>
+            <div class="dv-card__value">1,5<u> meses</u></div>
+            <div class="dv-bullet">
+              <i class="dv-bullet__band" style="left:0;width:100%;background:#EEF0F4"></i>
+              <i class="dv-bullet__measure" style="left:0;width:74%;background:#C97F2B"></i>
+              <i class="dv-bullet__target" style="left:50%"></i>
+            </div>
+            <div class="dv-card__meta">Meta: &lt; 1 mes de gasto operacional</div>
+            <div class="dv-card__footer">
+              <span class="dv-chip dv-chip--warn"><span class="dv-chip__dot"></span>Cumplido parcialmente</span>
+              <span class="dv-card__cut">Corte junio</span>
+            </div>
+          </article>
+
+          <article class="dv-card is-muted dv-enter" style="animation-delay:90ms">
+            <div class="dv-card__title">Descuento por ausentismo</div>
+            <div class="dv-card__value" style="font-size:15px;font-weight:550;color:var(--dv-draft)">En elaboración</div>
+            <div class="dv-card__meta">Metodología realizada. La medición inicia en agosto.</div>
+            <div class="dv-card__footer">
+              <span class="dv-chip dv-chip--draft"><span class="dv-chip__dot"></span>Sin corte aún</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="dv-eyebrow" style="margin-bottom:10px">Variante compacta, en fila de grupo</div>
+        <div class="dv-group-row" style="--dv-group-color:#0F69B4">
+          <div class="dv-group-row__label">
+            <h2>Control Financiero</h2>
+            <span class="dv-group-row__count">4 indicadores</span>
+          </div>
+          <div class="dv-grid dv-grid--4">
+            <article class="dv-card dv-card--compact dv-enter" style="--dv-card-accent:#0F69B4;animation-delay:0ms">
+              <div class="dv-card__title">Planificación vs Devengo</div>
+              <div class="dv-card__value">-5,9<u>%</u></div>
+              <span class="dv-chip dv-chip--ok"><span class="dv-chip__dot"></span>Cumplido</span>
+              <div class="dv-card__cut">Corte junio 2026</div>
+            </article>
+            <article class="dv-card dv-card--compact dv-enter" style="--dv-card-accent:#C97F2B;animation-delay:42ms">
+              <div class="dv-card__title">DTE pendientes</div>
+              <div class="dv-card__value">1,5<u> m</u></div>
+              <span class="dv-chip dv-chip--warn"><span class="dv-chip__dot"></span>Parcial</span>
+              <div class="dv-card__cut">Corte junio 2026</div>
+            </article>
+            <article class="dv-card dv-card--compact dv-enter" style="--dv-card-accent:#0F69B4;animation-delay:84ms">
+              <div class="dv-card__title">Convenio Suscrito APS</div>
+              <div class="dv-card__value">94,0<u>%</u></div>
+              <span class="dv-chip dv-chip--warn"><span class="dv-chip__dot"></span>Parcial</span>
+              <div class="dv-card__cut">Acumulado 2026</div>
+            </article>
+            <article class="dv-card dv-card--compact is-muted dv-enter" style="animation-delay:126ms">
+              <div class="dv-card__title">Descuento por ausentismo</div>
+              <div class="dv-card__value" style="font-size:13.5px;font-weight:550;color:var(--dv-draft)">En elaboración</div>
+              <span class="dv-chip dv-chip--draft"><span class="dv-chip__dot"></span>Inicia en agosto</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SUPERFICIES ================= -->
+      <section class="doc-section dv-reveal" id="superficies">
+        <div class="doc-h"><h2>Paneles y cajas de texto</h2><code>components/surface.css</code></div>
+        <p class="doc-lead">Todas comparten el mismo lenguaje —fondo blanco, radio de 16 px, sombra de nivel 1— y se diferencian por intención, no por apariencia.</p>
+
+        <div class="dv-grid dv-grid--tiles" style="margin-bottom:16px">
+          <div class="dv-tile"><div class="dv-tile__label">Planificado</div><div class="dv-tile__value dv-num">2.544.562<u> M$</u></div><div class="dv-tile__hint">Acumulado enero–junio 2026</div></div>
+          <div class="dv-tile"><div class="dv-tile__label">Devengado</div><div class="dv-tile__value dv-num">2.394.042<u> M$</u></div><div class="dv-tile__hint">Acumulado enero–junio 2026</div></div>
+          <div class="dv-tile"><div class="dv-tile__label">Diferencia</div><div class="dv-tile__value dv-num" style="color:var(--dv-warn)">-150.520<u> M$</u></div><div class="dv-tile__hint">Subejecución respecto del plan</div></div>
+        </div>
+
+        <div class="dv-formula">
+          <div class="dv-formula__label">Cómo se calcula</div>
+          <b>Desviación = (devengo acumulado a junio / planificación acumulada a junio) − 1.</b><br>
+          La meta es estar en el 100% o menos de lo planificado. Cumple todo resultado igual o inferior a cero; sobre cero indica ejecución acelerada.
+        </div>
+
+        <div class="dv-callout">
+          Nota informativa. Se usa para contexto metodológico que el lector necesita para interpretar la cifra, pero que no es una advertencia.
+        </div>
+
+        <div class="dv-callout dv-callout--warn">
+          Nota de advertencia. Reservada para salvedades que cambian la lectura del dato: cambios de metodología, cortes parciales, universos no comparables.
+        </div>
+
+        <div class="dv-placeholder">
+          <h4>Próximamente</h4>
+          <p>Bloque para lo que aún no existe. El borde punteado comunica “en construcción” sin necesidad de una etiqueta que lo diga.</p>
+        </div>
+      </section>
+
+      <!-- ================= TABLAS ================= -->
+      <section class="doc-section dv-reveal" id="tablas">
+        <div class="doc-h"><h2>Tablas</h2><code>components/table.css</code></div>
+        <p class="doc-lead">Cifras a la derecha, nombres a la izquierda, numeración tabular siempre. Las filas expandibles muestran una barra azul de 3 px que crece desde el canto izquierdo en hover — más barata que un borde y no desplaza el contenido. Haz clic en una fila.</p>
+
+        <div class="dv-panel">
+          <div class="dv-table-scroll">
+            <table class="dv-table">
+              <thead>
+                <tr><th>Servicio de Salud</th><th>Planificado (M$)</th><th>Devengado (M$)</th><th>Diferencia</th><th>Desviación</th><th>Estado</th></tr>
+              </thead>
+              <tbody id="tbody">
+                <tr class="dv-row is-expandable" data-row="1">
+                  <td><span class="dv-caret">›</span> Metropolitano Norte</td>
+                  <td class="dv-num">118.402.551</td><td class="dv-num">126.217.120</td>
+                  <td class="dv-num" style="color:var(--dv-primary)">+7.814.569</td>
+                  <td class="dv-num">+6,6%</td>
+                  <td><span class="dv-chip dv-chip--warn">Acelerado</span></td>
+                </tr>
+                <tr class="dv-row is-expandable" data-row="2">
+                  <td><span class="dv-caret">›</span> Viña del Mar Quillota</td>
+                  <td class="dv-num">96.114.208</td><td class="dv-num">68.741.659</td>
+                  <td class="dv-num" style="color:var(--dv-warn)">-27.372.549</td>
+                  <td class="dv-num">-28,5%</td>
+                  <td><span class="dv-chip dv-chip--ok">Cumplido</span></td>
+                </tr>
+                <tr class="dv-row is-expandable" data-row="3">
+                  <td><span class="dv-caret">›</span> Del Maule</td>
+                  <td class="dv-num">142.008.310</td><td class="dv-num">130.505.637</td>
+                  <td class="dv-num" style="color:var(--dv-warn)">-11.502.673</td>
+                  <td class="dv-num">-8,1%</td>
+                  <td><span class="dv-chip dv-chip--ok">Cumplido</span></td>
+                </tr>
+                <tr class="dv-row-total">
+                  <td>Total nacional</td>
+                  <td class="dv-num">2.544.562.248</td><td class="dv-num">2.394.042.046</td>
+                  <td class="dv-num">-150.520.202</td><td class="dv-num">-5,9%</td><td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= DATAVIZ ================= -->
+      <section class="doc-section dv-reveal" id="dataviz">
+        <div class="doc-h"><h2>Visualización de datos</h2><code>components/dataviz.css</code></div>
+        <p class="doc-lead">Piezas que se posicionan desde JavaScript con porcentajes. El CSS aporta la caja, la transición y la alineación; los valores los pone tu código.</p>
+
+        <div class="dv-split">
+          <div>
+            <div class="dv-panel">
+              <h3 class="dv-panel__title">Barras de progreso</h3>
+              <p class="dv-panel__subtitle">Con etiqueta, valor y nota.</p>
+              <div class="dv-progress-group">
+                <div>
+                  <div class="dv-progress__head"><span class="dv-progress__label">Exámenes y procedimientos</span><span class="dv-progress__value">+4,9%</span></div>
+                  <div class="dv-progress__track"><div class="dv-progress__bar" style="width:33%;background:#C97F2B"></div></div>
+                  <div class="dv-progress__note">81.430 M$ en 2026 · 77.617 M$ en 2025</div>
+                </div>
+                <div>
+                  <div class="dv-progress__head"><span class="dv-progress__label">Horas y consultas médicas</span><span class="dv-progress__value">+17,4%</span></div>
+                  <div class="dv-progress__track"><div class="dv-progress__bar" style="width:72%;background:#C97F2B"></div></div>
+                  <div class="dv-progress__note">76.784 M$ en 2026 · 65.381 M$ en 2025</div>
+                </div>
+                <div>
+                  <div class="dv-progress__head"><span class="dv-progress__label">Intervenciones quirúrgicas</span><span class="dv-progress__value">-15,7%</span></div>
+                  <div class="dv-progress__track"><div class="dv-progress__bar" style="width:58%;background:#0F69B4"></div></div>
+                  <div class="dv-progress__note">45.682 M$ en 2026 · 54.208 M$ en 2025</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="dv-panel">
+              <h3 class="dv-panel__title">Columnas mensuales</h3>
+              <p class="dv-panel__subtitle">Serie corta con línea de meta.</p>
+              <div class="dv-columns">
+                <div class="dv-columns__col"><span class="dv-columns__value">13,8</span><div class="dv-columns__track"><div class="dv-columns__bar" style="height:55%;background:#0F69B4"></div><span class="dv-columns__target" style="bottom:60%"></span></div><span class="dv-columns__label">Ene</span></div>
+                <div class="dv-columns__col"><span class="dv-columns__value">20,1</span><div class="dv-columns__track"><div class="dv-columns__bar" style="height:80%;background:#C97F2B"></div><span class="dv-columns__target" style="bottom:60%"></span></div><span class="dv-columns__label">Feb</span></div>
+                <div class="dv-columns__col"><span class="dv-columns__value">10,9</span><div class="dv-columns__track"><div class="dv-columns__bar" style="height:44%;background:#0F69B4"></div><span class="dv-columns__target" style="bottom:60%"></span></div><span class="dv-columns__label">Mar</span></div>
+                <div class="dv-columns__col"><span class="dv-columns__value">10,8</span><div class="dv-columns__track"><div class="dv-columns__bar" style="height:43%;background:#0F69B4"></div><span class="dv-columns__target" style="bottom:60%"></span></div><span class="dv-columns__label">Abr</span></div>
+                <div class="dv-columns__col"><span class="dv-columns__value">16,7</span><div class="dv-columns__track"><div class="dv-columns__bar" style="height:67%;background:#C97F2B"></div><span class="dv-columns__target" style="bottom:60%"></span></div><span class="dv-columns__label">May</span></div>
+                <div class="dv-columns__col"><span class="dv-columns__value">16,9</span><div class="dv-columns__track"><div class="dv-columns__bar" style="height:68%;background:#C97F2B"></div><span class="dv-columns__target" style="bottom:60%"></span></div><span class="dv-columns__label">Jun</span></div>
+              </div>
+              <div class="dv-legend" style="margin-top:14px">
+                <span><i style="background:#0F69B4"></i>Bajo la meta</span>
+                <span><i style="background:#C97F2B"></i>Sobre la meta</span>
+                <span><i style="background:#7C8798;height:2px;border-radius:1px"></i>Meta 15%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dv-panel">
+          <h3 class="dv-panel__title">Lista de ranking</h3>
+          <p class="dv-panel__subtitle">Dos columnas tipográficas. Al pasar el cursor, la fila se desplaza 5 px a la derecha.</p>
+          <div class="dv-rank" id="rank"></div>
+        </div>
+
+        <div class="dv-panel">
+          <h3 class="dv-panel__title">Medidor en línea</h3>
+          <p class="dv-panel__subtitle">Para incrustar dentro de una celda de tabla, junto a la cifra.</p>
+          <table class="dv-table">
+            <tbody>
+              <tr><td>Hospital Temuco (EAR)</td><td><span class="dv-meter"><i style="width:82%;background:#0F69B4"></i><u style="left:60%"></u></span></td><td class="dv-num">1,2 meses</td></tr>
+              <tr><td>Hospital de Valdivia (EAR)</td><td><span class="dv-meter"><i style="width:41%;background:#0F69B4"></i><u style="left:60%"></u></span></td><td class="dv-num">0,6 meses</td></tr>
+              <tr><td>Hospital Salvador (EAR)</td><td><span class="dv-meter"><i style="width:96%;background:#C97F2B"></i><u style="left:60%"></u></span></td><td class="dv-num">1,9 meses</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= ESCALAS ================= -->
+      <section class="doc-section dv-reveal" id="escalas">
+        <div class="doc-h"><h2>Escalas de color para datos</h2><code>01-tokens.css + JS</code></div>
+        <p class="doc-lead">No son tokens CSS porque son continuas: se interpolan en JavaScript. Los extremos sí están en el archivo de tokens. La función <code>mix()</code> está documentada en el README.</p>
+
+        <div class="dv-panel">
+          <div class="dv-eyebrow" style="margin-bottom:10px">Divergente — distancia respecto de la meta</div>
+          <div class="dv-scale-legend" id="scaleDiv"></div>
+          <p class="dv-footnote" style="margin-top:12px">Ámbar = lejos de la meta · gris = en la meta · azul = sobre la meta. Normaliza contra el percentil 85, no contra el máximo: un solo valor extremo comprime la escala y deja al resto indistinguible.</p>
+
+          <div class="dv-eyebrow" style="margin:22px 0 10px">Secuencial — magnitud simple</div>
+          <div class="dv-scale-legend" id="scaleSeq"></div>
+          <p class="dv-footnote" style="margin-top:12px">El piso de 0,04 evita que un valor de cero quede indistinguible del fondo blanco.</p>
+        </div>
+      </section>
+
+      <!-- ================= CONTROLES ================= -->
+      <section class="doc-section dv-reveal" id="controles">
+        <div class="doc-h"><h2>Controles</h2><code>components/controls.css</code></div>
+        <p class="doc-lead">Cuatro piezas. El select trae su flecha como SVG inline en Data-URI: sin icono externo y a prueba de cualquier política de contenido.</p>
+        <div class="dv-panel">
+          <div class="doc-strip">
+            <button class="dv-btn">Botón estándar</button>
+            <button class="dv-btn"><svg viewBox="0 0 16 16" fill="none"><path d="M4.5 6V2.5h7V6M4.5 12H3V7h10v5h-1.5M4.5 10h7v3.5h-7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Con icono</button>
+            <select class="dv-select"><option>Todos los Servicios</option><option>Metropolitano Norte</option></select>
+            <div class="dv-segmented">
+              <button class="is-active" data-seg="a">Relieve 3D</button>
+              <button data-seg="b">Plano</button>
+            </div>
+          </div>
+          <div class="dv-tag-list" style="margin-top:18px">
+            <span class="dv-tag">Control Financiero</span>
+            <span class="dv-tag">Nacional · Servicio · Establecimiento</span>
+            <span class="dv-tag">Corte junio 2026</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= CAPAS ================= -->
+      <section class="doc-section dv-reveal" id="capas">
+        <div class="doc-h"><h2>Modal y tooltip</h2><code>components/overlay.css</code></div>
+        <p class="doc-lead">El tooltip es <b>un solo nodo</b> para toda la página, delegado desde <code>document</code>. El original enganchaba un listener por elemento y los recreaba en cada render: con 250 filas eso son 250 listeners nuevos por cada cambio de vista.</p>
+        <div class="dv-panel">
+          <div class="doc-strip">
+            <button class="dv-btn" id="openModal">Abrir modal</button>
+            <span class="dv-tag" data-tip="Este texto vive en data-tip">Pasa el cursor por aquí</span>
+            <span class="dv-tag" data-tip="Un solo nodo para toda la página">Y por aquí</span>
+          </div>
+          <div class="dv-strip" style="margin-top:20px">
+            <div class="dv-mini is-active">
+              <div class="dv-mini__name">Planificación vs Devengo</div>
+              <div class="dv-mini__value">-5,9<u>%</u></div>
+              <div class="dv-mini__figures">Plan <b>142.008</b> · Dev <b>130.506</b></div>
+            </div>
+            <div class="dv-mini">
+              <div class="dv-mini__name">DTE pendientes</div>
+              <div class="dv-mini__value">1,5<u> m</u></div>
+              <div class="dv-mini__figures">Pendiente <b>18.402</b> M$</div>
+            </div>
+            <div class="dv-mini is-empty">
+              <div class="dv-mini__name">Interoperabilidad</div>
+              <div class="dv-mini__value" style="color:var(--dv-ink-4)">—</div>
+              <div class="dv-mini__figures">Sin dato en este nivel</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="dv-footnote" style="margin-top:36px;padding-top:18px;border-top:1px solid var(--dv-line)">
+        DV-UI · extraído y reestructurado desde Dashboard_Consolidado_DIVPRE.html · Los datos mostrados son reales del corte enero–junio 2026 y se usan solo como ejemplo de composición.
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ============ MODAL ============ -->
+<div class="dv-overlay" id="overlay">
+  <div class="dv-modal">
+    <header class="dv-modal__header">
+      <div>
+        <h2>Metropolitano Norte</h2>
+        <div class="dv-sub">1 de 12 indicadores cumplen la meta · 6 establecimientos</div>
+      </div>
+      <div class="dv-modal__actions">
+        <button class="dv-btn dv-btn--on-dark">Ver ficha completa →</button>
+        <button class="dv-btn dv-btn--on-dark dv-btn--icon" id="closeModal" aria-label="Cerrar">✕</button>
+      </div>
+    </header>
+    <div class="dv-modal__body">
+      <div class="dv-strip">
+        <div class="dv-mini is-active"><div class="dv-mini__name">Planificación vs Devengo</div><div class="dv-mini__value">+6,6<u>%</u></div><div class="dv-mini__figures">Acelerado</div></div>
+        <div class="dv-mini"><div class="dv-mini__name">DTE pendientes</div><div class="dv-mini__value">2,1<u> m</u></div><div class="dv-mini__figures">Sobre la meta</div></div>
+        <div class="dv-mini"><div class="dv-mini__name">Trato Directo</div><div class="dv-mini__value">21,4<u>%</u></div><div class="dv-mini__figures">Sobre la meta</div></div>
+      </div>
+      <table class="dv-table">
+        <thead><tr><th>Establecimiento</th><th>Planificado</th><th>Devengado</th><th>Desviación</th></tr></thead>
+        <tbody>
+          <tr><td>Hospital San José (EAR)</td><td class="dv-num">48.201.114</td><td class="dv-num">52.884.302</td><td class="dv-num">+9,7%</td></tr>
+          <tr><td>Hospital Roberto del Río (EAR)</td><td class="dv-num">29.115.880</td><td class="dv-num">30.402.771</td><td class="dv-num">+4,4%</td></tr>
+          <tr><td>Instituto Nacional del Cáncer (EAR)</td><td class="dv-num">18.744.201</td><td class="dv-num">19.011.556</td><td class="dv-num">+1,4%</td></tr>
+          <tr class="dv-row-total"><td>Total del Servicio</td><td class="dv-num">118.402.551</td><td class="dv-num">126.217.120</td><td class="dv-num">+6,6%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="dv-tooltip" id="tooltip"></div>
+
+<script>
+/* ============================================================
+   Los tres snippets que el CSS necesita, más el cableado de la demo.
+   ============================================================ */
+
+/* --- 1 · Halo que sigue al cursor ------------------------- */
+document.querySelectorAll('.dv-card--compact').forEach(el => {
+  el.addEventListener('mousemove', e => {
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--dv-mx', (e.clientX - r.left) + 'px');
+    el.style.setProperty('--dv-my', (e.clientY - r.top) + 'px');
+  });
+});
+
+/* --- 2 · Aparición al hacer scroll ------------------------ */
+const io = new IntersectionObserver(entries => {
+  entries.forEach(en => {
+    if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); }
+  });
+}, { rootMargin: '0px 0px -10% 0px' });
+document.querySelectorAll('.dv-reveal').forEach(el => io.observe(el));
+
+/* --- 3 · Tooltip único, delegado -------------------------- */
+const tip = document.getElementById('tooltip');
+document.addEventListener('mousemove', e => {
+  const el = e.target.closest('[data-tip]');
+  if (!el) { tip.classList.remove('is-visible'); return; }
+  tip.textContent = el.dataset.tip;
+  tip.style.left  = (e.clientX + 14) + 'px';
+  tip.style.top   = (e.clientY - 34) + 'px';
+  tip.classList.add('is-visible');
+});
+
+/* --- Escalas de color ------------------------------------- */
+const mix = (a, b, t) => 'rgb(' + a.map((x, i) => Math.round(x + (b[i] - x) * t)).join(',') + ')';
+const LOW = [138,85,24], MID = [232,234,238], HIGH = [10,74,128], PALE = [226,235,244];
+const diverging  = t => t >= 0 ? mix(MID, HIGH, Math.min(1, t)) : mix(MID, LOW, Math.min(1, -t));
+const sequential = t => mix(PALE, HIGH, Math.max(.04, Math.min(1, t)));
+
+const sd = document.getElementById('scaleDiv');
+sd.innerHTML = '<span>Lejos de la meta</span>' +
+  [-1,-.75,-.5,-.25,0,.25,.5,.75,1].map(t => '<i style="background:' + diverging(t) + '"></i>').join('') +
+  '<span>Sobre la meta</span><span class="dv-scale-legend__na"><i style="background:#EDEFF2"></i>sin dato</span>';
+
+const ss = document.getElementById('scaleSeq');
+ss.innerHTML = '<span>Menos</span>' +
+  [0,.2,.4,.6,.8,1].map(t => '<i style="background:' + sequential(t) + '"></i>').join('') +
+  '<span>Más</span><span class="dv-scale-legend__na"><i style="background:#EDEFF2"></i>sin dato</span>';
+
+/* --- Lista de ranking ------------------------------------- */
+const DATA = [
+  ['Arica y Parinacota',10,12],['Del Maule',10,12],['Araucanía Sur',9,12],['Los Ríos',9,12],
+  ['Metropolitano Oriente',8,12],["O'Higgins",8,12],['Ñuble',8,12],['Biobío',7,12],
+  ['Concepción',7,12],['Metropolitano Occidente',7,12],['Antofagasta',6,12],['Magallanes',6,12],
+  ['Aconcagua',5,12],['Chiloé',5,12],['Coquimbo',4,12],['Aysén',3,12],['Metropolitano Norte',1,12]
+];
+document.getElementById('rank').innerHTML = DATA.map(([n, ok, tot]) =>
+  '<div class="dv-rank__row" data-tip="' + n + ' · ' + ok + ' de ' + tot + ' indicadores cumplidos">' +
+  '<span class="dv-rank__swatch" style="background:' + sequential(ok / tot) + '"></span>' +
+  '<span class="dv-rank__name">' + n + '</span>' +
+  '<span class="dv-rank__value">' + ok + '<span style="color:var(--dv-ink-4);font-weight:500"> / ' + tot + '</span></span></div>'
+).join('');
+
+/* --- Filas expandibles ------------------------------------ */
+document.querySelectorAll('.dv-row.is-expandable').forEach(tr => {
+  tr.addEventListener('click', () => {
+    const open = tr.classList.toggle('is-open');
+    tr.querySelector('.dv-caret').classList.toggle('is-open', open);
+    const next = tr.nextElementSibling;
+    if (open) {
+      const sub = document.createElement('tr');
+      sub.className = 'dv-row-sub';
+      sub.dataset.subOf = tr.dataset.row;
+      sub.innerHTML = '<td colspan="6">Detalle por establecimiento · ' +
+        '<span class="dv-link">ver los 6 establecimientos →</span></td>';
+      tr.after(sub);
+    } else if (next && next.classList.contains('dv-row-sub')) {
+      next.remove();
+    }
+  });
+});
+
+/* --- Modal ------------------------------------------------ */
+const ov = document.getElementById('overlay');
+document.getElementById('openModal').onclick  = () => ov.classList.add('is-open');
+document.getElementById('closeModal').onclick = () => ov.classList.remove('is-open');
+ov.onclick = e => { if (e.target === ov) ov.classList.remove('is-open'); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') ov.classList.remove('is-open'); });
+
+/* --- Control segmentado ----------------------------------- */
+document.querySelectorAll('.dv-segmented button').forEach(b => {
+  b.onclick = () => {
+    b.parentElement.querySelectorAll('button').forEach(x => x.classList.remove('is-active'));
+    b.classList.add('is-active');
+  };
+});
+
+/* --- Navegación: pastilla deslizante + barra de progreso --- */
+const pill  = document.getElementById('pill');
+const sweep = document.getElementById('sweep');
+function movePill(el) {
+  pill.style.height    = el.offsetHeight + 'px';
+  pill.style.transform = 'translateY(' + el.offsetTop + 'px)';
+}
+document.querySelectorAll('.dv-nav-item:not(.is-disabled)').forEach(a => {
+  a.addEventListener('click', () => {
+    document.querySelectorAll('.dv-nav-item').forEach(x => x.classList.remove('is-active'));
+    a.classList.add('is-active');
+    movePill(a);
+    sweep.classList.remove('is-running');
+    void sweep.offsetWidth;              // fuerza reflow para reiniciar la animación
+    sweep.classList.add('is-running');
+  });
+});
+movePill(document.querySelector('.dv-nav-item.is-active'));
+</script>
+</body>
+</html>

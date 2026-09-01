@@ -1,0 +1,26 @@
+/* ==========================================================================
+   DV-UI · Sistema de diseño para dashboards institucionales
+   Extraído y reestructurado desde Dashboard_Consolidado_DIVPRE.html
+
+   Punto de entrada único. El ORDEN de estos imports importa:
+   tokens → base → layout → componentes → movimiento → impresión.
+   Invertirlo rompe la cascada.
+
+   Si tu build no soporta @import (o quieres evitar 10 peticiones HTTP),
+   concatena los archivos EN ESTE MISMO ORDEN. Ver README, sección "Build".
+   ========================================================================== */
+
+@import url('./01-tokens.css');
+@import url('./02-base.css');
+@import url('./03-layout.css');
+
+@import url('./components/controls.css');
+@import url('./components/chip.css');
+@import url('./components/card.css');
+@import url('./components/surface.css');
+@import url('./components/table.css');
+@import url('./components/dataviz.css');
+@import url('./components/overlay.css');
+
+@import url('./04-motion.css');
+@import url('./05-print.css');

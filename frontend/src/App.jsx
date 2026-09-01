@@ -33,6 +33,7 @@ import { abastecimientoRoutes } from './features/abastecimiento/routes';
 import { finanzasRoutes } from './features/finanzas/routes';
 import { pacRoutes } from './features/pac/routes';
 import { pacCumplimientoRoutes } from './features/pac-cumplimiento/routes';
+import { fscOcPacRoutes } from './features/fsc-oc-pac/routes';
 import { compraAgilRoutes } from './features/compra-agil/routes';
 import { perfilRoute, adminUsuariosRoute } from './features/usuarios/routes';
 import { devengoSigfeRoutes } from './features/devengo-sigfe/routes';
@@ -81,6 +82,7 @@ function AppRoutes() {
             {/* Módulo Abastecimiento (admin + abastecimiento + general) */}
             <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'general']} />}>
               {abastecimientoRoutes}
+              {fscOcPacRoutes}
             </Route>
 
             {/* Módulo Finanzas (admin + finanzas + general) */}

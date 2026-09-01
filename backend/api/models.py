@@ -1285,3 +1285,134 @@ class ConceptoJerarquia(models.Model):
 
     def __str__(self):
         return f"N{self.nivel} | {self.descripcion}"
+
+
+class CompradorInicial(models.Model):
+    """Mapeo fijo iniciales de comprador (código embebido en OrdenCompra.NombreOC,
+    ej. 'F1-162-26-NAM') → usuario del sistema. Lista cerrada entregada manualmente
+    por Abastecimiento — las iniciales NO se derivan del nombre (no hay regla fija:
+    p.ej. IVAN VARGAS → 'IVO', no 'IV'), así que este catálogo es la única fuente
+    de verdad y se mantiene a mano cuando entra/sale un comprador."""
+    codigo = models.CharField('Iniciales', max_length=10, primary_key=True)
+    usuario = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='iniciales_comprador')
+
+    class Meta:
+        db_table = 'data_comprador_inicial'
+        verbose_name = 'Inicial de Comprador'
+        verbose_name_plural = 'Iniciales de Comprador'
+
+    def __str__(self):
+        return f"{self.codigo} → {self.usuario.get_full_name() or self.usuario.username}"
+
+
+class FscOcLink(models.Model):
+    """Enlace FSC (Dentro PAC) ↔ Orden de Compra, calculado por
+    `services.recalcular_fsc_oc_matching()` y ajustable a mano.
+
+    `orden_compra` usa FK con on_delete=DO_NOTHING + db_constraint=False a propósito:
+    OC_SSO_SERVER.py hace `OrdenCompra.objects.all().delete()` + bulk_create en CADA
+    sync (snapshot completo, no upsert). Un FK con CASCADE borraría todas las
+    revisiones/confirmaciones manuales cada vez que corre el ETL de OC. Con esta
+    configuración el link sobrevive al delete+recreate y se reengancha solo en el
+    siguiente cálculo porque `codigo_oc` es estable entre sincronizaciones.
+    `formulario_derivado` sí usa CASCADE normal: FormularioFSCDerivado se sincroniza
+    por upsert (update_or_create), la fila es estable — solo se borra cuando el FSC
+    realmente desaparece de la fuente, y ahí sí corresponde borrar su link.
+    """
+    ALTA = 'ALTA'
+    MEDIA = 'MEDIA'
+    BAJA_SUGERIDA = 'BAJA_SUGERIDA'
+    MANUAL = 'MANUAL'
+    CONFIANZA_CHOICES = [
+        (ALTA, 'Alta — Tipo+Folio+Año+Comprador'),
+        (MEDIA, 'Media — Tipo+Folio+Año'),
+        (BAJA_SUGERIDA, 'Baja — solo Tipo+Folio (formato legacy)'),
+        (MANUAL, 'Manual — enlazado a mano'),
+    ]
+
+    SUGERIDO = 'SUGERIDO'
+    CONFIRMADO = 'CONFIRMADO'
+    RECHAZADO = 'RECHAZADO'
+    ESTADO_CHOICES = [
+        (SUGERIDO, 'Sugerido'),
+        (CONFIRMADO, 'Confirmado'),
+        (RECHAZADO, 'Rechazado'),
+    ]
+
+    formulario_derivado = models.ForeignKey(
+        'FormularioFSCDerivado', on_delete=models.CASCADE, related_name='enlaces_oc',
+    )
+    orden_compra = models.ForeignKey(
+        'OrdenCompra', on_delete=models.DO_NOTHING, db_constraint=False,
+        null=True, blank=True, related_name='enlaces_fsc',
+    )
+    confianza = models.CharField(max_length=20, choices=CONFIANZA_CHOICES, db_index=True)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default=SUGERIDO, db_index=True)
+    score_similitud = models.FloatField(null=True, blank=True)
+    criterios_match = models.JSONField(null=True, blank=True)
+    motivo_rechazo = models.TextField(null=True, blank=True)
+    observaciones = models.TextField(null=True, blank=True)
+    revisado_por = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    fecha_revision = models.DateTimeField(null=True, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'data_fsc_oc_link'
+        verbose_name = 'Enlace FSC-OC'
+        verbose_name_plural = 'Enlaces FSC-OC'
+        indexes = [
+            models.Index(fields=['confianza', 'estado']),
+            models.Index(fields=['orden_compra']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['formulario_derivado', 'orden_compra'],
+                name='uniq_fsc_oc_link_par',
+            ),
+        ]
+
+    def __str__(self):
+        return f"FSC {self.formulario_derivado_id} ↔ OC {self.orden_compra_id or '—'} ({self.estado})"
+
+
+class OcPacOverride(models.Model):
+    """Corrección manual del PAC real de una OC, cuando `OrdenCompra.EnlacePAC`/
+    `ID_Proyecto` (recalculados desde cero contra `OCPAC_Maestro.csv` en CADA sync
+    de OC, ver `enlazar_con_pac()` en `api/OC_SSO_SERVER.py`) están vacíos o
+    equivocados frente a lo que declara el FSC que originó esa compra
+    (`FormularioFSCDerivado.id_plan`).
+
+    Mismo patrón de soft-FK que `FscOcLink.orden_compra`: `orden_compra` es la PK
+    (1 fila por OC) con on_delete=DO_NOTHING + db_constraint=False porque
+    OrdenCompra se borra y recrea completo en cada sync — la corrección sobrevive
+    porque `codigo_oc` es estable entre sincronizaciones. Nunca se escribe en
+    `OrdenCompra.ID_Proyecto` ni en `PacProyectoMaestro` (ambos son pipelines
+    derivados/ajenos que se pisarían solos en el próximo sync/recarga) — este
+    override es la única fuente de verdad para "el PAC real de esta OC" y se
+    aplica por encima de `OrdenCompra.EnlacePAC`/`ID_Proyecto` al calcular el
+    estado de match (ver `_pac_match_estado()` en services.py).
+    """
+    orden_compra = models.OneToOneField(
+        'OrdenCompra', primary_key=True, on_delete=models.DO_NOTHING, db_constraint=False,
+        related_name='+',
+    )
+    id_proyecto_correcto = models.CharField(max_length=100)
+    formulario_derivado = models.ForeignKey(
+        'FormularioFSCDerivado', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', help_text='FSC desde el cual se hizo la corrección (trazabilidad, opcional).',
+    )
+    observaciones = models.TextField(blank=True, null=True)
+    creado_por = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, related_name='+')
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'data_oc_pac_override'
+        verbose_name = 'Corrección PAC de OC'
+        verbose_name_plural = 'Correcciones PAC de OC'
+
+    def __str__(self):
+        return f"OC {self.orden_compra_id} → PAC {self.id_proyecto_correcto}"

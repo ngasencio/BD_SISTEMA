@@ -1,0 +1,196 @@
+/* ==========================================================================
+   COMPONENTE · Tarjeta KPI
+   La pieza central del dashboard. Dos tamaños y dos estados.
+
+   <article class="dv-card" style="--dv-card-accent:#0F69B4">
+     <div class="dv-card__title">Planificación vs Devengo ST 22</div>
+     <div class="dv-card__value">-5,9<u>%</u></div>
+     <div class="dv-card__meta">Meta: devengo ≤ 100% de lo planificado</div>
+     <div class="dv-card__footer">
+       <span class="dv-chip dv-chip--ok">Cumplido</span>
+       <span class="dv-card__cut">Corte junio 2026</span>
+     </div>
+   </article>
+
+   --dv-card-accent  color del acento (borde, halo, barra inferior).
+   ========================================================================== */
+
+.dv-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--dv-sp-5) 17px 14px;
+  overflow: hidden;
+  border-radius: var(--dv-r-xl);
+  background: var(--dv-surface);
+  box-shadow: var(--dv-shadow-1);
+  cursor: pointer;
+  transition: box-shadow var(--dv-dur-fast) var(--dv-ease-standard),
+              transform  var(--dv-dur-fast) var(--dv-ease-standard);
+}
+.dv-card:hover { box-shadow: var(--dv-shadow-2); transform: translateY(-3px); }
+
+/* Barra de acento en el canto izquierdo, visible solo en hover. */
+.dv-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--dv-card-accent, transparent);
+  opacity: 0;
+  transition: opacity var(--dv-dur-fast);
+}
+.dv-card:hover::before { opacity: 1; }
+
+.dv-card__title {
+  min-height: 35px;
+  font-size: 12.7px;
+  font-weight: var(--dv-fw-semi);
+  line-height: 1.35;
+}
+.dv-card__value {
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  font-size: 31px;
+  font-weight: var(--dv-fw-bold);
+  letter-spacing: var(--dv-ls-tight);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+/* <u> se usa como "unidad": marca semántica corta, sin subrayado. */
+.dv-card__value u {
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: var(--dv-fw-medium);
+  color: var(--dv-ink-3);
+}
+.dv-card__meta { font-size: 11.4px; color: var(--dv-ink-3); line-height: 1.45; }
+.dv-card__footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 11px;
+  border-top: 1px solid var(--dv-line-2);
+}
+.dv-card__cut {
+  margin-left: auto;
+  font-size: var(--dv-fs-2xs);
+  color: var(--dv-ink-4);
+  white-space: nowrap;
+}
+
+/* ---------- Estado: inactiva / sin dato --------------------------------- */
+.dv-card.is-muted {
+  cursor: default;
+  background: var(--dv-surface-alt);
+  box-shadow: none;
+  border: 1px dashed var(--dv-line);
+}
+.dv-card.is-muted:hover { transform: none; box-shadow: none; }
+
+/* ==========================================================================
+   Variante compacta — la de la fila de grupo.
+   Centrada, más densa, con dos efectos de hover que valen la pena:
+   un halo radial que sigue al cursor y una barra que crece desde el centro.
+   ========================================================================== */
+
+.dv-card--compact {
+  width: 100%;
+  align-items: center;
+  text-align: center;
+  gap: 0;
+  padding: 11px var(--dv-sp-3);
+  border: 1px solid var(--dv-line-2);
+  border-radius: var(--dv-r-lg);
+  transition: box-shadow var(--dv-dur-fast) var(--dv-ease-standard),
+              transform  var(--dv-dur-fast) var(--dv-ease-standard),
+              border-color var(--dv-dur-fast);
+}
+.dv-card--compact > * { position: relative; z-index: 2; }
+
+.dv-card--compact .dv-card__title {
+  min-height: 27px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.7px;
+  font-weight: var(--dv-fw-medium);
+  color: var(--dv-ink-2);
+  line-height: 1.28;
+}
+.dv-card--compact .dv-card__value {
+  justify-content: center;
+  margin: var(--dv-sp-1) 0 7px;
+  font-size: 26px;
+  letter-spacing: -.04em;
+  transition: transform var(--dv-dur-fast) var(--dv-ease-spring);
+}
+.dv-card--compact .dv-card__value u { font-size: 13.5px; }
+.dv-card--compact .dv-chip {
+  font-size: 9.6px;
+  padding: 3px 8px 3px var(--dv-sp-2);
+  white-space: normal;
+  text-align: center;
+  line-height: 1.3;
+}
+.dv-card--compact .dv-card__cut,
+.dv-card--compact .dv-card__meta {
+  margin: 8px 0 0;
+  font-size: 9.6px;
+  color: var(--dv-ink-4);
+  white-space: normal;
+  line-height: 1.38;
+}
+
+/* Halo radial que sigue al cursor.
+   Requiere actualizar --dv-mx / --dv-my en el evento mousemove (ver README).
+   color-mix() necesita Chrome/Edge 111+, Safari 16.4+, Firefox 113+. */
+.dv-card--compact::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: inherit;
+  transition: opacity .3s ease;
+  background: radial-gradient(
+    300px circle at var(--dv-mx, 50%) var(--dv-my, 50%),
+    color-mix(in srgb, var(--dv-card-accent, var(--dv-accent)) 11%, transparent),
+    transparent 45%
+  );
+}
+.dv-card--compact:hover::after { opacity: 1; }
+
+/* Barra de acento inferior que crece desde el centro. */
+.dv-card--compact::before {
+  content: '';
+  position: absolute;
+  left: 50%; right: auto; top: auto; bottom: 0;
+  width: 0;
+  height: 2.5px;
+  transform: translateX(-50%);
+  background: var(--dv-card-accent, var(--dv-accent));
+  border-radius: 2px;
+  opacity: 1;
+  z-index: 3;
+  transition: width .3s var(--dv-ease-out);
+}
+.dv-card--compact:hover::before { width: 100%; }
+
+.dv-card--compact:hover {
+  transform: translateY(-4px) scale(1.018);
+  border-color: color-mix(in srgb, var(--dv-card-accent, var(--dv-accent)) 38%, var(--dv-line));
+  box-shadow: 0 10px 26px -12px color-mix(in srgb, var(--dv-card-accent, var(--dv-accent)) 55%, transparent),
+              0 2px 6px -2px rgba(15,23,34,.10);
+}
+.dv-card--compact:hover .dv-card__value    { transform: scale(1.045); }
+.dv-card--compact:hover .dv-chip           { transform: translateY(-1px); }
+.dv-card--compact:hover .dv-chip__dot      { box-shadow: 0 0 9px 1px currentColor; }
+
+.dv-card--compact.is-muted            { border-style: dashed; }
+.dv-card--compact.is-muted::before    { display: none; }
+.dv-card--compact.is-muted:hover      { border-color: var(--dv-line); box-shadow: none; transform: none; }

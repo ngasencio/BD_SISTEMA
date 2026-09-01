@@ -1,0 +1,90 @@
+/* ==========================================================================
+   04 · MOVIMIENTO
+   Animaciones de entrada y transición de página.
+
+   Regla de oro heredada del original, y vale la pena repetirla:
+   NUNCA declares `animation` en el estado :hover de un elemento que ya usa
+   una animación de entrada con `forwards`. Reemplazarla reinicia el
+   fotograma inicial y el elemento se desvanece en pleno hover.
+   Para hover usa `transition`; deja `animation` para la aparición.
+   ========================================================================== */
+
+/* ---------- Aparición escalonada ----------------------------------------
+   Aplica .dv-enter y escalona con inline style:
+   <div class="dv-card dv-enter" style="animation-delay:126ms">
+   Un buen escalón es 40–45 ms; más lento se siente perezoso.
+   ------------------------------------------------------------------------ */
+.dv-enter {
+  opacity: 0;
+  transform: translateY(9px);
+  animation: dv-enter .45s var(--dv-ease-out) forwards;
+}
+@keyframes dv-enter { to { opacity: 1; transform: none; } }
+
+/* ---------- Aparición al hacer scroll -----------------------------------
+   Añade .dv-reveal en el marcado y .is-in desde un IntersectionObserver
+   (ver el snippet en el README).
+   ------------------------------------------------------------------------ */
+.dv-reveal      { opacity: 0; transform: translateY(16px); }
+.dv-reveal.is-in{ animation: dv-reveal .55s var(--dv-ease-out) forwards; }
+@keyframes dv-reveal { to { opacity: 1; transform: none; } }
+
+/* ---------- Transición de página ----------------------------------------
+   Direccional: hacia abajo al avanzar, hacia arriba al retroceder.
+   El sentido lo decide tu router comparando índices de vista.
+   ------------------------------------------------------------------------ */
+.dv-page-down { animation: dv-page-down .46s var(--dv-ease-out); }
+.dv-page-up   { animation: dv-page-up   .46s var(--dv-ease-out); }
+@keyframes dv-page-down { from { opacity: 0; transform: translateY(22px);  } to { opacity: 1; transform: none; } }
+@keyframes dv-page-up   { from { opacity: 0; transform: translateY(-22px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Barra de progreso superior ----------------------------------
+   Un destello que cruza la parte alta del contenido al cambiar de vista.
+   Cuesta 2 px de alto y comunica "algo cargó" mejor que un spinner.
+   ------------------------------------------------------------------------ */
+.dv-sweep {
+  position: fixed;
+  top: 0; left: var(--dv-sidebar-w); right: 0;
+  height: 2px;
+  z-index: 40;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--dv-accent), transparent);
+  transform: scaleX(0);
+  opacity: 0;
+}
+.dv-sweep.is-running { animation: dv-sweep .62s var(--dv-ease-standard); }
+@keyframes dv-sweep {
+  0%   { transform: scaleX(0); opacity: 1; transform-origin: left; }
+  60%  { transform: scaleX(1); opacity: 1; transform-origin: left; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+/* ---------- Fondo decorativo --------------------------------------------
+   Líneas SVG que derivan muy lentamente. Puramente ambiental:
+   pointer-events:none y aria-hidden en el marcado.
+   ------------------------------------------------------------------------ */
+.dv-bg-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.dv-bg-fx svg { position: absolute; top: -14%; left: -14%; width: 128%; height: 128%; }
+.dv-bg-fx__layer-1 { animation: dv-drift-1  95s linear infinite; }
+.dv-bg-fx__layer-2 { animation: dv-drift-2 140s linear infinite; }
+@keyframes dv-drift-1 { to { transform: translate3d(-64px,  28px, 0); } }
+@keyframes dv-drift-2 { to { transform: translate3d( 52px, -36px, 0); } }
+
+/* ---------- Accesibilidad ------------------------------------------------
+   No negociable. Un usuario con prefers-reduced-motion tiene una razón
+   médica para pedirlo.
+   ------------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

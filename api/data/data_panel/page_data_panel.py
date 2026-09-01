@@ -459,6 +459,15 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         # formulario viejo se corrige si el maestro PAC se actualiza después.
         _clasificar_dentro_fuera_pac(_avisar)
 
+        # Enlace FSC-OC-PAC: reengancha automáticamente contra la foto actual de
+        # OC, sin importar el año que traiga este sync de FSC. Nunca debe tumbar
+        # el ETL de Formularios si falla — solo se loguea.
+        try:
+            from api.services import recalcular_fsc_oc_matching
+            recalcular_fsc_oc_matching(_avisar=_avisar)
+        except Exception as e:
+            _avisar(log=f"⚠️ No se pudo recalcular el enlace FSC-OC: {e}")
+
     if "carro" in archivos:
         tabla = pd.read_html(str(archivos["carro"]))[0]
         tabla.columns = columnas_producto

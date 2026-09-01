@@ -1,0 +1,149 @@
+/* ==========================================================================
+   COMPONENTE · Superficies de contenido
+   Panel, tile de cifra, hero y las cuatro cajas de texto destacado.
+   Todas comparten el mismo lenguaje: fondo blanco, radio XL, sombra 1.
+   ========================================================================== */
+
+/* ---------- Panel --------------------------------------------------------
+   Contenedor genérico. Envuelve gráficos, tablas y mapas.
+   <section class="dv-panel">
+     <h3 class="dv-panel__title">Cumplimiento por Servicio</h3>
+     <p class="dv-panel__subtitle">Cuántos indicadores cumple cada uno.</p>
+     …
+   </section>
+   ------------------------------------------------------------------------ */
+.dv-panel {
+  padding: 18px var(--dv-sp-7);
+  margin-bottom: var(--dv-sp-5);
+  border-radius: var(--dv-r-xl);
+  background: var(--dv-surface);
+  box-shadow: var(--dv-shadow-1);
+}
+.dv-panel__title    { font-size: var(--dv-fs-md); }
+.dv-panel__subtitle {
+  margin: 3px 0 14px;
+  font-size: 11.8px;
+  color: var(--dv-ink-3);
+  text-align: justify;
+}
+.dv-panel__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--dv-sp-4);
+  flex-wrap: wrap;
+}
+.dv-panel__header > :last-child { margin-left: auto; }
+
+/* Cabecera de ficha de indicador: más aire, título mayor. */
+.dv-panel--head { padding: var(--dv-sp-6) 22px; }
+.dv-panel--head h2 { font-size: 19px; margin-bottom: 8px; }
+
+/* ---------- Tile de cifra -----------------------------------------------
+   Una etiqueta, un número grande, una nota. Se usa en filas de 2 a 4.
+   ------------------------------------------------------------------------ */
+.dv-tile {
+  padding: var(--dv-sp-5) 17px;
+  border-radius: var(--dv-r-xl);
+  background: var(--dv-surface);
+  box-shadow: var(--dv-shadow-1);
+}
+.dv-tile__label {
+  font-size: var(--dv-fs-2xs);
+  font-weight: var(--dv-fw-heavy);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--dv-ink-3);
+}
+.dv-tile__value {
+  margin-top: 7px;
+  font-size: var(--dv-fs-2xl);
+  font-weight: var(--dv-fw-bold);
+  letter-spacing: var(--dv-ls-tight);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.dv-tile__value u { text-decoration: none; font-size: 14px; font-weight: var(--dv-fw-medium); color: var(--dv-ink-3); }
+.dv-tile__hint  { margin-top: 5px; font-size: 11.4px; color: var(--dv-ink-3); line-height: 1.45; }
+
+/* ---------- Hero ---------------------------------------------------------
+   Cifra de portada + separador vertical + contenido libre.
+   ------------------------------------------------------------------------ */
+.dv-hero {
+  display: grid;
+  grid-template-columns: auto 1px 1fr;
+  gap: var(--dv-sp-7);
+  align-items: center;
+  padding: var(--dv-sp-6) var(--dv-sp-7);
+  margin-bottom: 18px;
+  border-radius: var(--dv-r-xl);
+  background: var(--dv-surface);
+  box-shadow: var(--dv-shadow-1);
+}
+.dv-hero__rule  { background: var(--dv-line); height: 60px; }
+.dv-hero__value {
+  font-size: var(--dv-fs-3xl);
+  font-weight: 660;
+  letter-spacing: var(--dv-ls-tight);
+  line-height: .95;
+  color: var(--dv-navy);
+  font-variant-numeric: tabular-nums;
+}
+.dv-hero__value em { font-style: normal; font-size: var(--dv-fs-xl); color: var(--dv-ink-3); font-weight: var(--dv-fw-medium); }
+.dv-hero__caption  { margin-top: var(--dv-sp-2); max-width: 220px; font-size: 12.3px; color: var(--dv-ink-2); line-height: 1.45; }
+@media (max-width: 900px) {
+  .dv-hero { grid-template-columns: 1fr; }
+  .dv-hero__rule { display: none; }
+}
+
+/* ---------- Cajas de texto destacado -------------------------------------
+   Cuatro variantes con la misma anatomía y distinta intención:
+   nota (informativa) · advertencia · fórmula (metodología) · placeholder.
+   ------------------------------------------------------------------------ */
+
+.dv-callout {
+  padding: 14px 18px;
+  margin-bottom: var(--dv-sp-5);
+  border-radius: var(--dv-r-xl);
+  border-left: 3px solid var(--dv-primary);
+  background: var(--dv-surface);
+  box-shadow: var(--dv-shadow-1);
+  font-size: 12.4px;
+  color: var(--dv-ink-2);
+  line-height: var(--dv-lh-loose);
+  text-align: justify;
+}
+.dv-callout--warn { border-left-color: var(--dv-secondary); background: #FEFAF4; }
+
+/* Caja de fórmula: la que explica cómo se calcula un indicador. */
+.dv-formula {
+  padding: 13px var(--dv-sp-5);
+  margin-bottom: var(--dv-sp-5);
+  border: 1px solid #D7E5F3;
+  border-left: 3px solid var(--dv-accent);
+  border-radius: var(--dv-r-lg);
+  background: #F3F7FC;
+  font-size: 12.6px;
+  color: var(--dv-ink-2);
+  line-height: var(--dv-lh-loose);
+  text-align: justify;
+}
+.dv-formula__label {
+  margin-bottom: 5px;
+  font-size: 10px;
+  font-weight: var(--dv-fw-heavy);
+  letter-spacing: var(--dv-ls-caps);
+  text-transform: uppercase;
+  color: var(--dv-accent);
+}
+.dv-formula b { color: var(--dv-ink); font-weight: var(--dv-fw-bold); }
+
+/* Placeholder: lo que todavía no existe. Borde punteado = "aún no". */
+.dv-placeholder {
+  margin-top: var(--dv-sp-7);
+  padding: 17px 21px;
+  border: 1px dashed var(--dv-line);
+  border-radius: var(--dv-r-xl);
+  background: var(--dv-surface-alt);
+}
+.dv-placeholder h4 { margin-bottom: var(--dv-sp-2); font-size: var(--dv-fs-sm); color: var(--dv-ink-2); }
+.dv-placeholder p  { max-width: 900px; font-size: 12.2px; color: var(--dv-ink-3); line-height: var(--dv-lh-loose); text-align: justify; }
