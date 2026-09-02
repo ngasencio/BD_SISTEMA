@@ -61,6 +61,9 @@ from .views import (
     fsc_oc_pac_enlazar_manual_view, fsc_oc_pac_recalcular_view,
     fsc_oc_pac_fsc_detalle_view, fsc_oc_pac_oc_detalle_view, fsc_oc_pac_corregir_pac_view,
     fsc_oc_pac_corregidas_view, fsc_oc_pac_impacto_view,
+    ComprasCompradorPerfilViewSet, ComprasMisFormulariosView, ProcesoCompraViewSet,
+    compras_buscar_licitacion_view, compras_buscar_compra_agil_view, compras_buscar_oc_view,
+    compras_importar_licitacion_view, compras_importar_compra_agil_view, compras_importar_oc_view,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -100,6 +103,10 @@ router.register(r'formularios-fsc-productos', FormularioFSCProductoViewSet, base
 # Módulo Enlace FSC-OC-PAC
 router.register(r'fsc-oc-links', FscOcLinkViewSet, basename='fscoclink')
 router.register(r'compradores-iniciales', CompradorInicialViewSet, basename='compradorinicial')
+
+# Módulo Gestión de Compras
+router.register(r'compras-procesos', ProcesoCompraViewSet, basename='procesocompra')
+router.register(r'compras-compradores', ComprasCompradorPerfilViewSet, basename='comprascompradorperfil')
 
 # Módulo Usuarios
 router.register(r'usuarios', UsuarioViewSet, basename='usuario')
@@ -254,6 +261,15 @@ urlpatterns = [
     path('fsc-oc-pac/corregir-pac/', fsc_oc_pac_corregir_pac_view, name='fsc_oc_pac_corregir_pac'),
     path('fsc-oc-pac/corregidas/', fsc_oc_pac_corregidas_view, name='fsc_oc_pac_corregidas'),
     path('fsc-oc-pac/impacto/', fsc_oc_pac_impacto_view, name='fsc_oc_pac_impacto'),
+
+    # Módulo Gestión de Compras
+    path('compras/mis-formularios/', ComprasMisFormulariosView.as_view(), name='compras_mis_formularios'),
+    path('compras/buscar-licitacion/', compras_buscar_licitacion_view, name='compras_buscar_licitacion'),
+    path('compras/buscar-compra-agil/', compras_buscar_compra_agil_view, name='compras_buscar_compra_agil'),
+    path('compras/buscar-oc/', compras_buscar_oc_view, name='compras_buscar_oc'),
+    path('compras/importar-licitacion/', compras_importar_licitacion_view, name='compras_importar_licitacion'),
+    path('compras/importar-compra-agil/', compras_importar_compra_agil_view, name='compras_importar_compra_agil'),
+    path('compras/importar-oc/', compras_importar_oc_view, name='compras_importar_oc'),
 
     # Router ViewSets
     path('', include(router.urls)),

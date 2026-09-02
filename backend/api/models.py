@@ -1173,6 +1173,8 @@ class PerfilUsuario(models.Model):
         ('finanzas',        'Finanzas'),
         ('general',         'General (Todos los módulos)'),
         ('viewer',          'Visualizador'),
+        ('comprador',       'Comprador'),
+        ('jefatura',        'Jefatura'),
     ]
 
     user               = models.OneToOneField(
@@ -1416,3 +1418,237 @@ class OcPacOverride(models.Model):
 
     def __str__(self):
         return f"OC {self.orden_compra_id} → PAC {self.id_proyecto_correcto}"
+
+
+# =============================================================================
+# Módulo Gestión de Compras — Procesos de Compra por comprador
+# =============================================================================
+
+class ComprasCompradorPerfil(models.Model):
+    """Mapeo nombre-comprador-tal-cual-en-Panel-SSO (FormularioFSCDerivado.comprador,
+    ej. 'ALICIA VIDAL') -> usuario del sistema. Catálogo cerrado, mantenido a mano,
+    igual criterio que CompradorInicial (más arriba) pero indexado por nombre
+    completo porque la bandeja 'Mis Formularios' filtra FormularioFSCDerivado.comprador
+    directamente (texto libre del Panel SSO), no por iniciales embebidas en NombreOC.
+    Catálogo distinto y complementario a CompradorInicial — no unificar, sirven a
+    matchings distintos (FscOcLink usa iniciales embebidas en NombreOC; este usa el
+    nombre completo tal cual del Panel SSO)."""
+    nombre_comprador = models.CharField('Nombre Comprador (Panel SSO)', max_length=200, primary_key=True)
+    usuario = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='compras_comprador_perfil')
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'api_compras_comprador_perfil'
+        verbose_name = 'Comprador (Módulo Compras)'
+        verbose_name_plural = 'Compradores (Módulo Compras)'
+
+    def __str__(self):
+        return f"{self.nombre_comprador} → {self.usuario.username}"
+
+
+class ProcesoCompra(models.Model):
+    """Proceso de gestión de compra (Licitación / Compra Ágil / Convenio Marco /
+    Trato Directo / Orden de Compra directa) en el que un comprador convierte uno
+    o más FormularioFSCDerivado en estado AC. Relación M2M en ambos sentidos con
+    FormularioFSCDerivado (un FSC puede abrir varios procesos en paralelo — ej.
+    licitación Y compra ágil simultáneas —, y un proceso puede agrupar varios FSC
+    si es compra conjunta) y con OrdenCompra (un proceso puede generar varias OC,
+    ej. despachos parciales).
+
+    `licitacion` usa soft-FK (on_delete=DO_NOTHING, db_constraint=False) igual que
+    FscOcLink.orden_compra: LI_SSO_SERVER.py hace `Licitacion.objects.all().delete()`
+    + bulk_create() en cada sync (snapshot completo), así que un FK normal con
+    CASCADE borraría el proceso cada vez que corre el ETL. `codigo_compra_agil` NO
+    tiene FK (ni siquiera soft) porque CompraAgilResumen es managed=False y
+    AG_SSO_SERVER2.py la recrea con DROP TABLE + pandas.to_sql en cada sync — la
+    tabla física entera desaparece y reaparece, un soft-FK no aporta nada ahí; se
+    guarda solo el código y se resuelve por query en tiempo de lectura.
+    """
+    LICITACION           = 'LICITACION'
+    COMPRA_AGIL           = 'COMPRA_AGIL'
+    CONVENIO_MARCO        = 'CONVENIO_MARCO'
+    TRATO_DIRECTO         = 'TRATO_DIRECTO'
+    ORDEN_COMPRA_DIRECTA  = 'ORDEN_COMPRA_DIRECTA'
+    TIPO_PROCESO_CHOICES = [
+        (LICITACION,          'Licitación'),
+        (COMPRA_AGIL,          'Compra Ágil'),
+        (CONVENIO_MARCO,       'Convenio Marco'),
+        (TRATO_DIRECTO,        'Trato Directo'),
+        (ORDEN_COMPRA_DIRECTA, 'Orden de Compra Directa'),
+    ]
+
+    # Estados — códigos únicos, reutilizados entre tipos cuando el texto original
+    # del usuario es idéntico (REVISION_COMPRADOR, OC_ENVIADA, FINALIZADO, OTROS,
+    # RECHAZADO) para que el pivot de jefatura agregue por significado y no por
+    # texto duplicado. La validación de qué estado es válido para qué tipo NO vive
+    # en este choices (que es la unión de todos los tipos) sino en
+    # services.ESTADOS_POR_TIPO_PROCESO / services.validar_estado_para_tipo().
+    ESTADO_PROCESO_CHOICES = [
+        ('RECEPCIONADO',                 'Recepcionado por Comprador'),               # transversal, inicial
+        # Licitación
+        ('LIC_PUBLICACION',              'Publicación'),
+        ('REVISION_COMPRADOR',           'En Revisión Comprador'),                    # LICITACION + COMPRA_AGIL
+        ('LIC_REVISION_BASES_REFERENTE', 'Revisión Bases Referente'),
+        ('LIC_PENDIENTE_AUT_REFERENTE',  'Pendiente Autorización Referente'),
+        ('LIC_PREPARACION_INFORME_EVAL', 'Preparación Informe de Evaluación'),
+        ('LIC_EVALUACION_OFERTAS',       'Evaluación Ofertas'),
+        ('LIC_ADJUDICACION_DESERCION',   'Adjudicación o Deserción'),
+        ('LIC_SEGUNDO_LLAMADO',          'Segundo Llamado'),
+        ('LIC_SUSCRIPCION_CONTRATO',     'Suscripción de Contrato'),
+        ('LIC_EN_EJECUCION',             'En Ejecución'),
+        ('OC_ENVIADA',                   'O/C Enviada'),                              # LICITACION + COMPRA_AGIL
+        # Compra Ágil
+        ('CA_PUBLICADA',                 'Publicada'),
+        ('CA_ENVIADA_REFERENTE',         'Enviada a Referente'),
+        # Trato Directo
+        ('TD_TRAMITACION_RESOLUCION',    'En Tramitación de Resolución que Autoriza'),
+        # Orden de Compra Directa
+        ('OCD_GESTIONANDO_ENVIO',        'Gestionando el Envío de las Distintas OC'),
+        # Transversales de cierre
+        ('FINALIZADO',                   'Proceso Finalizado'),                       # todos los tipos
+        ('OTROS',                        'Otros'),                                    # LIC, CA, CONVENIO_MARCO
+        ('RECHAZADO',                    'Rechazado'),                                # todos los tipos
+    ]
+
+    tipo_proceso   = models.CharField(max_length=25, choices=TIPO_PROCESO_CHOICES, db_index=True)
+    estado_proceso = models.CharField(max_length=32, choices=ESTADO_PROCESO_CHOICES,
+                                       default='RECEPCIONADO', db_index=True)
+    titulo = models.CharField('Título del proceso', max_length=300,
+                               help_text="Identificador corto libre, ej. 'Insumos de Curación 2026'.")
+
+    comprador = models.ForeignKey('auth.User', on_delete=models.PROTECT, related_name='procesos_compra',
+                                   help_text='Comprador responsable de gestionar el proceso.')
+
+    licitacion = models.ForeignKey(
+        'Licitacion', on_delete=models.DO_NOTHING, db_constraint=False, null=True, blank=True,
+        related_name='procesos_compra',
+    )
+    codigo_compra_agil = models.CharField(
+        max_length=100, null=True, blank=True, db_index=True,
+        help_text='CodigoCompraAgil (api_compraagil_resumen) — sin FK, ver docstring de la clase.',
+    )
+
+    monto_estimado = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    fecha_cierre_estimada = models.DateTimeField(
+        null=True, blank=True,
+        help_text='Para alertas de cierre próximo. Se copia desde Licitacion.FechaCierre si hay '
+                   'licitación asociada, o se ingresa a mano para tipos sin registro en MP.',
+    )
+    observaciones = models.TextField(blank=True, default='')
+
+    creado_por  = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='procesos_compra_creados')
+    creado_en   = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    finalizado_en  = models.DateTimeField(null=True, blank=True)
+
+    formularios    = models.ManyToManyField('FormularioFSCDerivado', related_name='procesos_compra',
+                                             through='ProcesoCompraFormulario', blank=True)
+    ordenes_compra = models.ManyToManyField('OrdenCompra', related_name='procesos_compra',
+                                             through='ProcesoCompraOrdenCompra', blank=True)
+
+    class Meta:
+        db_table = 'api_compras_proceso'
+        verbose_name = 'Proceso de Compra'
+        verbose_name_plural = 'Procesos de Compra'
+        indexes = [
+            models.Index(fields=['tipo_proceso', 'estado_proceso'], name='idx_procompra_tipo_estado'),
+            models.Index(fields=['comprador', 'estado_proceso'],     name='idx_procompra_comprador_estado'),
+            models.Index(fields=['fecha_cierre_estimada'],           name='idx_procompra_cierre'),
+        ]
+        ordering = ['-actualizado_en']
+
+    def __str__(self):
+        return f"{self.get_tipo_proceso_display()} · {self.titulo} ({self.get_estado_proceso_display()})"
+
+
+class ProcesoCompraFormulario(models.Model):
+    """M2M ProcesoCompra <-> FormularioFSCDerivado. Ambos FK con CASCADE normal:
+    ProcesoCompra es propio del módulo, y FormularioFSCDerivado se sincroniza por
+    upsert (update_or_create en el ETL de Formularios) — la fila es estable, igual
+    razonamiento que FscOcLink.formulario_derivado."""
+    proceso = models.ForeignKey('ProcesoCompra', on_delete=models.CASCADE, related_name='vinculos_formulario')
+    formulario_derivado = models.ForeignKey('FormularioFSCDerivado', on_delete=models.CASCADE,
+                                             related_name='vinculos_proceso')
+    creado_en = models.DateTimeField(auto_now_add=True)
+    creado_por = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+
+    class Meta:
+        db_table = 'api_compras_proceso_formulario'
+        constraints = [models.UniqueConstraint(fields=['proceso', 'formulario_derivado'],
+                                                name='uniq_procesocompra_formulario')]
+
+    def __str__(self):
+        return f"Proceso {self.proceso_id} ↔ FSC {self.formulario_derivado_id}"
+
+
+class ProcesoCompraOrdenCompra(models.Model):
+    """M2M ProcesoCompra <-> OrdenCompra. orden_compra usa on_delete=DO_NOTHING +
+    db_constraint=False, idéntico a FscOcLink.orden_compra, porque
+    OC_SSO_SERVER.guardar_en_django hace delete() total + bulk_create en cada
+    sync; codigo_oc es estable entre syncs así que el vínculo se reengancha solo."""
+    proceso = models.ForeignKey('ProcesoCompra', on_delete=models.CASCADE, related_name='vinculos_oc')
+    orden_compra = models.ForeignKey('OrdenCompra', on_delete=models.DO_NOTHING, db_constraint=False,
+                                      related_name='vinculos_proceso')
+    creado_en = models.DateTimeField(auto_now_add=True)
+    creado_por = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+
+    class Meta:
+        db_table = 'api_compras_proceso_oc'
+        constraints = [models.UniqueConstraint(fields=['proceso', 'orden_compra'],
+                                                name='uniq_procesocompra_oc')]
+
+    def __str__(self):
+        return f"Proceso {self.proceso_id} ↔ OC {self.orden_compra_id}"
+
+
+class ProcesoCompraEstadoLog(models.Model):
+    """Historial append-only de cambios de estado_proceso, mismo espíritu que
+    FormularioFSCEstadoLog pero escrito transaccionalmente por el propio servicio
+    (services.cambiar_estado_proceso) en cada transición, no detectado por diff
+    de ETL — por eso guarda también estado_anterior y usuario."""
+    proceso = models.ForeignKey('ProcesoCompra', on_delete=models.CASCADE, related_name='historial_estados')
+    estado_anterior = models.CharField(max_length=32, null=True, blank=True)
+    estado_nuevo    = models.CharField(max_length=32)
+    usuario = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='cambios_estado_procesocompra')
+    comentario = models.TextField(blank=True, default='')
+    fecha = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'api_compras_proceso_estado_log'
+        ordering = ['proceso_id', 'fecha']
+        indexes = [models.Index(fields=['proceso', 'fecha'], name='idx_procompra_log_fecha')]
+
+    def __str__(self):
+        return f"Proceso {self.proceso_id} → {self.estado_nuevo} ({self.fecha:%Y-%m-%d})"
+
+
+class ComprasNotificacion(models.Model):
+    """Notificación in-app de cambios en el módulo Compras. El envío de correo
+    (services.enviar_email_notificacion) se dispara aparte y marca email_enviado;
+    la fila in-app siempre se crea primero y sobrevive aunque el correo falle."""
+    CAMBIO_ESTADO   = 'CAMBIO_ESTADO'
+    CIERRE_PROXIMO  = 'CIERRE_PROXIMO'
+    NUEVO_PROCESO   = 'NUEVO_PROCESO'
+    TIPO_CHOICES = [
+        (CAMBIO_ESTADO,  'Cambio de Estado'),
+        (CIERRE_PROXIMO, 'Alerta de Cierre Próximo'),
+        (NUEVO_PROCESO,  'Nuevo Proceso Creado'),
+    ]
+    destinatario = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='compras_notificaciones')
+    proceso = models.ForeignKey('ProcesoCompra', on_delete=models.CASCADE, null=True, blank=True,
+                                 related_name='notificaciones')
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, db_index=True)
+    mensaje = models.CharField(max_length=500)
+    leida = models.BooleanField(default=False, db_index=True)
+    email_enviado = models.BooleanField(default=False)
+    creado_en = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'api_compras_notificacion'
+        ordering = ['-creado_en']
+        indexes = [models.Index(fields=['destinatario', 'leida'], name='idx_compras_notif_dest_leida')]
+
+    def __str__(self):
+        return f"{self.tipo} → {self.destinatario_id} ({'leída' if self.leida else 'pendiente'})"

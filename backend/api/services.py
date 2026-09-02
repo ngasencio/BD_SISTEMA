@@ -4,18 +4,22 @@ from collections import defaultdict
 from datetime import date, datetime
 from difflib import SequenceMatcher
 
+from django.db import transaction
 from django.db.models import Avg, CharField, Count, DecimalField, Max, Q, Sum, Value
 from django.db.models.functions import Cast, Concat, Substr
+from django.utils import timezone
 
 from .models import (
     DetalleOrdenCompra, GestionContrato, Licitacion, DetalleLicitacion,
     OrdenCompra, PlanerPAC, RevisionOCCorregible,
-    CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado,
+    CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado, CompraAgilProducto,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog,
     SigfeAnexo1, ConceptoJerarquia,
     PacProyectoMaestro, Departamento, Establecimiento, SsoSubdireccion,
     Factura, FacturaSyncLog,
     FscOcLink, CompradorInicial, OcPacOverride,
+    ComprasCompradorPerfil, ProcesoCompra, ProcesoCompraFormulario,
+    ProcesoCompraOrdenCompra, ProcesoCompraEstadoLog, ComprasNotificacion,
 )
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
@@ -5155,3 +5159,668 @@ def calcular_fsc_oc_impacto():
             'enlazadas_automatico_pct': round(100 * enlazadas_automatico / total_oc, 1) if total_oc else 0.0,
         },
     }
+
+
+# =============================================================================
+# Módulo Gestión de Compras — Procesos de Compra por comprador
+#
+# Convierte un FormularioFSCDerivado en estado AC (bandeja "A Comprador" del
+# Panel SSO) en uno o más ProcesoCompra (Licitación / Compra Ágil / Convenio
+# Marco / Trato Directo / Orden de Compra directa) que el comprador clasifica
+# y hace avanzar de estado hasta finalizar. Relación M2M en ambos sentidos con
+# FormularioFSCDerivado (un FSC puede abrir varios procesos en paralelo, un
+# proceso puede agrupar varios FSC de compra conjunta) y con OrdenCompra (un
+# proceso puede generar varias OC). Ver plan de implementación (2026-09-01)
+# para el diseño completo — Fase 2: CRUD de ProcesoCompra sin integración en
+# vivo con Mercado Público (esa es Fase 3) ni notificaciones (Fase 4).
+# =============================================================================
+
+ESTADOS_POR_TIPO_PROCESO = {
+    ProcesoCompra.LICITACION: [
+        'RECEPCIONADO', 'LIC_PUBLICACION', 'REVISION_COMPRADOR', 'LIC_REVISION_BASES_REFERENTE',
+        'LIC_PENDIENTE_AUT_REFERENTE', 'LIC_PREPARACION_INFORME_EVAL', 'LIC_EVALUACION_OFERTAS',
+        'LIC_ADJUDICACION_DESERCION', 'LIC_SEGUNDO_LLAMADO', 'LIC_SUSCRIPCION_CONTRATO',
+        'LIC_EN_EJECUCION', 'OC_ENVIADA', 'FINALIZADO', 'OTROS', 'RECHAZADO',
+    ],
+    ProcesoCompra.COMPRA_AGIL: [
+        'RECEPCIONADO', 'CA_PUBLICADA', 'REVISION_COMPRADOR', 'CA_ENVIADA_REFERENTE',
+        'OC_ENVIADA', 'FINALIZADO', 'OTROS', 'RECHAZADO',
+    ],
+    ProcesoCompra.CONVENIO_MARCO: ['RECEPCIONADO', 'FINALIZADO', 'OTROS', 'RECHAZADO'],
+    ProcesoCompra.TRATO_DIRECTO: ['RECEPCIONADO', 'TD_TRAMITACION_RESOLUCION', 'FINALIZADO', 'RECHAZADO'],
+    ProcesoCompra.ORDEN_COMPRA_DIRECTA: ['RECEPCIONADO', 'OCD_GESTIONANDO_ENVIO', 'FINALIZADO', 'RECHAZADO'],
+}
+
+
+def validar_estado_para_tipo(tipo_proceso, estado_proceso):
+    """Lanza ValueError si `estado_proceso` no pertenece a
+    ESTADOS_POR_TIPO_PROCESO[tipo_proceso]. Se llama SIEMPRE antes de guardar
+    un ProcesoCompra (creación o cambio de estado) — los choices del campo
+    CharField son la UNIÓN de todos los tipos (Django no rechazaría por sí
+    solo un estado válido para otro tipo distinto)."""
+    permitidos = ESTADOS_POR_TIPO_PROCESO.get(tipo_proceso)
+    if permitidos is None:
+        raise ValueError(f"Tipo de proceso desconocido: {tipo_proceso!r}")
+    if estado_proceso not in permitidos:
+        raise ValueError(
+            f"Estado {estado_proceso!r} no es válido para {tipo_proceso!r}. "
+            f"Válidos: {', '.join(permitidos)}"
+        )
+
+
+def resolver_nombres_comprador(usuario):
+    """Devuelve los valores de FormularioFSCDerivado.comprador (texto libre
+    del Panel SSO, ej. 'ALICIA VIDAL') que corresponden a `usuario`, vía el
+    catálogo ComprasCompradorPerfil."""
+    return list(
+        ComprasCompradorPerfil.objects.filter(usuario=usuario, activo=True)
+        .values_list('nombre_comprador', flat=True)
+    )
+
+
+def listar_fsc_finalizados_comprador(usuario):
+    """FormularioFSCDerivado (bandeja 'AC') cuyo `estado_compra` — campo
+    textual propio del Panel SSO, ej. 'Licitación - Proceso Finalizado',
+    'Compra Ágil - Proceso Finalizado' — indica que el proceso de compra ya
+    se dio por finalizado. Es independiente de ProcesoCompra.estado_proceso
+    (nuestro seguimiento interno): usa el dato tal cual lo trae el Panel SSO."""
+    nombres = resolver_nombres_comprador(usuario)
+    return FormularioFSCDerivado.objects.filter(
+        estado='AC', comprador__in=nombres, estado_compra__icontains='Proceso Finalizado',
+    ).order_by('-fecha_derivado', '-folio')
+
+
+def listar_fsc_pendientes_comprador(usuario, incluir_ya_clasificados=False):
+    """Bandeja 'Mis Formularios': FormularioFSCDerivado en estado 'AC' (bandeja
+    'A Comprador') cuyo campo `comprador` coincide con los nombres resueltos
+    para `usuario`. Por defecto EXCLUYE los que ya tienen al menos un
+    ProcesoCompra vinculado — son los 'pendientes de clasificar'; con
+    incluir_ya_clasificados=True se listan todos los NO finalizados (para el
+    tab 'Formularios'). Siempre excluye los que ya están en
+    listar_fsc_finalizados_comprador (estado_compra con 'Proceso Finalizado')
+    para que un mismo FSC no aparezca duplicado en ambos tabs."""
+    nombres = resolver_nombres_comprador(usuario)
+    qs = FormularioFSCDerivado.objects.filter(estado='AC', comprador__in=nombres).exclude(
+        estado_compra__icontains='Proceso Finalizado'
+    )
+    if not incluir_ya_clasificados:
+        qs = qs.exclude(vinculos_proceso__isnull=False)
+    return qs.order_by('-fecha_derivado', '-folio')
+
+
+def crear_proceso_compra(*, tipo_proceso, titulo, comprador, formulario_ids, usuario_creador,
+                          estado_proceso='RECEPCIONADO', **campos_opcionales):
+    """Crea un ProcesoCompra, valida estado vs tipo, vincula 1..N
+    FormularioFSCDerivado (M2M — soporta compra conjunta) y registra la
+    primera fila en ProcesoCompraEstadoLog (estado_anterior=None)."""
+    validar_estado_para_tipo(tipo_proceso, estado_proceso)
+    if not formulario_ids:
+        raise ValueError('Debe indicar al menos un formulario (formulario_ids).')
+    with transaction.atomic():
+        proceso = ProcesoCompra.objects.create(
+            tipo_proceso=tipo_proceso, estado_proceso=estado_proceso, titulo=titulo,
+            comprador=comprador, creado_por=usuario_creador, **campos_opcionales,
+        )
+        for fsc_id in formulario_ids:
+            ProcesoCompraFormulario.objects.get_or_create(
+                proceso=proceso, formulario_derivado_id=fsc_id,
+                defaults={'creado_por': usuario_creador},
+            )
+        ProcesoCompraEstadoLog.objects.create(
+            proceso=proceso, estado_anterior=None, estado_nuevo=estado_proceso,
+            usuario=usuario_creador, comentario='Proceso creado.',
+        )
+    return proceso
+
+
+def cambiar_estado_proceso(proceso_id, nuevo_estado, usuario, comentario=''):
+    """Cambia estado_proceso, valida contra tipo_proceso y escribe
+    ProcesoCompraEstadoLog. También sirve para dejar una nota de seguimiento
+    SIN cambiar de estado (nuevo_estado == estado actual + comentario no
+    vacío) — así el comprador puede ir registrando avances para que jefatura
+    los revise en el historial aunque el proceso siga en la misma etapa.
+    No-op real (sin fila de historial) solo cuando no cambia el estado NI
+    trae comentario. Fase 4 engancha aquí el disparo de notificaciones
+    in-app/email — no implementado todavía."""
+    proceso = ProcesoCompra.objects.select_related('comprador').get(pk=proceso_id)
+    validar_estado_para_tipo(proceso.tipo_proceso, nuevo_estado)
+    anterior = proceso.estado_proceso
+    comentario = (comentario or '').strip()
+    if anterior == nuevo_estado and not comentario:
+        return proceso
+    with transaction.atomic():
+        if anterior != nuevo_estado:
+            proceso.estado_proceso = nuevo_estado
+            if nuevo_estado == 'FINALIZADO':
+                proceso.finalizado_en = timezone.now()
+            proceso.save(update_fields=['estado_proceso', 'finalizado_en', 'actualizado_en'])
+        ProcesoCompraEstadoLog.objects.create(
+            proceso=proceso, estado_anterior=anterior, estado_nuevo=nuevo_estado,
+            usuario=usuario, comentario=comentario,
+        )
+    return proceso
+
+
+def agregar_formulario_a_proceso(proceso_id, formulario_id, usuario):
+    """Agrega un FSC adicional a un proceso existente (compra conjunta).
+    Idempotente vía get_or_create sobre la constraint única
+    (proceso, formulario_derivado). Lanza FormularioFSCDerivado.DoesNotExist
+    si el id no existe."""
+    FormularioFSCDerivado.objects.get(pk=formulario_id)  # valida existencia, 404 explícito en la vista
+    proceso = ProcesoCompra.objects.get(pk=proceso_id)
+    vinculo, _creado = ProcesoCompraFormulario.objects.get_or_create(
+        proceso=proceso, formulario_derivado_id=formulario_id,
+        defaults={'creado_por': usuario},
+    )
+    return vinculo
+
+
+def buscar_licitacion_local(query, limite=10):
+    """Búsqueda por código o nombre entre las Licitaciones ya sincronizadas
+    localmente (LI_SSO_SERVER.py). Fase 3 extiende esta función para, si no
+    hay resultados, consultar en vivo la API de Mercado Público y persistir
+    el hallazgo — por ahora solo busca local."""
+    query = (query or '').strip()
+    if not query:
+        return []
+    qs = Licitacion.objects.filter(
+        Q(codigo_licitacion__icontains=query) | Q(Nombre__icontains=query)
+    ).order_by('-FechaPublicacion')[:limite]
+    return list(qs.values('codigo_licitacion', 'Nombre', 'Estado', 'FechaCierre', 'MontoEstimado'))
+
+
+def buscar_compra_agil_local(query, limite=10):
+    """Búsqueda por código o nombre entre las Compras Ágiles ya sincronizadas
+    localmente (AG_SSO_SERVER2.py). Ver nota de Fase 3 en buscar_licitacion_local."""
+    query = (query or '').strip()
+    if not query:
+        return []
+    qs = CompraAgilResumen.objects.filter(
+        Q(codigocompraagil__icontains=query) | Q(nombre__icontains=query)
+    ).order_by('-fechapublicacion')[:limite]
+    return list(qs.values('codigocompraagil', 'nombre', 'estadoglosa', 'fechacierre'))
+
+
+def buscar_oc_local(query, limite=10):
+    """Búsqueda por código o nombre entre las Órdenes de Compra ya
+    sincronizadas localmente (OC_SSO_SERVER.py). Ver nota de Fase 3 en
+    buscar_licitacion_local."""
+    query = (query or '').strip()
+    if not query:
+        return []
+    qs = OrdenCompra.objects.filter(
+        Q(codigo_oc__icontains=query) | Q(NombreOC__icontains=query)
+    ).order_by('-FechaEnvio')[:limite]
+    return list(qs.values('codigo_oc', 'NombreOC', 'EstadoOC', 'TotalBruto'))
+
+
+_FECHAS_LICITACION = [
+    ('FechaCreacion',              'Creación'),
+    ('FechaPublicacion',           'Publicación'),
+    ('FechaCierre',                'Cierre de Ofertas'),
+    ('FechaActoAperturaTecnica',   'Apertura Técnica'),
+    ('FechaActoAperturaEconomica', 'Apertura Económica'),
+    ('FechaEstimadaAdjudicacion',  'Adjudicación Estimada'),
+    ('FechaAdjudicacion',          'Adjudicación'),
+    ('FechaInicioContrato',        'Inicio de Contrato'),
+    ('FechaFinal',                 'Fecha Final'),
+]
+
+_FECHAS_COMPRA_AGIL = [
+    ('fechapublicacion',   'Publicación'),
+    ('fechacierre',        'Cierre'),
+    ('fechaultimocambio',  'Último Cambio'),
+]
+
+
+def calcular_proceso_detalle_mp(proceso_id):
+    """Detalle curado de la Licitación/Compra Ágil vinculada a un
+    ProcesoCompra, para el panel 'Ver' (botón junto a cada proceso en el
+    bloque 'Enlace Mercado Público'): resumen relevante para el comprador
+    (sin banderas administrativas internas de MP), sus líneas/productos, y
+    las fechas clave ordenadas cronológicamente para la línea de tiempo."""
+    proceso = ProcesoCompra.objects.select_related('licitacion').get(pk=proceso_id)
+    data = {'licitacion': None, 'compra_agil': None, 'lineas': [], 'fechas': []}
+
+    if proceso.licitacion_id:
+        lic = proceso.licitacion
+        data['licitacion'] = {
+            'codigo_licitacion': lic.codigo_licitacion,
+            'Nombre': lic.Nombre,
+            'Descripcion': lic.Descripcion,
+            'Estado': lic.Estado,
+            'C_NombreOrganismo': lic.C_NombreOrganismo,
+            'C_Unidad': lic.C_Unidad,
+            'C_Usuario': lic.C_Usuario,
+            'C_Cargo': lic.C_Cargo,
+            'MontoEstimado': lic.MontoEstimado,
+            'DescripcionTipoLicitacion': lic.DescripcionTipoLicitacion,
+        }
+        for campo, label in _FECHAS_LICITACION:
+            valor = getattr(lic, campo, None)
+            if valor:
+                data['fechas'].append({'clave': campo, 'label': label, 'fecha': valor.isoformat()})
+        data['lineas'] = list(DetalleLicitacion.objects.filter(licitacion=lic).values(
+            'NombreProducto', 'DescripcionItem', 'Cantidad', 'UnidadMedida',
+            'MontoUnitarioGanador', 'NombreGanador',
+        ))
+
+    elif proceso.codigo_compra_agil:
+        ca = CompraAgilResumen.objects.filter(codigocompraagil=proceso.codigo_compra_agil).first()
+        if ca:
+            data['compra_agil'] = {
+                'codigocompraagil': ca.codigocompraagil,
+                'nombre': ca.nombre,
+                'descripcion': ca.descripcion,
+                'estadoglosa': ca.estadoglosa,
+                'unidadcompra': ca.unidadcompra,
+                'presupuestoestimado': ca.presupuestoestimado,
+            }
+            for campo, label in _FECHAS_COMPRA_AGIL:
+                valor = getattr(ca, campo, None)
+                if valor:
+                    data['fechas'].append({'clave': campo, 'label': label, 'fecha': valor.isoformat()})
+            data['lineas'] = list(CompraAgilProducto.objects.filter(codigocompraagil=ca.codigocompraagil).values(
+                'nombre', 'descripcion', 'cantidad', 'unidadmedida',
+            ))
+
+    data['fechas'].sort(key=lambda f: f['fecha'])
+    return data
+
+
+def desvincular_proceso_mp(proceso_id, usuario):
+    """Quita el enlace de Licitación/Compra Ágil de un proceso, sin borrar el
+    proceso ni su historial — para cuando el comprador se equivocó al elegir
+    el código y quiere buscar de nuevo."""
+    proceso = ProcesoCompra.objects.get(pk=proceso_id)
+    proceso.licitacion = None
+    proceso.codigo_compra_agil = None
+    proceso.save(update_fields=['licitacion', 'codigo_compra_agil', 'actualizado_en'])
+    return proceso
+
+
+def quitar_oc_de_proceso(proceso_id, codigo_oc, usuario):
+    """Quita el enlace de una Orden de Compra a un proceso (borra solo la
+    fila ProcesoCompraOrdenCompra, la OC en sí no se toca)."""
+    ProcesoCompraOrdenCompra.objects.filter(proceso_id=proceso_id, orden_compra_id=codigo_oc).delete()
+
+
+# =============================================================================
+# Fase 3 — Integración en vivo con Mercado Público
+#
+# Cuando una búsqueda local (buscar_licitacion_local/buscar_compra_agil_local/
+# buscar_oc_local) no encuentra un código, estas funciones lo traen EN VIVO de
+# la API de Mercado Público usando los mismos clientes/parsers que ya usan los
+# ETL batch (api/LI_SSO_SERVER.py, OC_SSO_SERVER.py, AG_SSO_SERVER2.py — a
+# nivel de repo, NO backend/api/), y lo persisten con update_or_create en las
+# tablas GENERALES del sistema (Licitacion/OrdenCompra/CompraAgilResumen) —
+# nunca en una tabla paralela. CRÍTICO: nunca llamar a guardar_en_django()/
+# sincronizar_con_servidor() de esos scripts — hacen DELETE total + bulk_create
+# de TODA la tabla en cada corrida batch; acá se hace update_or_create acotado
+# a un solo registro. Alcance reducido a propósito: no recalcula
+# EnlacePAC/ID_Proyecto/TipoOCInterno (requiere el cruce completo contra
+# OCPAC_Maestro.csv de enlazar_con_pac()) ni Descripcion* derivadas de
+# _enriquecer_df_lic/_enriquecer_df_oc — quedan pendientes hasta el próximo
+# ETL batch completo, que sí las recalcula sobre toda la tabla.
+# =============================================================================
+
+def _ruta_etl_scripts():
+    """sys.path para poder `import LI_SSO_SERVER`/`OC_SSO_SERVER`/`AG_SSO_SERVER2`
+    — directorio api/ en la raíz del repo, NO backend/api/. Mismo cálculo que
+    _RUTA_AG_SERVIDOR en views.py."""
+    import sys
+    from pathlib import Path
+    ruta = str(Path(__file__).resolve().parent.parent.parent / 'api')
+    if ruta not in sys.path:
+        sys.path.insert(0, ruta)
+    return ruta
+
+
+def _coercionar_valor(valor, tipo):
+    """tipo: 'fecha' | 'int' | 'float' — misma lógica que guardar_en_django()
+    de cada script ETL, replicada acá porque esas funciones son destructivas
+    (delete-all) y no se pueden invocar para un solo registro."""
+    import dateutil.parser
+    from django.utils.timezone import make_aware, is_naive
+
+    if valor is None or str(valor).strip() == '' or str(valor).strip().lower() == 'none':
+        return None
+    if tipo == 'fecha':
+        try:
+            val_dt = dateutil.parser.isoparse(str(valor))
+            if is_naive(val_dt):
+                val_dt = make_aware(val_dt)
+            return val_dt
+        except (ValueError, TypeError):
+            return None
+    if tipo == 'int':
+        try:
+            return int(float(valor))
+        except (ValueError, TypeError):
+            return None
+    if tipo == 'float':
+        try:
+            v = valor.replace(',', '.') if isinstance(valor, str) else valor
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+    return valor
+
+
+def _medir(fn):
+    """Ejecuta fn() cronometrando la llamada Y capturando su stdout: los
+    clientes MercadoPublico*Client (LI/OC/AG) nunca lanzan excepción en sus
+    fallos de red — hacen print() del error real (ej. '⚠️ API sin respuesta
+    tras 2 intentos: HTTP Error 504: Gateway Timeout') y devuelven None en
+    silencio (mismo patrón que ya captura el resto del proyecto para leer
+    progreso de ETL vía contextlib.redirect_stdout, ver CLAUDE.md). Sin este
+    capture, un 504 real de Mercado Público se reportaría como 'no
+    encontrado' — indistinguible para quien lo usa. Devuelve (resultado,
+    segundos, excepcion_o_None, log_capturado: str)."""
+    import time, io, contextlib
+    inicio = time.time()
+    buffer = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buffer):
+            resultado = fn()
+        return resultado, round(time.time() - inicio, 1), None, buffer.getvalue().strip()
+    except Exception as e:
+        return None, round(time.time() - inicio, 1), e, buffer.getvalue().strip()
+
+
+_LI_DT_FIELDS = {
+    'FechaCreacion', 'FechaCierre', 'FechaInicio', 'FechaFinal', 'FechaPublicacion',
+    'FechaAdjudicacion', 'FechaEstimadaAdjudicacion', 'Adj_Fecha',
+    'FechaPubRespuestas', 'FechaActoAperturaTecnica', 'FechaActoAperturaEconomica',
+    'FechaSoporteFisico', 'FechaTiempoEvaluacion', 'FechaEstimadaFirma',
+    'FechaVisitaTerreno', 'FechaEntregaAntecedentes', 'FechaInicioContrato',
+}
+_LI_INT_FIELDS = {
+    'Etapas', 'CodigoEstado', 'CodigoTipo', 'DiasCierreLicitacion', 'CantidadReclamos',
+    'Informada', 'TomaRazon', 'EstadoPublicidadOfertas', 'Contrato', 'Obras',
+    'UnidadTiempoEvaluacion', 'Estimacion', 'VisibilidadMonto', 'TipoPago',
+    'Tiempo', 'UnidadTiempo', 'ProhibicionContratacion', 'SubContratacion',
+    'ExtensionPlazo', 'EsBaseTipo', 'UnidadTiempoContratoLicitacion',
+    'ValorTiempoRenovacion', 'Adj_Tipo', 'Adj_NumeroOferentes',
+}
+
+
+def _resumen_licitacion_ligero(lic):
+    return {
+        'codigo_licitacion': lic.codigo_licitacion, 'Nombre': lic.Nombre,
+        'Estado': lic.Estado, 'FechaCierre': lic.FechaCierre, 'MontoEstimado': lic.MontoEstimado,
+    }
+
+
+def buscar_o_importar_licitacion(codigo):
+    """Busca Licitacion por PK local; si no existe, la trae en vivo de
+    Mercado Público (mismo cliente que usa LI_SSO_SERVER.py para el ETL
+    batch) y la persiste con update_or_create. Devuelve
+    (dict_resumen_o_None, creada: bool, diagnostico: dict) —
+    diagnostico siempre trae 'segundos' y 'motivo' para que el frontend
+    pueda mostrar en su mini terminal cuánto tardó y por qué falló si no
+    encontró nada (no encontrada de verdad vs. timeout/error de red)."""
+    codigo = (codigo or '').strip().upper()
+    if not codigo:
+        return None, False, {'segundos': 0, 'motivo': 'Código vacío.'}
+    lic = Licitacion.objects.filter(codigo_licitacion=codigo).first()
+    if lic:
+        return _resumen_licitacion_ligero(lic), False, {'segundos': 0, 'motivo': 'Encontrada en la base de datos local.'}
+
+    _ruta_etl_scripts()
+    import LI_SSO_SERVER as li
+    cliente = li.MercadoPublicoLicitacionesClient(
+        li.ApiConfig(codigo_organismo=li.CODIGO_ORGANISMO, ticket=li.TICKET, max_reintentos=2, timeout=30)
+    )
+    detalle, segundos, excepcion, log = _medir(lambda: cliente.obtener_detalle_licitacion(codigo))
+    if excepcion is not None:
+        return None, False, {'segundos': segundos, 'motivo': f'Excepción al consultar Mercado Público: {excepcion}', 'log': log}
+    if not detalle:
+        motivo = log or (
+            f'Mercado Público no devolvió datos para "{codigo}" tras {segundos}s '
+            f'(agotó los reintentos — puede no existir, o la API respondió lento/con error).'
+        )
+        return None, False, {'segundos': segundos, 'motivo': motivo, 'log': log}
+    resumen, items = li._extraer_resumen_y_detalles(codigo, detalle)
+
+    campos_modelo = {f.name for f in Licitacion._meta.get_fields()}
+    defaults = {}
+    for k, v in resumen.items():
+        if k == 'CodigoLicitacion':
+            continue
+        if k in _LI_DT_FIELDS:
+            defaults[k] = _coercionar_valor(v, 'fecha')
+        elif k == 'EsRenovable':
+            defaults[k] = str(v or '').strip().lower() in ('1', 'true', 'si', 'sí', 'yes')
+        elif k in _LI_INT_FIELDS:
+            defaults[k] = _coercionar_valor(v, 'int')
+        elif k == 'MontoEstimado':
+            defaults[k] = _coercionar_valor(v, 'float')
+        else:
+            defaults[k] = v if (v is not None and str(v).strip().lower() != 'none') else None
+    defaults = {k: v for k, v in defaults.items() if k in campos_modelo}
+    if not defaults.get('Numero'):
+        defaults['Numero'] = ''
+
+    campos_det = {f.name for f in DetalleLicitacion._meta.get_fields()}
+    with transaction.atomic():
+        lic, creada = Licitacion.objects.update_or_create(codigo_licitacion=codigo, defaults=defaults)
+        DetalleLicitacion.objects.filter(licitacion_id=codigo).delete()
+        nuevos = []
+        for it in items:
+            it = it.copy()
+            it.pop('CodigoLicitacion', None)
+            correlativo = it.pop('Correlativo', None) or it.get('CodigoProducto') or 0
+            det_defaults = {}
+            for k, v in it.items():
+                if k in ('Cantidad', 'MontoUnitarioGanador', 'CantidadAdjudicada'):
+                    det_defaults[k] = _coercionar_valor(v, 'float')
+                else:
+                    det_defaults[k] = v if (v is not None and str(v).strip().lower() != 'none') else None
+            det_defaults = {k: v for k, v in det_defaults.items() if k in campos_det}
+            nuevos.append(DetalleLicitacion(licitacion_id=codigo, Correlativo=correlativo, **det_defaults))
+        DetalleLicitacion.objects.bulk_create(nuevos)
+
+    return _resumen_licitacion_ligero(lic), True, {'segundos': segundos, 'motivo': 'OK'}
+
+
+_OC_DT_FIELDS = {'FechaCreacion', 'FechaEnvio', 'FechaAceptacion', 'FechaCancelacion', 'FechaUltimaModificacion'}
+_OC_FLOAT_FIELDS = {'CodigoEstado', 'CantidadEvaluacion', 'PromedioCalificacion', 'TotalNeto', 'PorcentajeIva', 'Impuestos', 'TotalBruto'}
+
+
+def _resumen_oc_ligero(oc):
+    return {'codigo_oc': oc.codigo_oc, 'NombreOC': oc.NombreOC, 'EstadoOC': oc.EstadoOC, 'TotalBruto': oc.TotalBruto}
+
+
+def buscar_o_importar_oc(codigo_oc):
+    """Busca OrdenCompra por PK local; si no existe, la trae en vivo (mismo
+    cliente que OC_SSO_SERVER.py) y persiste resumen + líneas con
+    update_or_create. NO recalcula EnlacePAC/ID_Proyecto/TipoOCInterno —
+    para corrección manual puntual del PAC existe OcPacOverride. Devuelve
+    (dict_resumen_o_None, creada: bool, diagnostico: dict) — ver docstring
+    de buscar_o_importar_licitacion para el propósito de diagnostico."""
+    codigo_oc = (codigo_oc or '').strip().upper()
+    if not codigo_oc:
+        return None, False, {'segundos': 0, 'motivo': 'Código vacío.'}
+    oc = OrdenCompra.objects.filter(codigo_oc=codigo_oc).first()
+    if oc:
+        return _resumen_oc_ligero(oc), False, {'segundos': 0, 'motivo': 'Encontrada en la base de datos local.'}
+
+    _ruta_etl_scripts()
+    import OC_SSO_SERVER as ocserver
+    cliente = ocserver.MercadoPublicoClient(
+        ocserver.ApiConfig(codigo_organismo=ocserver.CODIGO_ORGANISMO, ticket=ocserver.TICKET, max_reintentos=2, timeout=30)
+    )
+    detalle, segundos, excepcion, log = _medir(lambda: cliente.obtener_detalle_oc(codigo_oc))
+    if excepcion is not None:
+        return None, False, {'segundos': segundos, 'motivo': f'Excepción al consultar Mercado Público: {excepcion}', 'log': log}
+    if not detalle:
+        motivo = log or (
+            f'Mercado Público no devolvió datos para "{codigo_oc}" tras {segundos}s '
+            f'(agotó los reintentos — puede no existir, o la API respondió lento/con error).'
+        )
+        return None, False, {'segundos': segundos, 'motivo': motivo, 'log': log}
+    resumen, items = ocserver._extraer_resumen_y_detalles(codigo_oc, detalle)
+
+    campos_modelo = {f.name for f in OrdenCompra._meta.get_fields()}
+    defaults = {}
+    for k, v in resumen.items():
+        if k == 'CodigoOC':
+            continue
+        if k in _OC_DT_FIELDS:
+            defaults[k] = _coercionar_valor(v, 'fecha')
+        elif k in _OC_FLOAT_FIELDS:
+            defaults[k] = _coercionar_valor(v, 'float')
+        else:
+            defaults[k] = v if (v is not None and str(v).strip().lower() != 'none') else None
+    defaults = {k: v for k, v in defaults.items() if k in campos_modelo}
+
+    campos_det = {f.name for f in DetalleOrdenCompra._meta.get_fields()}
+    with transaction.atomic():
+        oc, creada = OrdenCompra.objects.update_or_create(codigo_oc=codigo_oc, defaults=defaults)
+        DetalleOrdenCompra.objects.filter(orden_compra_id=codigo_oc).delete()
+        nuevos = []
+        for it in items:
+            it = it.copy()
+            it.pop('CodigoOC', None)
+            correlativo = it.pop('Correlativo', None) or it.get('CodigoProducto') or 0
+            det_defaults = {}
+            for k, v in it.items():
+                if k in ('Cantidad', 'PrecioNeto', 'TotalImpuestos', 'TotalLinea'):
+                    det_defaults[k] = _coercionar_valor(v, 'float')
+                else:
+                    det_defaults[k] = v if (v is not None and str(v).strip().lower() != 'none') else None
+            det_defaults = {k: v for k, v in det_defaults.items() if k in campos_det}
+            nuevos.append(DetalleOrdenCompra(orden_compra_id=codigo_oc, Correlativo=correlativo, **det_defaults))
+        DetalleOrdenCompra.objects.bulk_create(nuevos)
+
+    return _resumen_oc_ligero(oc), True, {'segundos': segundos, 'motivo': 'OK'}
+
+
+_CA_DT_DBCOLS = {'FechaPublicacion', 'FechaCierre', 'FechaUltimoCambio'}
+
+
+def _resumen_compra_agil_ligero(fila):
+    """`fila` es un dict (de .values(), nunca una instancia de modelo) — ver
+    nota en buscar_o_importar_compra_agil sobre por qué se evita a propósito
+    cualquier SELECT de fila completa sobre CompraAgilResumen."""
+    return {
+        'codigocompraagil': fila.get('codigocompraagil'),
+        'nombre': fila.get('nombre'),
+        'estadoglosa': fila.get('estadoglosa'),
+    }
+
+
+def buscar_o_importar_compra_agil(codigo):
+    """Busca CompraAgilResumen por PK local; si no existe, la trae en vivo
+    (mismo cliente que AG_SSO_SERVER2.py) y persiste resumen + productos
+    solicitados. Mapea por db_column (los atributos Python del modelo son
+    minúsculas, ej. codigocompraagil/db_column='CodigoCompraAgil' — a
+    diferencia de Licitacion/OrdenCompra que usan PascalCase directo). NO
+    importa proveedores/documentos (fuera de alcance — se completan en el
+    próximo ETL batch completo).
+
+    IMPORTANTE — nunca usar .get()/.first()/update_or_create() (ni cualquier
+    otra operación que dispare un SELECT de la fila completa) sobre
+    CompraAgilResumen: la tabla es managed=False, poblada por
+    AG_SSO_SERVER2.sincronizar_con_servidor() con pandas.to_sql() sin
+    validación de tipos ni constraint de unicidad — hay filas reales en
+    producción con fechas corruptas (string no parseable) en columnas
+    DateTimeField, que revientan con AttributeError al convertir el valor
+    ('str' object has no attribute 'utcoffset') apenas Django intenta leer
+    esa fila completa (bug real reportado 2026-09-02: cualquier SELECT que
+    toque esas columnas, en cualquier fila de la tabla, puede fallar). Por
+    eso acá todo se hace con .values() acotado a las columnas que interesan
+    (nunca las de fecha), .exists() para el existence-check, y .update()/
+    .create() en vez de update_or_create() para escribir sin leer antes.
+
+    IMPORTANTE #2 — la API v2 de Compra Ágil (api2.mercadopublico.cl) es
+    MUY lenta: medido en producción, una sola consulta de detalle puede
+    tardar ~25s (bug real reportado 2026-09-02: con timeout=30 por defecto
+    y max_reintentos=2, agotaba los 2 intentos por timeout y reportaba
+    'no encontrado' para códigos que sí existían). timeout=45 le da margen;
+    devuelve (dict_resumen_o_None, creada: bool, diagnostico: dict) con
+    'segundos' reales para que el frontend pueda mostrar cuánto tardó."""
+    codigo = (codigo or '').strip().upper()
+    if not codigo:
+        return None, False, {'segundos': 0, 'motivo': 'Código vacío.'}
+    fila = CompraAgilResumen.objects.filter(codigocompraagil=codigo).values(
+        'codigocompraagil', 'nombre', 'estadoglosa'
+    ).first()
+    if fila:
+        return _resumen_compra_agil_ligero(fila), False, {'segundos': 0, 'motivo': 'Encontrada en la base de datos local.'}
+
+    _ruta_etl_scripts()
+    import AG_SSO_SERVER2 as ag
+    # ApiConfig de este script difiere de LI/OC: toma ticket+region (no
+    # codigo_organismo) — obtener_detalle_compra_agil() de todas formas no usa
+    # region (llama directo a /v2/compra-agil/{codigo}), pero el dataclass la
+    # exige igual. REGION_LOS_LAGOS es la misma constante que usa el CLI.
+    # max_reintentos=1 (NO 2) a propósito — ver 2026-09-02: reintentar duplica
+    # el consumo del rate-limit de Mercado Público sin mejorar la fiabilidad
+    # (una consulta aislada de 1 solo intento con timeout=30 es la que
+    # demostró funcionar de forma confiable; reintentar de inmediato tras un
+    # 429/504 solo empeora el problema al gastar el doble de cupo por búsqueda).
+    cliente = ag.MercadoPublicoCompraAgilClient(
+        ag.ApiConfig(ticket=ag.TICKET, region=ag.REGION_LOS_LAGOS, max_reintentos=1, timeout=30)
+    )
+    detalle, segundos, excepcion, log = _medir(lambda: cliente.obtener_detalle_compra_agil(codigo))
+    if excepcion is not None:
+        return None, False, {'segundos': segundos, 'motivo': f'Excepción al consultar Mercado Público: {excepcion}', 'log': log}
+    if not detalle:
+        motivo = log or (
+            f'Mercado Público no devolvió datos para "{codigo}" tras {segundos}s '
+            f'(agotó los reintentos — la API de Compra Ágil es lenta, ~25s por consulta; '
+            f'puede no existir, o haber tardado más de lo esperado).'
+        )
+        return None, False, {'segundos': segundos, 'motivo': motivo, 'log': log}
+    resumen, productos, _proveedores, _cotizados, _documentos = ag._extraer_tablas_normalizadas(detalle)
+
+    dbcol_a_attname = {
+        f.db_column: f.attname for f in CompraAgilResumen._meta.get_fields() if getattr(f, 'db_column', None)
+    }
+    defaults = {}
+    for k, v in resumen.items():
+        attname = dbcol_a_attname.get(k)
+        if not attname or attname == 'codigocompraagil':
+            continue
+        if k in _CA_DT_DBCOLS:
+            defaults[attname] = _coercionar_valor(v, 'fecha')
+        else:
+            defaults[attname] = v if (v is not None and str(v).strip().lower() != 'none') else None
+
+    dbcol_a_attname_prod = {
+        f.db_column: f.attname for f in CompraAgilProducto._meta.get_fields() if getattr(f, 'db_column', None)
+    }
+    with transaction.atomic():
+        creada = not CompraAgilResumen.objects.filter(codigocompraagil=codigo).exists()
+        if creada:
+            CompraAgilResumen.objects.create(codigocompraagil=codigo, **defaults)
+        else:
+            CompraAgilResumen.objects.filter(codigocompraagil=codigo).update(**defaults)
+        CompraAgilProducto.objects.filter(codigocompraagil=codigo).delete()
+        nuevos = []
+        for p in productos:
+            pd_defaults = {dbcol_a_attname_prod[k]: v for k, v in p.items() if k in dbcol_a_attname_prod}
+            if not pd_defaults.get('codigoproducto'):
+                continue
+            nuevos.append(CompraAgilProducto(**pd_defaults))
+        CompraAgilProducto.objects.bulk_create(nuevos)
+
+    resultado = {'codigocompraagil': codigo, 'nombre': defaults.get('nombre'), 'estadoglosa': defaults.get('estadoglosa')}
+    return resultado, True, {'segundos': segundos, 'motivo': 'OK'}
+
+
+def agregar_oc_a_proceso(proceso_id, codigo_oc, usuario):
+    """Vincula una OrdenCompra ya sincronizada localmente a un proceso (un
+    proceso puede generar varias OC, ej. despachos parciales). Lanza
+    OrdenCompra.DoesNotExist si el código no está sincronizado — la vista
+    debe indicarle al frontend que use el buscador de Mercado Público
+    (Fase 3) en ese caso."""
+    OrdenCompra.objects.get(pk=codigo_oc)  # valida existencia, 404 explícito en la vista
+    proceso = ProcesoCompra.objects.get(pk=proceso_id)
+    vinculo, _creado = ProcesoCompraOrdenCompra.objects.get_or_create(
+        proceso=proceso, orden_compra_id=codigo_oc,
+        defaults={'creado_por': usuario},
+    )
+    return vinculo

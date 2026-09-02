@@ -15,8 +15,10 @@ from .models import (
     PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
     SigfeAnexo1,
     FscOcLink, CompradorInicial,
+    ComprasCompradorPerfil, ProcesoCompra, ProcesoCompraFormulario,
+    ProcesoCompraOrdenCompra, ProcesoCompraEstadoLog, ComprasNotificacion,
 )
-from .services import generar_id_formulario, _pac_match_estado
+from .services import generar_id_formulario, _pac_match_estado, ESTADOS_POR_TIPO_PROCESO
 
 ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
 
@@ -439,6 +441,167 @@ class FormularioFSCProductoSerializer(serializers.ModelSerializer):
 
     def get_id_formulario(self, obj):
         return generar_id_formulario(obj.folio, obj.anho, tipo_formulario=obj.tipo_formulario)
+
+
+# =============================================================================
+# Módulo Gestión de Compras — Procesos de Compra por comprador
+# =============================================================================
+
+class ComprasCompradorPerfilSerializer(serializers.ModelSerializer):
+    nombre_usuario = serializers.CharField(source='usuario.first_name', read_only=True)
+
+    class Meta:
+        model = ComprasCompradorPerfil
+        fields = ['nombre_comprador', 'usuario', 'nombre_usuario', 'activo']
+
+
+class ProcesoCompraFormularioMiniSerializer(serializers.ModelSerializer):
+    """Vista embebida de un FSC vinculado a un proceso — folio/unidad/requerimiento
+    ya resueltos para no obligar al frontend a otro round-trip."""
+    id_formulario = serializers.SerializerMethodField()
+    folio = serializers.IntegerField(source='formulario_derivado.folio', read_only=True)
+    anho = serializers.IntegerField(source='formulario_derivado.anho', read_only=True)
+    unidad_requirente = serializers.CharField(source='formulario_derivado.unidad_requirente', read_only=True)
+    requerimiento = serializers.CharField(source='formulario_derivado.requerimiento', read_only=True)
+    monto_estimado = serializers.IntegerField(source='formulario_derivado.monto_estimado', read_only=True)
+
+    class Meta:
+        model = ProcesoCompraFormulario
+        fields = [
+            'id', 'formulario_derivado', 'id_formulario', 'folio', 'anho',
+            'unidad_requirente', 'requerimiento', 'monto_estimado', 'creado_en',
+        ]
+
+    def get_id_formulario(self, obj):
+        fsc = obj.formulario_derivado
+        return generar_id_formulario(fsc.folio, fsc.anho, formulario_texto=fsc.formulario)
+
+
+class ProcesoCompraOrdenCompraMiniSerializer(serializers.ModelSerializer):
+    codigo_oc = serializers.CharField(source='orden_compra_id', read_only=True)
+    nombre_oc = serializers.CharField(source='orden_compra.NombreOC', read_only=True)
+    estado_oc = serializers.CharField(source='orden_compra.EstadoOC', read_only=True)
+    total_bruto = serializers.DecimalField(source='orden_compra.TotalBruto', max_digits=20,
+                                            decimal_places=2, read_only=True)
+    link_mp = serializers.URLField(source='orden_compra.LinkMP', read_only=True)
+    id_proyecto = serializers.CharField(source='orden_compra.ID_Proyecto', read_only=True)
+    nombre_proyecto = serializers.CharField(source='orden_compra.Nombre_Proyecto', read_only=True)
+    enlace_pac = serializers.CharField(source='orden_compra.EnlacePAC', read_only=True)
+
+    class Meta:
+        model = ProcesoCompraOrdenCompra
+        fields = [
+            'id', 'orden_compra', 'codigo_oc', 'nombre_oc', 'estado_oc', 'total_bruto', 'creado_en',
+            'link_mp', 'id_proyecto', 'nombre_proyecto', 'enlace_pac',
+        ]
+
+
+class ProcesoCompraEstadoLogSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.CharField(source='usuario.first_name', read_only=True)
+    estado_anterior_display = serializers.SerializerMethodField()
+    estado_nuevo_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProcesoCompraEstadoLog
+        fields = [
+            'id', 'estado_anterior', 'estado_anterior_display', 'estado_nuevo',
+            'estado_nuevo_display', 'usuario', 'usuario_nombre', 'comentario', 'fecha',
+        ]
+
+    def _label(self, codigo):
+        return dict(ProcesoCompra.ESTADO_PROCESO_CHOICES).get(codigo, codigo)
+
+    def get_estado_anterior_display(self, obj):
+        return self._label(obj.estado_anterior) if obj.estado_anterior else None
+
+    def get_estado_nuevo_display(self, obj):
+        return self._label(obj.estado_nuevo)
+
+
+class ProcesoCompraSerializer(serializers.ModelSerializer):
+    tipo_proceso_display = serializers.CharField(source='get_tipo_proceso_display', read_only=True)
+    estado_proceso_display = serializers.CharField(source='get_estado_proceso_display', read_only=True)
+    comprador_nombre = serializers.CharField(source='comprador.first_name', read_only=True)
+    licitacion_nombre = serializers.CharField(source='licitacion.Nombre', read_only=True)
+    # Estado REAL en Mercado Público (distinto de estado_proceso, que es la
+    # gestión interna del comprador) — bloque "Historial de Compra".
+    licitacion_estado = serializers.CharField(source='licitacion.Estado', read_only=True)
+    compra_agil_nombre = serializers.SerializerMethodField()
+    compra_agil_estado = serializers.SerializerMethodField()
+    formularios_detalle = serializers.SerializerMethodField()
+    ordenes_compra_detalle = serializers.SerializerMethodField()
+    n_formularios = serializers.SerializerMethodField()
+    n_ordenes_compra = serializers.SerializerMethodField()
+    estados_validos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProcesoCompra
+        fields = [
+            'id', 'tipo_proceso', 'tipo_proceso_display', 'estado_proceso', 'estado_proceso_display',
+            'titulo', 'comprador', 'comprador_nombre', 'licitacion', 'licitacion_nombre', 'licitacion_estado',
+            'codigo_compra_agil', 'compra_agil_nombre', 'compra_agil_estado',
+            'monto_estimado', 'fecha_cierre_estimada', 'observaciones',
+            'creado_por', 'creado_en', 'actualizado_en', 'finalizado_en',
+            'formularios_detalle', 'ordenes_compra_detalle', 'n_formularios', 'n_ordenes_compra',
+            'estados_validos',
+        ]
+        read_only_fields = ['comprador', 'creado_por', 'creado_en', 'actualizado_en', 'finalizado_en']
+
+    def _compra_agil(self, obj):
+        if not obj.codigo_compra_agil:
+            return None
+        if not hasattr(obj, '_ca_cache'):
+            from .models import CompraAgilResumen
+            obj._ca_cache = CompraAgilResumen.objects.filter(codigocompraagil=obj.codigo_compra_agil).first()
+        return obj._ca_cache
+
+    def get_compra_agil_nombre(self, obj):
+        ca = self._compra_agil(obj)
+        return ca.nombre if ca else None
+
+    def get_compra_agil_estado(self, obj):
+        ca = self._compra_agil(obj)
+        return ca.estadoglosa if ca else None
+
+    def get_formularios_detalle(self, obj):
+        vinculos = obj.vinculos_formulario.select_related('formulario_derivado')
+        return ProcesoCompraFormularioMiniSerializer(vinculos, many=True).data
+
+    def get_ordenes_compra_detalle(self, obj):
+        vinculos = obj.vinculos_oc.select_related('orden_compra')
+        return ProcesoCompraOrdenCompraMiniSerializer(vinculos, many=True).data
+
+    def get_n_formularios(self, obj):
+        return obj.vinculos_formulario.count()
+
+    def get_n_ordenes_compra(self, obj):
+        return obj.vinculos_oc.count()
+
+    def get_estados_validos(self, obj):
+        return ESTADOS_POR_TIPO_PROCESO.get(obj.tipo_proceso, [])
+
+
+class ComprasMisFormularioSerializer(FormularioFSCDerivadoSerializer):
+    """Extiende FormularioFSCDerivadoSerializer con un resumen de los
+    ProcesoCompra ya vinculados a este FSC — así 'Mis Formularios' puede
+    mostrar en la misma fila si ya está clasificado o no, sin una pestaña
+    separada."""
+    procesos = serializers.SerializerMethodField()
+
+    def get_procesos(self, obj):
+        return [
+            {'id': p.id, 'tipo_proceso': p.tipo_proceso, 'estado_proceso': p.estado_proceso, 'titulo': p.titulo}
+            for p in obj.procesos_compra.all()
+        ]
+
+
+class ComprasNotificacionSerializer(serializers.ModelSerializer):
+    proceso_titulo = serializers.CharField(source='proceso.titulo', read_only=True)
+
+    class Meta:
+        model = ComprasNotificacion
+        fields = ['id', 'proceso', 'proceso_titulo', 'tipo', 'mensaje', 'leida', 'creado_en']
+        read_only_fields = ['proceso', 'proceso_titulo', 'tipo', 'mensaje', 'creado_en']
 
 
 # =============================================================================

@@ -5,6 +5,7 @@
 const MODULOS_GENERALES = ['Licitaciones', 'Órdenes de Compra', 'PAC', 'Compra Ágil'];
 const MODULOS_ABASTECIMIENTO = ['Formularios FSC', 'Boletas de Garantía', 'Contratos SSO'];
 const MODULOS_FINANZAS = ['Anexo N°1 — Ejec. Presupuestaria', 'Anexo N°3 — Reporte Deuda', 'Dashboard Finanzas'];
+const MODULOS_COMPRAS = ['Procesos de Compra'];
 
 export const ROLES = [
     {
@@ -29,18 +30,32 @@ export const ROLES = [
         modulos: [...MODULOS_GENERALES, ...MODULOS_FINANZAS],
     },
     {
+        value: 'comprador',
+        label: 'Comprador',
+        color: '#0891b2',
+        descripcion: 'Generales + Abastecimiento (Formularios FSC, Boletas, Contratos) + Procesos de Compra, con vista personalizada de sus propios formularios y procesos.',
+        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_COMPRAS],
+    },
+    {
+        value: 'jefatura',
+        label: 'Jefatura',
+        color: '#be185d',
+        descripcion: 'Generales + Procesos de Compra con vista global (todos los compradores), dashboard de KPIs y notificaciones.',
+        modulos: [...MODULOS_GENERALES, ...MODULOS_COMPRAS],
+    },
+    {
         value: 'general',
         label: 'General (Todos)',
         color: '#d97706',
-        descripcion: 'Ve Abastecimiento y Finanzas completos, sin administrar usuarios.',
-        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS],
+        descripcion: 'Ve Abastecimiento, Finanzas y Procesos de Compra completos, sin administrar usuarios.',
+        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS, ...MODULOS_COMPRAS],
     },
     {
         value: 'admin',
         label: 'Administrador',
         color: '#7c3aed',
         descripcion: 'Todo el sistema, incluyendo Gestión de Usuarios (roles, altas, bajas).',
-        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS, 'Gestión de Usuarios'],
+        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS, ...MODULOS_COMPRAS, 'Gestión de Usuarios'],
     },
 ];
 

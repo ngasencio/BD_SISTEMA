@@ -8,7 +8,8 @@
  *  /login                       → Pública
  *  /                            → Protegida → AppLayout > Home
  *  /licitaciones                → Protegida → AppLayout > Dashboard
- *  /abastecimiento/*            → Protegida (rol: admin, abastecimiento, general)
+ *  /abastecimiento/*            → Protegida (rol: admin, abastecimiento, comprador, general)
+ *  /compras/*                   → Protegida (rol: admin, comprador, jefatura, general)
  *  /finanzas/*                  → Protegida (rol: admin, finanzas, general)
  *  /anexo1/base-datos           → Protegida (rol: admin, finanzas, general)
  *  /anexo3/reporte-sigfe        → Protegida (rol: admin, finanzas, general) — único reporte Anexo N°3, el viejo AnexoDeudaPage se eliminó
@@ -39,6 +40,7 @@ import { perfilRoute, adminUsuariosRoute } from './features/usuarios/routes';
 import { devengoSigfeRoutes } from './features/devengo-sigfe/routes';
 import { anexo1SigfeRoutes } from './features/anexo1-sigfe/routes';
 import { facturasRoutes } from './features/facturas/routes';
+import { comprasRoutes } from './features/compras/routes';
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
@@ -79,10 +81,15 @@ function AppRoutes() {
             {/* Módulo Compra Ágil (todos los autenticados) */}
             {compraAgilRoutes}
 
-            {/* Módulo Abastecimiento (admin + abastecimiento + general) */}
-            <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'general']} />}>
+            {/* Módulo Abastecimiento (admin + abastecimiento + comprador + general) */}
+            <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'comprador', 'general']} />}>
               {abastecimientoRoutes}
               {fscOcPacRoutes}
+            </Route>
+
+            {/* Módulo Gestión de Compras (admin + comprador + jefatura + general) */}
+            <Route element={<RequireRole allowed={['admin', 'comprador', 'jefatura', 'general']} />}>
+              {comprasRoutes}
             </Route>
 
             {/* Módulo Finanzas (admin + finanzas + general) */}

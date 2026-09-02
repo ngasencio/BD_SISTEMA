@@ -6010,20 +6010,24 @@ select.boleta-input {
 .mu-field span { font-size: 12.5px; font-weight: 600; color: #374151; display: flex; align-items: center; gap: 4px; margin-bottom: 5px; }
 .mu-hint { font-weight: 400; color: #9ca3af; font-size: 11px; }
 .mu-field input,
-.mu-field select {
+.mu-field select,
+.mu-field textarea {
   width: 100%;
   border: 1px solid #e5e7eb;
   border-radius: 7px;
   padding: 8px 11px;
   font-size: 13.5px;
+  font-family: inherit;
   color: #111827;
   background: #fafafa;
   outline: none;
   transition: border-color 0.15s, background 0.15s;
   box-sizing: border-box;
 }
+.mu-field textarea { resize: vertical; line-height: 1.5; }
 .mu-field input:focus,
-.mu-field select:focus { border-color: var(--gob-azul, #1d4ed8); background: #fff; }
+.mu-field select:focus,
+.mu-field textarea:focus { border-color: var(--gob-azul, #1d4ed8); background: #fff; }
 .mu-pass-wrap { position: relative; }
 .mu-pass-wrap input { padding-right: 36px; }
 .mu-pass-toggle {

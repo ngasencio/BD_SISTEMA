@@ -19,8 +19,8 @@ from django.db.models.functions import Cast
 from django.http import HttpResponse, FileResponse
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters as drf_filters, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import filters as drf_filters, generics, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -49,6 +49,7 @@ from .models import (
     PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
     SigfeAnexo1,
     FscOcLink, CompradorInicial,
+    ComprasCompradorPerfil, ProcesoCompra,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
@@ -64,6 +65,8 @@ from .serializers import (
     DepartamentoSerializer, EstablecimientoSerializer,
     FscOcLinkSerializer, CompradorInicialSerializer,
     DevengoSigfeAnualSerializer, SigfeAnexo1Serializer,
+    ComprasCompradorPerfilSerializer, ProcesoCompraSerializer, ProcesoCompraEstadoLogSerializer,
+    ComprasMisFormularioSerializer,
 )
 
 # Campos de fecha que mapea EVENT_CFG en CalendarioSect.jsx (17 campos)
@@ -110,15 +113,24 @@ def _tiene_rol(user, roles):
 
 
 class _IsAbastecimiento(BasePermission):
-    """Acceso al módulo Abastecimiento: admin, abastecimiento o general."""
+    """Acceso al módulo Abastecimiento: admin, abastecimiento, comprador o general.
+    'comprador' incluye Abastecimiento completo (decisión 2026-09-01: son las
+    mismas personas que ya gestionan FSC a diario, no se les puede quitar acceso
+    al pasarlas al nuevo rol)."""
     def has_permission(self, request, view):
-        return _tiene_rol(request.user, {'admin', 'abastecimiento', 'general'})
+        return _tiene_rol(request.user, {'admin', 'abastecimiento', 'comprador', 'general'})
 
 
 class _IsFinanzas(BasePermission):
     """Acceso al módulo Finanzas: admin, finanzas o general."""
     def has_permission(self, request, view):
         return _tiene_rol(request.user, {'admin', 'finanzas', 'general'})
+
+
+class _IsComprador(BasePermission):
+    """Acceso al módulo Gestión de Compras: admin, comprador o jefatura."""
+    def has_permission(self, request, view):
+        return _tiene_rol(request.user, {'admin', 'comprador', 'jefatura', 'general'})
 
 
 # =============================================================================
@@ -1982,6 +1994,243 @@ def fsc_oc_pac_impacto_view(request):
     data = calcular_fsc_oc_impacto()
     cache.set(cache_key, data, timeout=300)
     return Response(data)
+
+
+# =============================================================================
+# Módulo Gestión de Compras — Procesos de Compra por comprador
+#
+# Fase 2 del plan (2026-09-01): CRUD de ProcesoCompra sin integración en vivo
+# con Mercado Público (Fase 3) ni notificaciones (Fase 4). Ver la sección
+# homónima en services.py para la lógica de negocio.
+# =============================================================================
+
+class ComprasCompradorPerfilViewSet(viewsets.ReadOnlyModelViewSet):
+    """Catálogo nombre-Panel-SSO -> usuario, para selects de 'reasignar comprador'."""
+    queryset = ComprasCompradorPerfil.objects.select_related('usuario').filter(activo=True)
+    serializer_class = ComprasCompradorPerfilSerializer
+    permission_classes = [IsAuthenticated, _IsComprador]
+    pagination_class = None
+
+
+class ComprasMisFormulariosView(generics.ListAPIView):
+    """Bandeja personalizada del comprador logueado: todos sus
+    FormularioFSCDerivado en estado 'AC' (bandeja 'A Comprador'), estén o no
+    ya clasificados en un ProcesoCompra — cada fila trae su(s) proceso(s)
+    vinculado(s) en `procesos` para que el frontend decida 'Clasificar' vs
+    'Gestionar' sin necesitar una pestaña separada."""
+    serializer_class = ComprasMisFormularioSerializer
+    permission_classes = [IsAuthenticated, _IsComprador]
+    filter_backends = [drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    search_fields = ['requerimiento', 'especificaciones_tecnicas', 'unidad_requirente']
+    ordering_fields = ['fecha_derivado', 'folio', 'monto_estimado']
+    ordering = ['-fecha_derivado']
+
+    def get_queryset(self):
+        from .services import listar_fsc_pendientes_comprador, listar_fsc_finalizados_comprador
+        if self.request.GET.get('finalizados', '').strip().lower() in ('1', 'true', 'si'):
+            qs = listar_fsc_finalizados_comprador(self.request.user)
+        else:
+            qs = listar_fsc_pendientes_comprador(self.request.user, incluir_ya_clasificados=True)
+        return qs.prefetch_related('procesos_compra')
+
+
+class ProcesoCompraViewSet(viewsets.ModelViewSet):
+    """CRUD de Procesos de Compra. Un comprador ve y opera solo los suyos;
+    jefatura/admin/general ven y pueden operar todos."""
+    serializer_class = ProcesoCompraSerializer
+    permission_classes = [IsAuthenticated, _IsComprador]
+    filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
+    filterset_fields = ['tipo_proceso', 'estado_proceso', 'comprador']
+    ordering_fields = ['creado_en', 'actualizado_en', 'fecha_cierre_estimada']
+    ordering = ['-actualizado_en']
+
+    def get_queryset(self):
+        qs = ProcesoCompra.objects.select_related('comprador', 'licitacion', 'creado_por')
+        if not _tiene_rol(self.request.user, {'admin', 'jefatura', 'general'}):
+            qs = qs.filter(comprador=self.request.user)
+        formulario_id = self.request.GET.get('formulario_id', '').strip()
+        if formulario_id.isdigit():
+            qs = qs.filter(vinculos_formulario__formulario_derivado_id=formulario_id)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        from .services import crear_proceso_compra
+        data = request.data
+        comprador_id = data.get('comprador') or request.user.id
+        if str(comprador_id) != str(request.user.id) and not _tiene_rol(
+            request.user, {'admin', 'jefatura', 'general'}
+        ):
+            return Response({'error': 'No puede crear procesos para otro comprador.'}, status=403)
+        try:
+            comprador = User.objects.get(pk=comprador_id)
+        except User.DoesNotExist:
+            return Response({'error': 'Comprador no encontrado.'}, status=400)
+        try:
+            proceso = crear_proceso_compra(
+                tipo_proceso=data.get('tipo_proceso'),
+                titulo=data.get('titulo', ''),
+                comprador=comprador,
+                formulario_ids=data.get('formulario_ids') or [],
+                usuario_creador=request.user,
+                estado_proceso=data.get('estado_proceso') or 'RECEPCIONADO',
+                monto_estimado=data.get('monto_estimado') or None,
+                observaciones=data.get('observaciones', ''),
+                # Enlace directo al crear — permite "elegir la licitación/compra
+                # ágil del desplegable" como un solo paso (Bloque 1 del panel).
+                licitacion_id=data.get('licitacion') or None,
+                codigo_compra_agil=data.get('codigo_compra_agil') or None,
+            )
+        except ValueError as e:
+            return Response({'error': str(e)}, status=400)
+        return Response(self.get_serializer(proceso).data, status=201)
+
+    @action(detail=True, methods=['post'], url_path='cambiar-estado')
+    def cambiar_estado(self, request, pk=None):
+        from .services import cambiar_estado_proceso
+        nuevo_estado = request.data.get('estado_proceso')
+        if not nuevo_estado:
+            return Response({'error': 'estado_proceso es requerido'}, status=400)
+        proceso = self.get_object()
+        try:
+            proceso = cambiar_estado_proceso(
+                proceso.id, nuevo_estado, request.user, request.data.get('comentario', '')
+            )
+        except ValueError as e:
+            return Response({'error': str(e)}, status=400)
+        return Response(self.get_serializer(proceso).data)
+
+    @action(detail=True, methods=['post'], url_path='agregar-formulario')
+    def agregar_formulario(self, request, pk=None):
+        from .services import agregar_formulario_a_proceso
+        formulario_id = request.data.get('formulario_id')
+        if not formulario_id:
+            return Response({'error': 'formulario_id es requerido'}, status=400)
+        proceso = self.get_object()
+        try:
+            agregar_formulario_a_proceso(proceso.id, formulario_id, request.user)
+        except FormularioFSCDerivado.DoesNotExist:
+            return Response({'error': 'Formulario no encontrado'}, status=404)
+        return Response(self.get_serializer(proceso).data)
+
+    @action(detail=True, methods=['post'], url_path='agregar-oc')
+    def agregar_oc(self, request, pk=None):
+        from .services import agregar_oc_a_proceso
+        codigo_oc = request.data.get('codigo_oc')
+        if not codigo_oc:
+            return Response({'error': 'codigo_oc es requerido'}, status=400)
+        proceso = self.get_object()
+        try:
+            agregar_oc_a_proceso(proceso.id, codigo_oc, request.user)
+        except OrdenCompra.DoesNotExist:
+            return Response(
+                {'error': 'OC no encontrada localmente. Búsquela con la integración de Mercado Público.'},
+                status=404,
+            )
+        return Response(self.get_serializer(proceso).data)
+
+    @action(detail=True, methods=['get'], url_path='historial')
+    def historial(self, request, pk=None):
+        proceso = self.get_object()
+        logs = proceso.historial_estados.select_related('usuario').all()
+        return Response(ProcesoCompraEstadoLogSerializer(logs, many=True).data)
+
+    @action(detail=True, methods=['get'], url_path='detalle-mp')
+    def detalle_mp(self, request, pk=None):
+        from .services import calcular_proceso_detalle_mp
+        proceso = self.get_object()
+        return Response(calcular_proceso_detalle_mp(proceso.id))
+
+    @action(detail=True, methods=['post'], url_path='desvincular-mp')
+    def desvincular_mp(self, request, pk=None):
+        from .services import desvincular_proceso_mp
+        proceso = self.get_object()
+        proceso = desvincular_proceso_mp(proceso.id, request.user)
+        return Response(self.get_serializer(proceso).data)
+
+    @action(detail=True, methods=['post'], url_path='quitar-oc')
+    def quitar_oc(self, request, pk=None):
+        from .services import quitar_oc_de_proceso
+        codigo_oc = request.data.get('codigo_oc')
+        if not codigo_oc:
+            return Response({'error': 'codigo_oc es requerido'}, status=400)
+        proceso = self.get_object()
+        quitar_oc_de_proceso(proceso.id, codigo_oc, request.user)
+        proceso.refresh_from_db()
+        return Response(self.get_serializer(proceso).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsComprador])
+def compras_buscar_licitacion_view(request):
+    """Búsqueda local de Licitaciones para enlazar a un Proceso de Compra.
+    Fase 3 agrega el fallback a la API de Mercado Público cuando no hay
+    resultados locales — mismo contrato de respuesta, solo cambia lo que
+    hace la función de services por dentro."""
+    from .services import buscar_licitacion_local
+    return Response(buscar_licitacion_local(request.GET.get('q', '')))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsComprador])
+def compras_buscar_compra_agil_view(request):
+    from .services import buscar_compra_agil_local
+    return Response(buscar_compra_agil_local(request.GET.get('q', '')))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsComprador])
+def compras_buscar_oc_view(request):
+    from .services import buscar_oc_local
+    return Response(buscar_oc_local(request.GET.get('q', '')))
+
+
+# ── Fase 3: importación en vivo desde Mercado Público cuando la búsqueda
+# local no encuentra el código exacto (ver docstring de cada función en
+# services.py para el alcance y las limitaciones) ──────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, _IsComprador])
+def compras_importar_licitacion_view(request):
+    from .services import buscar_o_importar_licitacion
+    codigo = (request.data.get('codigo') or '').strip()
+    if not codigo:
+        return Response({'error': 'codigo es requerido'}, status=400)
+    resumen, creada, diagnostico = buscar_o_importar_licitacion(codigo)
+    if resumen is None:
+        return Response({'error': diagnostico['motivo'], 'diagnostico': diagnostico}, status=404)
+    resumen['_creada'] = creada
+    resumen['_diagnostico'] = diagnostico
+    return Response(resumen)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, _IsComprador])
+def compras_importar_compra_agil_view(request):
+    from .services import buscar_o_importar_compra_agil
+    codigo = (request.data.get('codigo') or '').strip()
+    if not codigo:
+        return Response({'error': 'codigo es requerido'}, status=400)
+    resumen, creada, diagnostico = buscar_o_importar_compra_agil(codigo)
+    if resumen is None:
+        return Response({'error': diagnostico['motivo'], 'diagnostico': diagnostico}, status=404)
+    resumen['_creada'] = creada
+    resumen['_diagnostico'] = diagnostico
+    return Response(resumen)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, _IsComprador])
+def compras_importar_oc_view(request):
+    from .services import buscar_o_importar_oc
+    codigo = (request.data.get('codigo') or '').strip()
+    if not codigo:
+        return Response({'error': 'codigo es requerido'}, status=400)
+    resumen, creada, diagnostico = buscar_o_importar_oc(codigo)
+    if resumen is None:
+        return Response({'error': diagnostico['motivo'], 'diagnostico': diagnostico}, status=404)
+    resumen['_creada'] = creada
+    resumen['_diagnostico'] = diagnostico
+    return Response(resumen)
 
 
 # =============================================================================

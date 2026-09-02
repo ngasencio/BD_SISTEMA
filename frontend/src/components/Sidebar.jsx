@@ -10,13 +10,14 @@ export default function Sidebar() {
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
-        abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac') || path.startsWith('/compra-agil') || path.startsWith('/fsc-oc-pac'),
+        abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac') || path.startsWith('/compra-agil') || path.startsWith('/fsc-oc-pac') || path.startsWith('/compras'),
         finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas') || path.startsWith('/facturas'),
         admin: path.startsWith('/admin'),
     });
     const [openMods, setOpenMods] = useState({
         mp: path.startsWith('/licitaciones') || path.startsWith('/ordenes-compra') || path.startsWith('/compra-agil') || path.startsWith('/abastecimiento/contratos'),
         formularios: path.startsWith('/abastecimiento/formularios'),
+        compras: path.startsWith('/compras'),
         pac: path.startsWith('/pac') || path.startsWith('/fsc-oc-pac'),
         inventario: false,
         garantias: path.startsWith('/abastecimiento/boletas'),
@@ -87,7 +88,7 @@ export default function Sidebar() {
                                     <span>⚡</span>
                                     <span className="nav-item-text">Compra Ágil</span>
                                 </div>
-                                {puede('admin', 'abastecimiento', 'general') && (
+                                {puede('admin', 'abastecimiento', 'comprador', 'general') && (
                                     <div
                                         className={`nav-item ${isActive('/abastecimiento/contratos') ? 'active' : ''}`}
                                         onClick={() => goTo('/abastecimiento/contratos', 'abast', 'mp')}
@@ -101,7 +102,7 @@ export default function Sidebar() {
                         </div>
 
                         {/* Formularios */}
-                        {puede('admin', 'abastecimiento', 'general') && (
+                        {puede('admin', 'abastecimiento', 'comprador', 'general') && (
                         <div className={`nav-mod ${openMods.formularios ? 'open' : ''}`}>
                             <div className="nav-mod-title" onClick={() => toggleMod('formularios')}>
                                 <span style={{ fontSize: 14 }}>🗂️</span>
@@ -116,6 +117,28 @@ export default function Sidebar() {
                                     <span>📝</span>
                                     <span className="nav-item-text">Formularios FSC</span>
                                 </div>
+                            </div>
+                        </div>
+                        )}
+
+                        {/* Gestión de Compras */}
+                        {puede('admin', 'comprador', 'jefatura', 'general') && (
+                        <div className={`nav-mod ${openMods.compras ? 'open' : ''}`}>
+                            <div className="nav-mod-title" onClick={() => toggleMod('compras')}>
+                                <span style={{ fontSize: 14 }}>🧾</span>
+                                <span className="nav-mod-title-text">Gestión de Compras</span>
+                                <span className="nav-mod-arrow" style={{ transform: openMods.compras ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+                            </div>
+                            <div className="nav-mod-items" style={{ display: openMods.compras ? 'block' : 'none' }}>
+                                {puede('admin', 'comprador', 'general') && (
+                                    <div
+                                        className={`nav-item ${isActive('/compras/mis-formularios') ? 'active' : ''}`}
+                                        onClick={() => goTo('/compras/mis-formularios', 'abast', 'compras')}
+                                    >
+                                        <span>📝</span>
+                                        <span className="nav-item-text">Mis Formularios</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                         )}
@@ -168,7 +191,7 @@ export default function Sidebar() {
                         </div>
 
                         {/* Garantías */}
-                        {puede('admin', 'abastecimiento', 'general') && (
+                        {puede('admin', 'abastecimiento', 'comprador', 'general') && (
                         <div className={`nav-mod ${openMods.garantias ? 'open' : ''}`}>
                             <div className="nav-mod-title" onClick={() => toggleMod('garantias')}>
                                 <span style={{ fontSize: 14 }}>🛡️</span>
