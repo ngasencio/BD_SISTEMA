@@ -417,8 +417,8 @@ body{font-family:var(--f);background:var(--gris0);color:var(--gris7);height:100v
 
   <!-- TABS -->
   <div class="tabs">
-    <div class="tab-btn active" onclick="TAB.show('resumen',this)">📊 Resumen Ejecutivo</div>
     <div class="tab-btn" onclick="TAB.show('simple',this)">🧭 Guía Rápida</div>
+    <div class="tab-btn active" onclick="TAB.show('resumen',this)">📊 Resumen Ejecutivo</div>
     <div class="tab-btn" onclick="TAB.show('deuda',this)">⚠️ Deuda Flotante</div>
     <div class="tab-btn" onclick="TAB.show('pagos',this)">📈 Análisis de Pagos</div>
     <div class="tab-btn" onclick="TAB.show('prov',this)">🏢 Proveedores</div>
@@ -1229,11 +1229,11 @@ const U = {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: datasets.length > 1, labels:{font:{size:10},color:'#64748b'} },
-          tooltip: { callbacks: { label: c => opts.ttFn ? opts.ttFn(c) : U.fmtM(c.raw) } }
+          tooltip: { callbacks: { label: c => opts.ttFn ? opts.ttFn(c) : U.fmtM(c.raw), footer: opts.footerFn }, itemSort: opts.stacked ? (a,b)=>b.datasetIndex-a.datasetIndex : undefined }
         },
         scales: {
-          x: { ticks:{ callback: v => opts.xCb ? opts.xCb(v) : U.fmtM(v), font:{size:9.5}, color:'#94a3b8' }, grid:{color:'#f1f5f9'} },
-          y: { ticks:{ font:{size:9.5}, color:'#475569' }, grid:{display:false} }
+          x: { stacked: !!opts.stacked, ticks:{ callback: v => opts.xCb ? opts.xCb(v) : U.fmtM(v), font:{size:9.5}, color:'#94a3b8' }, grid:{color:'#f1f5f9'} },
+          y: { stacked: !!opts.stacked, ticks:{ font:{size:9.5}, color:'#475569' }, grid:{display:false} }
         }
       }
     });
@@ -1472,10 +1472,13 @@ function renderResumen(){
   }
   const labels = grpArr.map(g=>g.lbl.slice(0,35));
   U.barH('ch-dist', labels, [
-    {label:'Vigente',   data:grpArr.map(g=>g.vigente),   backgroundColor:'rgba(11,90,143,.15)',  borderColor:'rgba(11,90,143,.4)', borderWidth:1, borderRadius:3},
-    {label:'Pagado',    data:grpArr.map(g=>g.consumido),  backgroundColor:'rgba(22,163,74,.6)',   borderRadius:3, borderWidth:0},
-    {label:'Deuda',     data:grpArr.map(g=>g.disponible), backgroundColor:'rgba(220,38,38,.65)',  borderRadius:3, borderWidth:0},
-  ], {ttFn: c=>c.dataset.label+': '+U.fmtM(c.raw)});
+    {label:'Pagado',    data:grpArr.map(g=>g.consumido),  backgroundColor:'rgba(22,163,74,.75)',  borderRadius:3, borderWidth:0},
+    {label:'Deuda',     data:grpArr.map(g=>g.disponible), backgroundColor:'rgba(220,38,38,.75)',  borderRadius:3, borderWidth:0},
+  ], {
+    stacked: true,
+    ttFn: c=>c.dataset.label+': '+U.fmtM(c.raw),
+    footerFn: items => 'Vigente: '+U.fmtM(grpArr[items[0].dataIndex].vigente)
+  });
 
   // Alertas
   const provGrp = U.groupBy(d,'pr').filter(g=>g.pct>15).sort((a,b)=>b.pct-a.pct).slice(0,8);

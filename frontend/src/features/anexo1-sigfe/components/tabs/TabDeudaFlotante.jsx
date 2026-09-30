@@ -9,7 +9,24 @@ const fmtMoney = (n) =>
     new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
 const fmtPct = (n) => (n == null ? '—' : `${n.toFixed(1)}%`);
 const COLOR_ESTADO = { verde: '--color-success', amarillo: '--color-warning', rojo: '--color-danger' };
-const COLOR_ESTADO_HEX = { verde: '#16a34a', amarillo: '#ca8a04', rojo: '#dc2626' };
+
+// Barra de %Deuda/Dev — mismo criterio "un solo vistazo, sin leer el número"
+// que usa el reporte de referencia (Anexo N°3) para su % de deuda por
+// concepto. Reutiliza .progress-track/.progress-fill (ya en index.css); el
+// color viene del mismo `estado_pct_deuda` que ya calcula el backend (evita
+// duplicar los umbrales de negocio en el frontend).
+function BarraDeuda({ pct, estado }) {
+    if (pct == null) return <span>—</span>;
+    const ancho = Math.min(Math.max(pct, 0), 100);
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 120 }}>
+            <div className="progress-track" style={{ width: 60, flex: 'none' }}>
+                <div className={`progress-fill ${estado}`} style={{ width: `${ancho}%` }} />
+            </div>
+            <span className="progress-val" style={{ width: 'auto' }}>{fmtPct(pct)}</span>
+        </div>
+    );
+}
 
 export default function TabDeudaFlotante({ filtros, refreshKey }) {
     const [mesSeleccionado, setMesSeleccionado] = useState(null);
@@ -105,7 +122,7 @@ export default function TabDeudaFlotante({ filtros, refreshKey }) {
                                 <td className="td-monto">{fmtMoney(s.devengado_total)}</td>
                                 <td className="td-monto">{fmtMoney(s.efectivo_total)}</td>
                                 <td className="td-monto">{fmtMoney(s.deuda)}</td>
-                                <td className="td-monto" style={{ fontWeight: 700, color: COLOR_ESTADO_HEX[s.estado_pct_deuda] }}>{fmtPct(s.pct_deuda_sobre_devengado)}</td>
+                                <td><BarraDeuda pct={s.pct_deuda_sobre_devengado} estado={s.estado_pct_deuda} /></td>
                                 <td>{s.mes_deuda_maxima ?? '—'}</td>
                                 <td className="td-monto">{fmtMoney(s.valor_deuda_maxima)}</td>
                                 <td>{s.tendencia === 'bajando' ? '↓ Bajando' : s.tendencia === 'subiendo' ? '↑ Subiendo' : '—'}</td>

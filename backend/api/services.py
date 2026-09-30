@@ -5218,16 +5218,71 @@ def resolver_nombres_comprador(usuario):
     )
 
 
+def _ids_fsc_duplicados_a_ocultar(queryset):
+    """El Panel SSO reexporta su histórico completo en cada descarga; cuando
+    `fecha_solicitud` de un mismo FSC cambia levemente entre dos descargas
+    (typo corregido, formato distinto, etc.), la clave de upsert de
+    page_data_panel.py (folio+anho+unidad_requirente+fecha_solicitud) deja de
+    calzar con la fila ya guardada y crea una fila NUEVA en vez de
+    actualizarla — la vieja queda huérfana, congelada en el estado en que se
+    sincronizó por última vez. Resultado: el mismo FSC real aparece dos veces
+    en 'Mis Formularios' (bug real detectado 2026-09-02, ~35 grupos en toda
+    la tabla). Esto es un problema del ETL en sí (`api/data/data_panel/
+    page_data_panel.py`), no algo para 'arreglar' borrando filas de
+    producción a ciegas — mientras no se corrija ahí, esta función oculta la
+    fila sobrante en la lista SIN borrar nada de la base de datos.
+
+    Por cada grupo (folio, anho, unidad_requirente) con más de una fila,
+    conserva la más 'vigente': primero la que ya tiene un enlace real activo
+    (FscOcLink o ProcesoCompraFormulario — señal fuerte de cuál usa el
+    sistema), si no hay o hay más de una, la de `fecha_derivado` más
+    reciente, y por último la de mayor id. Devuelve el set de ids A OCULTAR
+    (no los que se conservan)."""
+    filas = list(queryset.values('id', 'folio', 'anho', 'unidad_requirente', 'fecha_derivado'))
+    grupos = {}
+    for f in filas:
+        clave = (f['folio'], f['anho'], f['unidad_requirente'])
+        grupos.setdefault(clave, []).append(f)
+    grupos = {k: v for k, v in grupos.items() if len(v) > 1}
+    if not grupos:
+        return set()
+
+    todos_ids = [f['id'] for lista in grupos.values() for f in lista]
+    ids_con_link = set(FscOcLink.objects.filter(formulario_derivado_id__in=todos_ids)
+                        .values_list('formulario_derivado_id', flat=True))
+    ids_con_proceso = set(ProcesoCompraFormulario.objects.filter(formulario_derivado_id__in=todos_ids)
+                           .values_list('formulario_derivado_id', flat=True))
+    ids_referenciados = ids_con_link | ids_con_proceso
+
+    ocultar = set()
+    for lista in grupos.values():
+        con_ref = [f for f in lista if f['id'] in ids_referenciados]
+        candidatos = con_ref if len(con_ref) == 1 else lista
+        elegido = max(candidatos, key=lambda f: (f['fecha_derivado'] or '', f['id']))
+        ocultar.update(f['id'] for f in lista if f['id'] != elegido['id'])
+    return ocultar
+
+
 def listar_fsc_finalizados_comprador(usuario):
-    """FormularioFSCDerivado (bandeja 'AC') cuyo `estado_compra` — campo
-    textual propio del Panel SSO, ej. 'Licitación - Proceso Finalizado',
-    'Compra Ágil - Proceso Finalizado' — indica que el proceso de compra ya
-    se dio por finalizado. Es independiente de ProcesoCompra.estado_proceso
-    (nuestro seguimiento interno): usa el dato tal cual lo trae el Panel SSO."""
+    """FormularioFSCDerivado (bandeja 'AC') cuyo proceso de compra ya se dio
+    por finalizado, por CUALQUIERA de dos vías independientes:
+      - `estado_compra` (campo textual propio del Panel SSO, ej. 'Licitación
+        - Proceso Finalizado') — el Panel ya lo cerró de su lado.
+      - Al menos un ProcesoCompra vinculado con estado_proceso='FINALIZADO'
+        (nuestro seguimiento interno) — el comprador lo cerró en este sistema,
+        sin esperar a que el Panel SSO lo refleje (puede tardar hasta el
+        próximo sync). El serializer expone `estado_compra` tal cual para que
+        el frontend muestre el desfase ('Cerrado acá, pendiente en Panel SSO')
+        cuando esta vía cerró el proceso pero la del Panel todavía no."""
     nombres = resolver_nombres_comprador(usuario)
-    return FormularioFSCDerivado.objects.filter(
-        estado='AC', comprador__in=nombres, estado_compra__icontains='Proceso Finalizado',
-    ).order_by('-fecha_derivado', '-folio')
+    qs = FormularioFSCDerivado.objects.filter(estado='AC', comprador__in=nombres).filter(
+        Q(estado_compra__icontains='Proceso Finalizado') |
+        Q(vinculos_proceso__proceso__estado_proceso='FINALIZADO')
+    ).distinct()
+    ocultos = _ids_fsc_duplicados_a_ocultar(qs)
+    if ocultos:
+        qs = qs.exclude(id__in=ocultos)
+    return qs.order_by('-fecha_derivado', '-folio')
 
 
 def listar_fsc_pendientes_comprador(usuario, incluir_ya_clasificados=False):
@@ -5237,15 +5292,170 @@ def listar_fsc_pendientes_comprador(usuario, incluir_ya_clasificados=False):
     ProcesoCompra vinculado — son los 'pendientes de clasificar'; con
     incluir_ya_clasificados=True se listan todos los NO finalizados (para el
     tab 'Formularios'). Siempre excluye los que ya están en
-    listar_fsc_finalizados_comprador (estado_compra con 'Proceso Finalizado')
-    para que un mismo FSC no aparezca duplicado en ambos tabs."""
+    listar_fsc_finalizados_comprador (estado_compra con 'Proceso Finalizado'
+    O algún ProcesoCompra vinculado en estado_proceso='FINALIZADO' — mismo
+    criterio doble de esa función) para que un mismo FSC no aparezca
+    duplicado en ambos tabs. También oculta duplicados de un mismo FSC real
+    causados por el bug de upsert del ETL de Formularios (ver
+    _ids_fsc_duplicados_a_ocultar)."""
     nombres = resolver_nombres_comprador(usuario)
     qs = FormularioFSCDerivado.objects.filter(estado='AC', comprador__in=nombres).exclude(
-        estado_compra__icontains='Proceso Finalizado'
-    )
+        Q(estado_compra__icontains='Proceso Finalizado') |
+        Q(vinculos_proceso__proceso__estado_proceso='FINALIZADO')
+    ).distinct()
     if not incluir_ya_clasificados:
         qs = qs.exclude(vinculos_proceso__isnull=False)
+    ocultos = _ids_fsc_duplicados_a_ocultar(qs)
+    if ocultos:
+        qs = qs.exclude(id__in=ocultos)
     return qs.order_by('-fecha_derivado', '-folio')
+
+
+def calcular_compras_resumen_comprador(usuario):
+    """Panel 'Resumen' de Mis Formularios — da al comprador una vista de
+    'reloj' de sus procesos activos sin abrir cada FSC uno por uno:
+      - alertas: procesos con Licitación/Compra Ágil enlazada y fecha de
+        cierre real (de Mercado Público), ordenadas por urgencia — para
+        avisar antes de que cierren (o avisar que ya cerraron y falta
+        adjudicar/tramitar).
+      - gestion_interna: FSC en trámite (AC, no finalizados) que TODAVÍA no
+        tienen un código real de Mercado Público enlazado — sin clasificar,
+        o clasificados en un tipo manual (Convenio Marco/Trato Directo/OC
+        Directa), o en Licitación/Compra Ágil pero aún sin código elegido.
+      - pivote: tipo_proceso × bucket de estado (recepcionado/en_tramite/
+        finalizado/rechazado), solo tipos con al menos un proceso — insumo
+        del gráfico y la tabla pivot del panel.
+      - kpis: contadores de alto nivel para las tarjetas del panel.
+    Todo acotado a los procesos/FSC del `usuario` (mismo criterio que
+    listar_fsc_pendientes_comprador)."""
+    hoy = timezone.localdate()
+
+    procesos_activos = list(
+        ProcesoCompra.objects
+        .filter(comprador=usuario)
+        .exclude(estado_proceso__in=['FINALIZADO', 'RECHAZADO'])
+        .select_related('licitacion')
+    )
+
+    codigos_ca = [p.codigo_compra_agil for p in procesos_activos if p.codigo_compra_agil]
+    ca_por_codigo = {
+        c['codigocompraagil']: c
+        for c in CompraAgilResumen.objects.filter(codigocompraagil__in=codigos_ca)
+                                           .values('codigocompraagil', 'fechacierre', 'estadoglosa')
+    } if codigos_ca else {}
+
+    alertas = []
+    for p in procesos_activos:
+        fecha_cierre = estado_mp = fuente = codigo_mp = None
+        if p.tipo_proceso == 'LICITACION' and p.licitacion_id:
+            codigo_mp, fuente = p.licitacion_id, 'Licitación'
+            if p.licitacion:
+                fecha_cierre, estado_mp = p.licitacion.FechaCierre, p.licitacion.Estado
+        elif p.tipo_proceso == 'COMPRA_AGIL' and p.codigo_compra_agil:
+            codigo_mp, fuente = p.codigo_compra_agil, 'Compra Ágil'
+            ca = ca_por_codigo.get(p.codigo_compra_agil)
+            if ca:
+                fecha_cierre, estado_mp = ca['fechacierre'], ca['estadoglosa']
+        if not fecha_cierre:
+            continue
+        fecha_cierre_date = fecha_cierre.date() if hasattr(fecha_cierre, 'date') else fecha_cierre
+        dias = (fecha_cierre_date - hoy).days
+        urgencia = 'vencido' if dias < 0 else 'alta' if dias <= 3 else 'media' if dias <= 10 else 'baja'
+        # Compra Ágil: el estado REAL en Mercado Público pesa más que la sola
+        # fecha — "Proveedor Seleccionado" (o algo posterior en el flujo) es
+        # una compra resuelta aunque su fecha de cierre quedó muy atrás, así
+        # que no debe alarmar; "Publicada" (todavía abierta a ofertas) sí es
+        # motivo de alerta en rojo, cierre próximo o no.
+        if p.tipo_proceso == 'COMPRA_AGIL' and estado_mp:
+            estado_mp_norm = estado_mp.lower()
+            if 'seleccionad' in estado_mp_norm:
+                urgencia = 'baja'
+            elif 'public' in estado_mp_norm:
+                urgencia = 'vencido'
+        alertas.append({
+            'proceso_id': p.id, 'titulo': p.titulo, 'tipo_proceso': p.tipo_proceso,
+            'fuente': fuente, 'codigo_mp': codigo_mp, 'estado_mp': estado_mp,
+            'estado_proceso': p.estado_proceso, 'fecha_cierre': fecha_cierre_date.isoformat(),
+            'dias': dias, 'urgencia': urgencia,
+        })
+    # Prioridad por urgencia real (vencido→alta→media→baja) y, dentro de cada
+    # nivel, de menor a mayor días — así lo más atrasado/próximo a cerrar
+    # siempre encabeza la lista, sin que un "vencido" reclasificado a 'baja'
+    # (Compra Ágil con proveedor ya seleccionado) tape lo que sí urge.
+    _RANGO_URGENCIA = {'vencido': 0, 'alta': 1, 'media': 2, 'baja': 3}
+    alertas.sort(key=lambda a: (_RANGO_URGENCIA[a['urgencia']], a['dias']))
+
+    # Bloque "Proceso de Gestión" — FSC en trámite sin enlace real a Mercado Público
+    fsc_abiertos = listar_fsc_pendientes_comprador(usuario, incluir_ya_clasificados=True) \
+        .prefetch_related('procesos_compra')
+    gestion_interna = []
+    for f in fsc_abiertos:
+        procesos_f = list(f.procesos_compra.all())
+        if any(p.licitacion_id or p.codigo_compra_agil for p in procesos_f):
+            continue
+        gestion_interna.append({
+            'id': f.id,
+            'id_formulario': generar_id_formulario(f.folio, f.anho, formulario_texto=f.formulario),
+            'unidad_requirente': f.unidad_requirente,
+            'requerimiento': f.requerimiento,
+            'monto_estimado': f.monto_estimado,
+            'fecha_derivado': f.fecha_derivado,
+            'n_procesos': len(procesos_f),
+            'tipo_proceso': procesos_f[0].tipo_proceso if procesos_f else None,
+        })
+
+    # Pivote tipo × bucket de estado, sobre TODOS los procesos del comprador.
+    # Compra Ágil: igual que en las alertas, "Proveedor Seleccionado" (o algo
+    # posterior) cuenta como resuelta del lado de Mercado Público aunque
+    # nuestro seguimiento interno (estado_proceso) todavía no se haya movido
+    # a FINALIZADO — el pivote debe reflejar eso, no el trámite interno solo.
+    todos_procesos_vals = list(
+        ProcesoCompra.objects.filter(comprador=usuario)
+        .values_list('tipo_proceso', 'estado_proceso', 'codigo_compra_agil')
+    )
+    codigos_ca_todos = [c for _, _, c in todos_procesos_vals if c]
+    ca_estado_todos = {
+        c['codigocompraagil']: c['estadoglosa']
+        for c in CompraAgilResumen.objects.filter(codigocompraagil__in=codigos_ca_todos)
+                                           .values('codigocompraagil', 'estadoglosa')
+    } if codigos_ca_todos else {}
+
+    def _bucket(tipo, estado, codigo_ca):
+        if tipo == 'COMPRA_AGIL' and codigo_ca:
+            estado_mp = (ca_estado_todos.get(codigo_ca) or '').lower()
+            if 'seleccionad' in estado_mp:
+                return 'finalizado'
+        if estado == 'FINALIZADO':
+            return 'finalizado'
+        if estado == 'RECHAZADO':
+            return 'rechazado'
+        if estado == 'RECEPCIONADO':
+            return 'recepcionado'
+        return 'en_tramite'
+
+    tipo_labels = dict(ProcesoCompra.TIPO_PROCESO_CHOICES)
+    pivote_map = {}
+    for tipo_value, estado_val, codigo_ca in todos_procesos_vals:
+        fila = pivote_map.setdefault(tipo_value, {'recepcionado': 0, 'en_tramite': 0, 'finalizado': 0, 'rechazado': 0})
+        fila[_bucket(tipo_value, estado_val, codigo_ca)] += 1
+    pivote = sorted(
+        (
+            {'tipo_proceso': tipo_value, 'tipo_label': tipo_labels.get(tipo_value, tipo_value),
+             **fila, 'total': sum(fila.values())}
+            for tipo_value, fila in pivote_map.items()
+        ),
+        key=lambda f: -f['total'],
+    )
+
+    kpis = {
+        'procesos_activos': len(procesos_activos),
+        'alertas_vencidas': sum(1 for a in alertas if a['urgencia'] == 'vencido'),
+        'alertas_proximas': sum(1 for a in alertas if a['urgencia'] in ('alta', 'media')),
+        'gestion_interna': len(gestion_interna),
+        'finalizados': listar_fsc_finalizados_comprador(usuario).count(),
+    }
+
+    return {'kpis': kpis, 'alertas': alertas, 'gestion_interna': gestion_interna, 'pivote': pivote}
 
 
 def crear_proceso_compra(*, tipo_proceso, titulo, comprador, formulario_ids, usuario_creador,
@@ -5552,8 +5762,9 @@ def _resumen_licitacion_ligero(lic):
     }
 
 
-def buscar_o_importar_licitacion(codigo):
-    """Busca Licitacion por PK local; si no existe, la trae en vivo de
+def buscar_o_importar_licitacion(codigo, forzar=False):
+    """Busca Licitacion por PK local; si no existe (o `forzar=True`, para el
+    botón "🔄 Actualizar" de un proceso ya enlazado), la trae en vivo de
     Mercado Público (mismo cliente que usa LI_SSO_SERVER.py para el ETL
     batch) y la persiste con update_or_create. Devuelve
     (dict_resumen_o_None, creada: bool, diagnostico: dict) —
@@ -5564,7 +5775,7 @@ def buscar_o_importar_licitacion(codigo):
     if not codigo:
         return None, False, {'segundos': 0, 'motivo': 'Código vacío.'}
     lic = Licitacion.objects.filter(codigo_licitacion=codigo).first()
-    if lic:
+    if lic and not forzar:
         return _resumen_licitacion_ligero(lic), False, {'segundos': 0, 'motivo': 'Encontrada en la base de datos local.'}
 
     _ruta_etl_scripts()
@@ -5621,7 +5832,7 @@ def buscar_o_importar_licitacion(codigo):
             nuevos.append(DetalleLicitacion(licitacion_id=codigo, Correlativo=correlativo, **det_defaults))
         DetalleLicitacion.objects.bulk_create(nuevos)
 
-    return _resumen_licitacion_ligero(lic), True, {'segundos': segundos, 'motivo': 'OK'}
+    return _resumen_licitacion_ligero(lic), creada, {'segundos': segundos, 'motivo': 'OK'}
 
 
 _OC_DT_FIELDS = {'FechaCreacion', 'FechaEnvio', 'FechaAceptacion', 'FechaCancelacion', 'FechaUltimaModificacion'}
@@ -5632,8 +5843,9 @@ def _resumen_oc_ligero(oc):
     return {'codigo_oc': oc.codigo_oc, 'NombreOC': oc.NombreOC, 'EstadoOC': oc.EstadoOC, 'TotalBruto': oc.TotalBruto}
 
 
-def buscar_o_importar_oc(codigo_oc):
-    """Busca OrdenCompra por PK local; si no existe, la trae en vivo (mismo
+def buscar_o_importar_oc(codigo_oc, forzar=False):
+    """Busca OrdenCompra por PK local; si no existe (o `forzar=True`, para el
+    botón "🔄 Actualizar" de una OC ya enlazada), la trae en vivo (mismo
     cliente que OC_SSO_SERVER.py) y persiste resumen + líneas con
     update_or_create. NO recalcula EnlacePAC/ID_Proyecto/TipoOCInterno —
     para corrección manual puntual del PAC existe OcPacOverride. Devuelve
@@ -5643,7 +5855,7 @@ def buscar_o_importar_oc(codigo_oc):
     if not codigo_oc:
         return None, False, {'segundos': 0, 'motivo': 'Código vacío.'}
     oc = OrdenCompra.objects.filter(codigo_oc=codigo_oc).first()
-    if oc:
+    if oc and not forzar:
         return _resumen_oc_ligero(oc), False, {'segundos': 0, 'motivo': 'Encontrada en la base de datos local.'}
 
     _ruta_etl_scripts()
@@ -5694,7 +5906,7 @@ def buscar_o_importar_oc(codigo_oc):
             nuevos.append(DetalleOrdenCompra(orden_compra_id=codigo_oc, Correlativo=correlativo, **det_defaults))
         DetalleOrdenCompra.objects.bulk_create(nuevos)
 
-    return _resumen_oc_ligero(oc), True, {'segundos': segundos, 'motivo': 'OK'}
+    return _resumen_oc_ligero(oc), creada, {'segundos': segundos, 'motivo': 'OK'}
 
 
 _CA_DT_DBCOLS = {'FechaPublicacion', 'FechaCierre', 'FechaUltimoCambio'}
@@ -5711,9 +5923,10 @@ def _resumen_compra_agil_ligero(fila):
     }
 
 
-def buscar_o_importar_compra_agil(codigo):
-    """Busca CompraAgilResumen por PK local; si no existe, la trae en vivo
-    (mismo cliente que AG_SSO_SERVER2.py) y persiste resumen + productos
+def buscar_o_importar_compra_agil(codigo, forzar=False):
+    """Busca CompraAgilResumen por PK local; si no existe (o `forzar=True`,
+    para el botón "🔄 Actualizar" de una compra ágil ya enlazada), la trae en
+    vivo (mismo cliente que AG_SSO_SERVER2.py) y persiste resumen + productos
     solicitados. Mapea por db_column (los atributos Python del modelo son
     minúsculas, ej. codigocompraagil/db_column='CodigoCompraAgil' — a
     diferencia de Licitacion/OrdenCompra que usan PascalCase directo). NO
@@ -5747,7 +5960,7 @@ def buscar_o_importar_compra_agil(codigo):
     fila = CompraAgilResumen.objects.filter(codigocompraagil=codigo).values(
         'codigocompraagil', 'nombre', 'estadoglosa'
     ).first()
-    if fila:
+    if fila and not forzar:
         return _resumen_compra_agil_ligero(fila), False, {'segundos': 0, 'motivo': 'Encontrada en la base de datos local.'}
 
     _ruta_etl_scripts()
@@ -5808,7 +6021,7 @@ def buscar_o_importar_compra_agil(codigo):
         CompraAgilProducto.objects.bulk_create(nuevos)
 
     resultado = {'codigocompraagil': codigo, 'nombre': defaults.get('nombre'), 'estadoglosa': defaults.get('estadoglosa')}
-    return resultado, True, {'segundos': segundos, 'motivo': 'OK'}
+    return resultado, creada, {'segundos': segundos, 'motivo': 'OK'}
 
 
 def agregar_oc_a_proceso(proceso_id, codigo_oc, usuario):

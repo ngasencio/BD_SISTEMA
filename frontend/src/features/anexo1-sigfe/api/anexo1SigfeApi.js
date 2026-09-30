@@ -23,6 +23,13 @@ export const fetchGuiaSimpleAnexo1 = (params = {}) =>
 export const fetchSerieNivel1Anexo1 = (params = {}) =>
     apiClient.get('sigfe-anexo1/serie-nivel1/', { params });
 
+// Mapa de Gasto: pivot Establecimiento x Mes (Devengado/Efectivo/%Ley) para un
+// concepto o el consolidado Nivel 1. A diferencia del resto de endpoints
+// sigfe-anexo1/*, no acepta `ue` — acá el establecimiento es el eje de la
+// tabla, no un filtro.
+export const fetchMapaGastoAnexo1 = (params = {}) =>
+    apiClient.get('sigfe-anexo1/mapa-gasto/', { params });
+
 export const fetchAlertasAnexo1 = (params = {}) =>
     apiClient.get('sigfe-anexo1/alertas/', { params });
 

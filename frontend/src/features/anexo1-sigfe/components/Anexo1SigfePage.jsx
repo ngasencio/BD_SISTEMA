@@ -7,6 +7,7 @@ import BannerActualizacionAnexo1 from './BannerActualizacionAnexo1';
 import PanelCambiosAnexo1 from './PanelCambiosAnexo1';
 import FiltroEjecucion from './FiltroEjecucion';
 import TabResumen from './tabs/TabResumen';
+import TabMapaGasto from './tabs/TabMapaGasto';
 import TabGuiaSimple from './tabs/TabGuiaSimple';
 import TabAlertas from './tabs/TabAlertas';
 import TabSemaforo from './tabs/TabSemaforo';
@@ -22,6 +23,7 @@ const TABS = [
     { id: 'base-datos', label: '🗄️ Base de datos' },
     { id: 'guia-simple', label: '🧭 Guía Rápida' },
     { id: 'resumen', label: '📊 Resumen Ejecutivo' },
+    { id: 'mapa-gasto', label: '🗺️ Mapa de Gasto' },
     { id: 'detallado', label: '🔍 Análisis Detallado' },
     { id: 'tendencias', label: '📈 Histórico y Tendencias' },
     { id: 'alertas', label: '⚠️ Alertas' },
@@ -166,6 +168,7 @@ export default function Anexo1SigfePage() {
                     anhos={anhos}
                     value={filtrosConAnho}
                     onChange={setFiltros}
+                    ocultarEstablecimiento={tab === 'mapa-gasto'}
                 />
             )}
 
@@ -174,6 +177,9 @@ export default function Anexo1SigfePage() {
             )}
             {tab === 'resumen' && anhos.length > 0 && (
                 <TabResumen filtros={filtrosConAnho} refreshKey={refreshKey} />
+            )}
+            {tab === 'mapa-gasto' && anhos.length > 0 && (
+                <TabMapaGasto filtros={filtrosConAnho} refreshKey={refreshKey} />
             )}
             {tab === 'detallado' && anhos.length > 0 && (
                 <TabDetallado filtros={filtrosConAnho} refreshKey={refreshKey} />

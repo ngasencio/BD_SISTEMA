@@ -1123,9 +1123,28 @@ def sincronizar_con_servidor():
     """
     try:
         from sqlalchemy import create_engine, text
+        from sqlalchemy.types import DateTime
     except ImportError:
         print("❌ Requiere sqlalchemy: pip install sqlalchemy")
         return
+
+    # El CSV se lee entero como texto (dtype=str, línea de abajo) para no
+    # perder precisión/formato de ningún campo — pero eso hace que
+    # to_sql() infiera TODAS las columnas como TEXT, incluidas las de
+    # fecha. El modelo Django CompraAgilResumen sí declara
+    # fechapublicacion/fechacierre/fechaultimocambio como DateTimeField;
+    # si quedan como TEXT en MariaDB, CUALQUIER lectura completa de fila
+    # revienta con "'str' object has no attribute 'utcoffset'" en cuanto
+    # Django intenta convertir el valor (bug real, recurrente: 2026-09-02).
+    # Forzar el tipo destino acá (SQLAlchemy hace el CAST en el CREATE
+    # TABLE, MariaDB acepta el string ISO tal cual al insertar) es más
+    # seguro que tocar el dtype del DataFrame — no cambia cómo se lee ni
+    # se procesa el resto del CSV.
+    _DTYPE_FECHAS_RESUMEN = {
+        'FechaPublicacion':  DateTime(),
+        'FechaCierre':       DateTime(),
+        'FechaUltimoCambio': DateTime(),
+    }
 
     print("\n" + "=" * 60)
     print("🚀 SINCRONIZANDO MAESTROS → bd_sistema")
@@ -1170,7 +1189,8 @@ def sincronizar_con_servidor():
             with engine.connect() as conn:
                 conn.execute(text(f"DROP TABLE IF EXISTS `{nombre_tabla}`"))
                 conn.commit()
-            df.to_sql(nombre_tabla, con=engine, if_exists="append", index=False, chunksize=500)
+            dtype_sql = _DTYPE_FECHAS_RESUMEN if nombre_tabla == TABLA_RESUMEN else None
+            df.to_sql(nombre_tabla, con=engine, if_exists="append", index=False, chunksize=500, dtype=dtype_sql)
             print(f"   ✅ {nombre_tabla}: {len(df)} registros")
         except Exception as e:
             print(f"   ❌ Error en {nombre_tabla}: {e}")

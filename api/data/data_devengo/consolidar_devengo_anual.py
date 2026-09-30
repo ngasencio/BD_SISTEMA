@@ -3,15 +3,31 @@ consolidar_devengo_anual.py
 ---------------------------------
 Consolida los .xlsx de "Disponibilidad de Devengos Presupuestarios" descargados
 por sigfe_descarga_devengos_Completo.py (carpeta descargas_sigfe/) y los
-sincroniza de forma INCREMENTAL contra la tabla api_sigfe_devengo_anual
-(modelo Django DevengoSigfeAnual), acumulando histórico anual sin duplicar.
+sincroniza por REEMPLAZO (upsert) contra la tabla api_sigfe_devengo_anual
+(modelo Django DevengoSigfeAnual).
 
-A diferencia de consolidar_devengo.py (que reemplaza por completo la tabla
-'devengo' usada por el dashboard de Anexo N°3), este script NO borra nada:
-cada fila se identifica por un hash de su contenido de negocio (row_hash) y
-solo se insertan las filas cuyo hash todavía no existe en la base. Esto
-permite volver a descargar rangos de fechas superpuestos sin generar
-duplicados, y acumular el año completo en varias corridas parciales.
+Monto Vigente/Disponible/Consumido (+ Monto Vigente Insumo, Tipo de Cambio,
+Fecha Conforme, Fecha Ingreso) son SALDO VIVO: el mismo documento puede
+aparecer en dos descargas distintas con esos valores cambiados (típicamente
+Monto Disponible bajando a medida que se paga). Cada fila se identifica por
+`doc_key` — un hash de TODOS los demás campos (la identidad real del
+documento/línea presupuestaria: UE, folio, tipo/número de documento,
+concepto, proveedor, catálogos — nunca el saldo). Si `doc_key` ya existe en
+la base, esta corrida ACTUALIZA esa fila con los montos/fechas nuevos en vez
+de insertar una fila adicional — así la tabla siempre refleja el saldo
+vigente real, sin acumular duplicados que antes inflaban (Vigente/Consumido)
+o licuaban (Disponible) los KPIs del reporte Anexo N°3.
+
+`row_hash` (hash de TODO el contenido, incluido el saldo) se sigue
+calculando y guardando: sirve para detectar cuándo un doc_key ya existente
+no cambió nada desde la última sincronización y así saltarse ese UPDATE.
+
+Antes (versión insert-only por row_hash) cada cambio de saldo generaba una
+fila nueva y la vieja quedaba para siempre en la tabla — confirmado en
+producción: ~10% de las filas eran snapshots repetidos del mismo documento,
+y sumas como "Monto Disponible" (deuda pendiente, el KPI central del
+reporte) quedaban muy por debajo de la realidad. Ver migración
+0044_devengosigfeanual_doc_key para el dedupe del histórico ya acumulado.
 
 Uso:
     cd api/data/data_devengo
@@ -92,10 +108,25 @@ MAPEO_COLUMNAS = {
 CAMPOS_FECHA = {"fecha_documento", "fecha_conforme", "fecha_emision", "fecha_ingreso"}
 CAMPOS_DECIMAL = {"tipo_cambio", "monto_vigente", "monto_disponible", "monto_consumido", "monto_vigente_insumo"}
 
-# Campos que participan del hash de contenido (identifican un registro real).
-# archivo_origen queda fuera a propósito: el mismo registro puede reaparecer
-# en otra descarga con otro nombre de archivo y sigue siendo el mismo hecho.
+# Campos que participan del hash de contenido completo (row_hash). archivo_origen
+# queda fuera a propósito: el mismo registro puede reaparecer en otra descarga con
+# otro nombre de archivo y sigue siendo el mismo hecho.
 CAMPOS_HASH = [c for c in MAPEO_COLUMNAS.keys()]
+
+# Campos de SALDO VIVO: valores que legítimamente cambian entre una sincronización
+# y otra para el MISMO documento (a medida que se paga, se corrige el tipo de
+# cambio, o el documento pasa a estado "conforme"/"ingresado"). Estos campos NUNCA
+# forman parte de la identidad del documento (doc_key) — si lo hicieran, cada
+# cambio de saldo crearía una fila nueva en vez de actualizar la existente, que es
+# exactamente el bug que este script corrige (ver docstring del módulo).
+CAMPOS_SALDO_VIVO = CAMPOS_DECIMAL | {"fecha_conforme", "fecha_ingreso"}
+
+# Identidad real del documento/línea presupuestaria — todo lo demás. Validado
+# contra el histórico completo en producción (53.424 filas) y contra descargas
+# completas de los 7 establecimientos: cero colisiones agrupando por
+# (archivo_origen + estos campos), es decir, ninguna fila real y distinta
+# comparte esta llave dentro de una misma descarga.
+CAMPOS_IDENTIDAD = [c for c in CAMPOS_HASH if c not in CAMPOS_SALDO_VIVO]
 
 
 def normalizar_encabezado(texto: str) -> str:
@@ -168,6 +199,22 @@ def valor_a_fecha(val):
     return None
 
 
+def fecha_iso_para_hash(val) -> str:
+    """Fecha normalizada a 'YYYY-MM-DD' (sin hora/zona horaria) para usar en
+    row_hash/doc_key. Trunca a solo-fecha a propósito: un datetime naive
+    (recién leído del Excel, en este script) y el mismo valor ya guardado en
+    MySQL (que Django devuelve tz-aware) producen distinto texto con
+    .isoformat() completo aunque sean "el mismo día" — eso rompería el
+    matching de doc_key entre la migración de dedupe y las sincronizaciones
+    siguientes. Recortar a la fecha evita ese desfase por completo."""
+    fecha = valor_a_fecha(val)
+    if fecha is None:
+        return ""
+    if hasattr(fecha, "date"):
+        fecha = fecha.date()
+    return fecha.isoformat()
+
+
 def valor_a_decimal_texto(val) -> str:
     """Representación de texto estable de un monto, para el hash — evita que
     diferencias de representación flotante (34020000.0 vs 34020000) generen
@@ -181,14 +228,30 @@ def valor_a_decimal_texto(val) -> str:
 
 
 def calcular_row_hash(registro: dict) -> str:
+    """Hash de TODO el contenido (incl. saldo vivo) — detecta si un doc_key ya
+    existente cambió algo desde la última sincronización."""
     partes = []
     for campo in CAMPOS_HASH:
         val = registro.get(campo)
         if campo in CAMPOS_DECIMAL:
             partes.append(valor_a_decimal_texto(val))
         elif campo in CAMPOS_FECHA:
-            fecha = valor_a_fecha(val)
-            partes.append(fecha.isoformat() if fecha else "")
+            partes.append(fecha_iso_para_hash(val))
+        else:
+            partes.append(valor_a_texto(val))
+    cadena = "|".join(partes)
+    return hashlib.sha256(cadena.encode("utf-8")).hexdigest()
+
+
+def calcular_doc_key(registro: dict) -> str:
+    """Hash de la IDENTIDAD del documento/línea (todo excepto saldo vivo) —
+    llave de upsert: dos filas con el mismo doc_key son el mismo documento
+    real en distintos momentos, y la más nueva reemplaza a la anterior."""
+    partes = []
+    for campo in CAMPOS_IDENTIDAD:
+        val = registro.get(campo)
+        if campo in CAMPOS_FECHA:
+            partes.append(fecha_iso_para_hash(val))
         else:
             partes.append(valor_a_texto(val))
     cadena = "|".join(partes)
@@ -220,9 +283,10 @@ def procesar_archivo(filepath: str) -> list:
             continue  # fila sin código UE -> no es un registro real
 
         row_hash = calcular_row_hash(registro)
+        doc_key = calcular_doc_key(registro)
 
         # Normalizar valores finales para el modelo Django
-        limpio = {"archivo_origen": nombre_archivo, "row_hash": row_hash}
+        limpio = {"archivo_origen": nombre_archivo, "row_hash": row_hash, "doc_key": doc_key}
         for campo in MAPEO_COLUMNAS:
             val = registro.get(campo)
             if campo in CAMPOS_FECHA:
@@ -247,9 +311,14 @@ def procesar_archivo(filepath: str) -> list:
     return registros
 
 
+CAMPOS_ACTUALIZABLES = sorted(CAMPOS_SALDO_VIVO) + ["archivo_origen", "row_hash", "fecha_sync"]
+
+
 def guardar_en_django(registros: list, progress_callback=None):
-    """Upsert incremental: solo inserta filas cuyo row_hash todavía no existe.
-    No borra nada de la tabla (a diferencia de consolidar_devengo.py).
+    """Upsert por doc_key: documentos nuevos se insertan, documentos ya
+    conocidos cuyo saldo cambió se ACTUALIZAN en la misma fila (nunca se
+    inserta una fila adicional para el mismo documento). No borra nada de
+    la tabla (a diferencia de consolidar_devengo.py).
 
     Devuelve un dict con conteos + un detalle acotado de las filas nuevas
     (para mostrar "documentos nuevos" en el panel de cambios del dashboard)
@@ -274,87 +343,115 @@ def guardar_en_django(registros: list, progress_callback=None):
     if not apps.ready:
         django.setup()
 
+    from django.utils import timezone
     from api.models import DevengoSigfeAnual
 
-    # Se consulta en lotes (no un solo IN gigante) para no exceder
-    # max_allowed_packet de MariaDB con decenas de miles de hashes.
-    TAM_LOTE_CONSULTA = 3000
-    hashes_nuevos = list({r["row_hash"] for r in registros})
-    hashes_existentes = set()
-    for i in range(0, len(hashes_nuevos), TAM_LOTE_CONSULTA):
-        lote = hashes_nuevos[i:i + TAM_LOTE_CONSULTA]
-        hashes_existentes.update(
-            DevengoSigfeAnual.objects.filter(row_hash__in=lote).values_list("row_hash", flat=True)
-        )
-
-    # Deduplicar también DENTRO del lote leído: es normal que dos descargas
-    # con rangos de fecha superpuestos (ej. corridas de días distintos)
-    # traigan filas idénticas entre sí, no solo repetidas de la BD. Si no se
-    # filtran aquí, bulk_create(ignore_conflicts=True) las descarta igual
-    # por la restricción única de row_hash, pero en silencio — el conteo
-    # final de la tabla quedaría más bajo que "insertadas" sin explicación.
-    vistos_en_lote = set()
-    por_insertar = []
+    # Deduplicar DENTRO del lote leído por doc_key: si dos filas del mismo
+    # archivo (o de archivos del mismo lote) resolvieran al mismo documento
+    # real, nos quedamos con la última — no debería ocurrir en la práctica
+    # (validado: 0 colisiones agrupando por archivo+identidad sobre el
+    # histórico completo), pero es la red de seguridad ante un cambio futuro
+    # del formato de SIGFE.
+    por_doc_key = {}
     duplicados_intra_lote = 0
     for r in registros:
-        h = r["row_hash"]
-        if h in hashes_existentes:
-            continue
-        if h in vistos_en_lote:
+        if r["doc_key"] in por_doc_key:
             duplicados_intra_lote += 1
-            continue
-        vistos_en_lote.add(h)
-        por_insertar.append(r)
+        por_doc_key[r["doc_key"]] = r
+    registros_unicos = list(por_doc_key.values())
 
-    ya_existian = len(registros) - len(por_insertar) - duplicados_intra_lote
+    # Se consulta en lotes (no un solo IN gigante) para no exceder
+    # max_allowed_packet de MariaDB con decenas de miles de doc_keys.
+    TAM_LOTE_CONSULTA = 3000
+    doc_keys = list(por_doc_key.keys())
+    existentes = {}  # doc_key -> (id, row_hash)
+    for i in range(0, len(doc_keys), TAM_LOTE_CONSULTA):
+        lote = doc_keys[i:i + TAM_LOTE_CONSULTA]
+        for pk, dk, rh in DevengoSigfeAnual.objects.filter(doc_key__in=lote).values_list("id", "doc_key", "row_hash"):
+            existentes[dk] = (pk, rh)
+
+    ahora = timezone.now()
+    por_insertar = []
+    por_actualizar = []
+    sin_cambios = 0
+    for r in registros_unicos:
+        previo = existentes.get(r["doc_key"])
+        if previo is None:
+            por_insertar.append(DevengoSigfeAnual(**r))
+            continue
+        obj_id, row_hash_previo = previo
+        if row_hash_previo == r["row_hash"]:
+            sin_cambios += 1
+            continue
+        obj = DevengoSigfeAnual(id=obj_id, **r)
+        obj.fecha_sync = ahora  # bulk_update no dispara auto_now solo
+        por_actualizar.append(obj)
 
     print(
-        f"  -> {len(registros)} filas leídas | {ya_existian} ya existían en BD | "
-        f"{duplicados_intra_lote} duplicadas dentro del mismo lote | {len(por_insertar)} nuevas por insertar"
+        f"  -> {len(registros)} filas leídas | {duplicados_intra_lote} duplicadas dentro del mismo lote | "
+        f"{sin_cambios} sin cambios | {len(por_actualizar)} actualizadas (saldo cambió) | "
+        f"{len(por_insertar)} nuevas por insertar"
     )
 
     # batch_size chico: max_allowed_packet de este servidor MariaDB es de
     # solo 1 MiB, y las filas tienen varios campos de texto largos (titulo,
     # principal, catálogos) que con lotes de 1000 lo superan fácilmente.
-    objs = [DevengoSigfeAnual(**r) for r in por_insertar]
-    DevengoSigfeAnual.objects.bulk_create(objs, batch_size=200, ignore_conflicts=True)
+    DevengoSigfeAnual.objects.bulk_create(por_insertar, batch_size=200)
+    if por_actualizar:
+        DevengoSigfeAnual.objects.bulk_update(por_actualizar, CAMPOS_ACTUALIZABLES, batch_size=200)
 
     total_en_tabla = DevengoSigfeAnual.objects.count()
-    print(f"  ✅ Insertadas {len(objs)} filas nuevas. Total en tabla: {total_en_tabla}")
-    _avisar(progreso_pct=98, log_msg=f"Insertadas {len(objs)} filas nuevas. Total en tabla: {total_en_tabla}")
+    print(
+        f"  ✅ {len(por_insertar)} filas nuevas, {len(por_actualizar)} actualizadas "
+        f"(saldo reemplazado). Total en tabla: {total_en_tabla}"
+    )
+    _avisar(
+        progreso_pct=98,
+        log_msg=(
+            f"{len(por_insertar)} documentos nuevos, {len(por_actualizar)} con saldo actualizado. "
+            f"Total en tabla: {total_en_tabla}"
+        ),
+    )
 
     # Detalle acotado (panel "documentos nuevos") + resumen agregado por
     # establecimiento (para el panel de análisis) — se arman desde los
-    # mismos dicts ya en memoria, sin consultas extra a la BD.
+    # mismos dicts ya en memoria, sin consultas extra a la BD. Incluye tanto
+    # documentos nuevos como actualizados: ambos son "novedades" reales del
+    # sync (un documento cuyo saldo cambió es tan relevante como uno nuevo).
     LIMITE_DETALLE = 300
     nuevos_detalle = []
     resumen_por_ue = {}
-    for r in por_insertar:
-        ue = r.get("codigo_ue") or "(sin establecimiento)"
+    novedades = list(por_insertar) + por_actualizar
+    for obj in novedades:
+        ue = obj.codigo_ue or "(sin establecimiento)"
         agg = resumen_por_ue.setdefault(ue, {"codigo_ue": ue, "cantidad": 0, "monto_vigente_total": 0})
         agg["cantidad"] += 1
-        agg["monto_vigente_total"] += float(r.get("monto_vigente") or 0)
+        agg["monto_vigente_total"] += float(obj.monto_vigente or 0)
 
         if len(nuevos_detalle) < LIMITE_DETALLE:
-            fecha_doc = r.get("fecha_documento")
+            fecha_doc = obj.fecha_documento
             nuevos_detalle.append({
                 "codigo_ue": ue,
-                "principal": r.get("principal"),
-                "tipo_documento": r.get("tipo_documento"),
-                "numero_documento": r.get("numero_documento"),
+                "principal": obj.principal,
+                "tipo_documento": obj.tipo_documento,
+                "numero_documento": obj.numero_documento,
                 "fecha_documento": fecha_doc.isoformat() if fecha_doc else None,
-                "concepto_presupuestario": r.get("concepto_presupuestario"),
-                "monto_vigente": float(r.get("monto_vigente") or 0),
+                "concepto_presupuestario": obj.concepto_presupuestario,
+                "monto_vigente": float(obj.monto_vigente or 0),
             })
 
     return {
         "filas_leidas": len(registros),
-        "ya_existian": ya_existian,
         "duplicados_intra_lote": duplicados_intra_lote,
-        "insertadas": len(objs),
+        "sin_cambios": sin_cambios,
+        "insertadas": len(por_insertar),
+        "actualizadas": len(por_actualizar),
+        # Compat con el panel de cambios del frontend (esperaba "ya_existian"
+        # de la versión insert-only): ahora significa "no requirieron cambio".
+        "ya_existian": sin_cambios,
         "total_en_tabla": total_en_tabla,
         "nuevos_detalle": nuevos_detalle,
-        "nuevos_detalle_truncado": len(por_insertar) > LIMITE_DETALLE,
+        "nuevos_detalle_truncado": len(novedades) > LIMITE_DETALLE,
         "resumen_por_ue": sorted(resumen_por_ue.values(), key=lambda x: -x["monto_vigente_total"]),
     }
 

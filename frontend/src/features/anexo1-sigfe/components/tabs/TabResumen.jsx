@@ -108,12 +108,12 @@ export default function TabResumen({ filtros, refreshKey }) {
             )}
 
             <div className="kpi-grid">
-                <KpiCard title="Ley de Presupuestos" value={fmtMoney(kpis.ley_presupuestos)} icon="📜" colorVar="--color-primary" tip="Monto anual total asignado por la Ley de Presupuestos para el período/establecimiento filtrado." />
-                <KpiCard title="Saldo por Aplicar" value={fmtMoney(kpis.saldo_por_aplicar)} icon="📥" colorVar={kpis.saldo_por_aplicar < 0 ? '--color-danger' : '--color-primary'} tip="Ley menos Requerimiento — parte de la Ley aún sin solicitud de compra asociada." />
+                <KpiCard title="Ley de Presupuestos" value={fmtMoney(kpis.ley_presupuestos)} icon="📜" colorVar="--color-primary" tip="Ley de Presupuestos||Monto anual total asignado por la Ley de Presupuestos para el período/establecimiento filtrado. No cambia mes a mes: es el techo anual." />
+                <KpiCard title="Saldo por Aplicar" value={fmtMoney(kpis.saldo_por_aplicar)} icon="📥" colorVar={kpis.saldo_por_aplicar < 0 ? '--color-danger' : '--color-primary'} tip="Saldo por Aplicar||Parte de la Ley que aún no tiene ni siquiera una solicitud de compra asociada.||Ley − Requerimiento" />
                 <KpiCard title="Comprometido" value={fmtMoney(kpis.comprometido)} icon="🤝" colorVar="--color-accent" tip="Monto comprometido (orden de compra u obligación) aún no devengado." />
-                <KpiCard title="Saldo por Devengar" value={fmtMoney(kpis.saldo_por_devengar)} icon="⏳" colorVar={kpis.saldo_por_devengar < 0 ? '--color-danger' : '--color-accent'} tip="Comprometido menos Devengado — compromisos aún sin reconocer contablemente." />
+                <KpiCard title="Saldo por Devengar" value={fmtMoney(kpis.saldo_por_devengar)} icon="⏳" colorVar={kpis.saldo_por_devengar < 0 ? '--color-danger' : '--color-accent'} tip="Saldo por Devengar||Compromisos ya firmados (OC/obligación) que todavía no se reconocen contablemente — el bien no ha llegado o el servicio no se ha prestado.||Comprometido − Devengado" />
                 <KpiCard title="Devengado" value={fmtMoney(kpis.devengado)} icon="✅" colorVar="--color-success" tip="Gasto reconocido contablemente, acumulado en el período seleccionado." />
-                <KpiCard title="Deuda Flotante" value={fmtMoney(kpis.deuda_flotante)} icon="⚠️" colorVar={kpis.deuda_flotante > 0 ? '--color-warning' : '--color-success'} tip="Devengado menos Efectivo — obligaciones reconocidas y aún no pagadas." />
+                <KpiCard title="Deuda Flotante" value={fmtMoney(kpis.deuda_flotante)} icon="⚠️" colorVar={kpis.deuda_flotante > 0 ? '--color-warning' : '--color-success'} tip="Deuda Flotante||Lo que ya se recibió/prestó (devengado) pero todavía no se paga. Es el indicador más importante para gestión de pagos.||Devengado − Efectivo" />
                 <KpiCard title="Efectivo" value={fmtMoney(kpis.efectivo)} icon="💵" colorVar="--color-accent" tip="Monto efectivamente pagado del devengado acumulado." />
                 <KpiCard title="Subtítulos Activos" value={kpis.subtitulos_activos} icon="🗂️" colorVar="--color-primary" tip="Cantidad de subtítulos presupuestarios (N1) con movimiento en el período." />
                 <KpiCard title="Mes de Mayor Gasto" value={kpis.mes_mayor_gasto ?? '—'} icon="📅" colorVar="--color-primary" tip="Mes del año con mayor Devengado a nivel Subtítulo, considerando el año completo." />
@@ -123,7 +123,7 @@ export default function TabResumen({ filtros, refreshKey }) {
                     icon="📈"
                     colorVar={ESTADO_COLOR[kpis.pct_ejecucion_estado]}
                     trend={comparacion?.delta_devengado_pct}
-                    tip="Devengado sobre Ley de Presupuestos. La flecha compara contra el mismo período del año anterior, si se seleccionó."
+                    tip="% Ejecución||Qué proporción de la Ley anual ya se devengó. La flecha compara contra el mismo período del año anterior, si se seleccionó.||Devengado / Ley × 100"
                 />
                 <KpiCard
                     title="% Pago"
@@ -131,7 +131,7 @@ export default function TabResumen({ filtros, refreshKey }) {
                     icon="💳"
                     colorVar={ESTADO_COLOR[kpis.pct_pago_estado]}
                     trend={comparacion?.delta_efectivo_pct}
-                    tip="Efectivo sobre Devengado. La flecha compara contra el mismo período del año anterior, si se seleccionó."
+                    tip="% Pago||Qué proporción de lo devengado ya se pagó efectivamente. La flecha compara contra el mismo período del año anterior, si se seleccionó.||Efectivo / Devengado × 100"
                 />
             </div>
 

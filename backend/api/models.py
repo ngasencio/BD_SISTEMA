@@ -1194,10 +1194,21 @@ class PerfilUsuario(models.Model):
 
 
 class DevengoSigfeAnual(models.Model):
-    """Histórico consolidado de 'Disponibilidad de Devengos Presupuestarios' (SIGFE),
+    """Snapshot vigente de 'Disponibilidad de Devengos Presupuestarios' (SIGFE),
     descargado por establecimiento vía Selenium (api/data/data_devengo/) y sincronizado
-    de forma incremental — no se reemplaza el contenido completo en cada corrida, se
-    hace upsert por row_hash para acumular el histórico anual sin duplicar filas."""
+    por REEMPLAZO (upsert por doc_key): monto_vigente/monto_disponible/monto_consumido/
+    monto_vigente_insumo/tipo_cambio/fecha_conforme/fecha_ingreso son saldo vivo — cambian
+    de una sincronización a otra a medida que el documento se paga — así que cada sync
+    actualiza esos campos en la MISMA fila en vez de insertar una fila nueva.
+
+    `doc_key` (hash de todos los campos EXCEPTO los de saldo vivo recién listados)
+    identifica la línea de negocio real (mismo documento+concepto+proveedor+catálogos);
+    es la llave de unicidad — reemplazó a `row_hash` (que seguía acumulando una fila
+    nueva por cada cambio de saldo, duplicando montos en todos los reportes/KPIs; ver
+    migración 0044_devengosigfeanual_doc_key, que dedupe el histórico existente quedándose
+    con la fila de fecha_sync más reciente por doc_key). `row_hash` se conserva solo como
+    hash de TODO el contenido (incl. saldo vivo), usado por el ETL para saltarse el
+    UPDATE cuando nada cambió desde la última sincronización."""
     codigo_ue = models.CharField('Código Unidad Ejecutora', max_length=255)
     folio = models.CharField('Folio', max_length=100, null=True, blank=True)
     titulo = models.CharField('Título', max_length=500, null=True, blank=True)
@@ -1227,7 +1238,10 @@ class DevengoSigfeAnual(models.Model):
     insumo = models.CharField('Insumo', max_length=500, null=True, blank=True)
     monto_vigente_insumo = models.DecimalField('Monto Vigente Insumo', max_digits=20, decimal_places=2, null=True, blank=True)
     archivo_origen = models.CharField('Archivo Origen', max_length=500, null=True, blank=True)
-    row_hash = models.CharField('Hash de fila', max_length=64, unique=True, editable=False)
+    row_hash = models.CharField('Hash de fila (contenido completo)', max_length=64, editable=False, db_index=True)
+    doc_key = models.CharField(
+        'Llave del documento (identidad, sin saldo vivo)', max_length=64, unique=True, editable=False,
+    )
     fecha_sync = models.DateTimeField('Última sincronización', auto_now=True)
 
     class Meta:

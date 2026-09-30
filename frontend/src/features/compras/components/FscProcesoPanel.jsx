@@ -358,6 +358,49 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
         } catch { setError('No fue posible quitar el enlace de la orden de compra.'); }
     };
 
+    // "🔄 Actualizar" — vuelve a consultar Mercado Público EN VIVO por el
+    // código ya enlazado (forzar=true salta el atajo "ya está en la BD
+    // local") y sobrescribe el registro existente con lo último (estado,
+    // fecha de cierre, etc.) — sin desenlazar ni tener que buscarlo de nuevo.
+    const [actualizando, setActualizando] = useState(() => new Set());
+    const marcarActualizando = (id, activo) => setActualizando(prev => {
+        const next = new Set(prev);
+        activo ? next.add(id) : next.delete(id);
+        return next;
+    });
+
+    const handleActualizarMp = async (proceso) => {
+        const codigo = proceso.licitacion || proceso.codigo_compra_agil;
+        if (!codigo || actualizando.has(proceso.id)) return;
+        setError(null);
+        marcarActualizando(proceso.id, true);
+        try {
+            const fn = proceso.tipo_proceso === 'LICITACION' ? importarLicitacion : importarCompraAgil;
+            await fn(codigo, true);
+            onCambiado?.();
+            cargarProcesos(true);
+        } catch (err) {
+            setError(err.response?.data?.error || 'No fue posible actualizar desde Mercado Público.');
+        } finally {
+            marcarActualizando(proceso.id, false);
+        }
+    };
+
+    const handleActualizarOc = async (codigoOc) => {
+        if (actualizando.has(codigoOc)) return;
+        setError(null);
+        marcarActualizando(codigoOc, true);
+        try {
+            await importarOc(codigoOc, true);
+            onCambiado?.();
+            cargarProcesos(true);
+        } catch (err) {
+            setError(err.response?.data?.error || 'No fue posible actualizar la orden de compra.');
+        } finally {
+            marcarActualizando(codigoOc, false);
+        }
+    };
+
     const handleRegistrarEstado = async (e) => {
         e.preventDefault();
         setGuardando(true);
@@ -417,7 +460,7 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
 
                             <SeccionBloque icon="🏛️" titulo="Enlace Mercado Público" subtitulo="Proceso de Compra" acento="#7c3aed">
                                 {procesos.length > 0 && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: mostrarAgregarProceso ? 14 : 0 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                                         {procesos.map((p, i) => {
                                             const tipoInfo = TIPOS_PROCESO.find(t => t.value === p.tipo_proceso);
                                             const codigoMp = p.licitacion || p.codigo_compra_agil;
@@ -441,6 +484,21 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
                                                                 onClick={e => { e.stopPropagation(); setProcesoVerMp(p); }}
                                                             >
                                                                 👁 Ver
+                                                            </button>
+                                                            <button
+                                                                type="button" title="Actualizar en vivo desde Mercado Público"
+                                                                disabled={actualizando.has(p.id)}
+                                                                onClick={e => { e.stopPropagation(); handleActualizarMp(p); }}
+                                                                style={{
+                                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                                                                    border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb',
+                                                                    cursor: actualizando.has(p.id) ? 'wait' : 'pointer', fontSize: 12, padding: 0,
+                                                                    animation: actualizando.has(p.id) ? 'spin 1s linear infinite' : 'none',
+                                                                    opacity: actualizando.has(p.id) ? 0.6 : 1,
+                                                                }}
+                                                            >
+                                                                🔄
                                                             </button>
                                                             <button
                                                                 type="button" title="Quitar este enlace de Mercado Público"
@@ -558,6 +616,21 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
                                                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                                                 <EstadoMpBadge estado={oc.estado_oc} />
                                                                 <PacBadge idProyecto={oc.id_proyecto} enlacePac={oc.enlace_pac} />
+                                                                <button
+                                                                    type="button" title="Actualizar en vivo desde Mercado Público"
+                                                                    disabled={actualizando.has(oc.codigo_oc)}
+                                                                    onClick={() => handleActualizarOc(oc.codigo_oc)}
+                                                                    style={{
+                                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                        width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                                                                        border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb',
+                                                                        cursor: actualizando.has(oc.codigo_oc) ? 'wait' : 'pointer', fontSize: 11, padding: 0,
+                                                                        animation: actualizando.has(oc.codigo_oc) ? 'spin 1s linear infinite' : 'none',
+                                                                        opacity: actualizando.has(oc.codigo_oc) ? 0.6 : 1,
+                                                                    }}
+                                                                >
+                                                                    🔄
+                                                                </button>
                                                                 <button
                                                                     type="button" title="Quitar el enlace de esta OC"
                                                                     onClick={() => handleQuitarOc(oc.codigo_oc)}

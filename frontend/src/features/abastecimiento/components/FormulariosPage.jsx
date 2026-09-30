@@ -80,28 +80,29 @@ const parseTipoFormulario = (texto) => {
 // ─── Bandejas de visación FSC ─────────────────────────────────────────────────
 
 const ESTADO_FSC_INFO = {
-    P:    { nombre: 'Pendiente Firmas',                        color: '#d97706' },
-    FR:   { nombre: 'Revisor Finanzas',                        color: '#2563eb' },
-    FA:   { nombre: 'Autorizador Finanzas',                    color: '#4f46e5' },
-    ASDA: { nombre: 'Autorizador Sub Director Administrativo', color: '#7c3aed' },
-    ADIR: { nombre: 'Autorizador Director',                    color: '#a21caf' },
-    AA:   { nombre: 'Autorizador Abastecimiento',              color: '#0891b2' },
-    DC:   { nombre: 'Derivación Compras',                      color: '#1d4ed8' },
-    AC:   { nombre: 'A Comprador',                             color: '#15803d' },
-    R:    { nombre: 'Rechazado',                               color: '#b91c1c' },
+    P:    { nombre: 'Pendiente Firma',            persona: null,                   color: '#d97706' },
+    FR:   { nombre: 'Revisor Finanzas',           persona: 'Christian Jaramillo',  color: '#2563eb' },
+    FA:   { nombre: 'Jefatura Finanzas',          persona: 'Rodrigo Martínez',     color: '#4f46e5' },
+    ASDA: { nombre: 'Subdirector Administrativo', persona: null,                   color: '#7c3aed' },
+    ADIR: { nombre: 'Director SSO',               persona: null,                   color: '#a21caf' },
+    AA:   { nombre: 'Jefatura Abastecimiento',    persona: 'Cristina Flores',      color: '#0891b2' },
+    DC:   { nombre: 'Jefatura Subdepto',          persona: 'Sandra Espinoza',      color: '#1d4ed8' },
+    AC:   { nombre: 'Compradores',                persona: null,                   color: '#15803d' },
+    R:    { nombre: 'Rechazados',                 persona: null,                   color: '#b91c1c' },
 };
 
 // ─── Badge de estado FSC ──────────────────────────────────────────────────────
 
 function EstadoFSCBadge({ codigo }) {
-    const info = ESTADO_FSC_INFO[codigo] || { nombre: codigo || 'Sin estado', color: '#94a3b8' };
+    const info = ESTADO_FSC_INFO[codigo] || { nombre: codigo || 'Sin estado', persona: null, color: '#94a3b8' };
+    const titulo = info.persona ? `${info.nombre} (${info.persona})` : info.nombre;
     return (
         <span style={{
             display: 'inline-block', padding: '2px 10px', borderRadius: 20,
             fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
             background: info.color + '20', color: info.color,
             border: `1px solid ${info.color}50`,
-        }} title={info.nombre}>
+        }} title={titulo}>
             {codigo || '—'}
         </span>
     );
@@ -139,9 +140,9 @@ function InfoTooltip({ text }) {
 
 // ─── Chip de filtro rápido ────────────────────────────────────────────────────
 
-function FiltroChip({ activo, color, onClick, children }) {
+function FiltroChip({ activo, color, onClick, children, title }) {
     return (
-        <button onClick={onClick} style={{
+        <button onClick={onClick} title={title} style={{
             padding: '3px 10px', borderRadius: 20, fontSize: 11,
             fontWeight: activo ? 700 : 400,
             border: activo ? `2px solid ${color || '#7c3aed'}` : '1px solid #e2e8f0',
@@ -862,30 +863,37 @@ function FlujoVisacion({ anioSeleccionado, estadoSel, onSelectEstado }) {
                 <span>🔁</span>
                 <span className="card-title">
                     Línea de flujo de visación
-                    <InfoTooltip text={`Recorrido de las solicitudes por las bandejas de visación, desde P · Pendiente Firmas hasta AC · A Comprador. Haz clic en un círculo para filtrar la tabla de solicitudes. Historial disponible desde el ${flujo.historial_disponible_desde}.`} />
+                    <InfoTooltip text={`Recorrido de las solicitudes por las bandejas de visación, desde ${ESTADO_FSC_INFO.P.nombre} hasta ${ESTADO_FSC_INFO.AC.nombre}. Cada bandeja muestra el cargo responsable y, entre paréntesis, quién la atiende habitualmente. Haz clic en un círculo para filtrar la tabla de solicitudes. Historial disponible desde el ${flujo.historial_disponible_desde}.`} />
                 </span>
             </div>
             <div className="flujo-pipeline">
-                {nodos.map((nodo, i) => (
-                    <React.Fragment key={nodo.codigo}>
-                        <button
-                            type="button"
-                            className={`flujo-nodo ${estadoSel?.includes(nodo.codigo) ? 'activo' : ''}`}
-                            style={{ '--nodo-color': ESTADO_FSC_INFO[nodo.codigo]?.color || '#94a3b8' }}
-                            onClick={() => {
-                                const actual = estadoSel || [];
-                                onSelectEstado(actual.includes(nodo.codigo)
-                                    ? actual.filter(c => c !== nodo.codigo)
-                                    : [...actual, nodo.codigo]);
-                            }}
-                            title={`${ESTADO_FSC_INFO[nodo.codigo]?.nombre || nodo.nombre} — ${fmtN(nodo.cantidad)} formulario(s)\nClic para filtrar/agregar a filtro`}
-                        >
-                            <span className="flujo-nodo-circulo">{fmtN(nodo.cantidad)}</span>
-                            <span className="flujo-nodo-label">{nodo.codigo}</span>
-                        </button>
-                        {i < nodos.length - 1 && <span className="flujo-flecha">→</span>}
-                    </React.Fragment>
-                ))}
+                {nodos.map((nodo, i) => {
+                    const info = ESTADO_FSC_INFO[nodo.codigo] || { nombre: nodo.codigo, persona: null, color: '#94a3b8' };
+                    return (
+                        <React.Fragment key={nodo.codigo}>
+                            <button
+                                type="button"
+                                className={`flujo-nodo ${estadoSel?.includes(nodo.codigo) ? 'activo' : ''}`}
+                                style={{ '--nodo-color': info.color }}
+                                onClick={() => {
+                                    const actual = estadoSel || [];
+                                    onSelectEstado(actual.includes(nodo.codigo)
+                                        ? actual.filter(c => c !== nodo.codigo)
+                                        : [...actual, nodo.codigo]);
+                                }}
+                                title={`${info.nombre}${info.persona ? ` (${info.persona})` : ''} — ${fmtN(nodo.cantidad)} formulario(s)\nClic para filtrar/agregar a filtro`}
+                            >
+                                <span className="flujo-nodo-circulo-wrap">
+                                    <span className="flujo-nodo-circulo">{fmtN(nodo.cantidad)}</span>
+                                    <span className="flujo-nodo-codigo-tag">{nodo.codigo}</span>
+                                </span>
+                                <span className="flujo-nodo-label">{info.nombre}</span>
+                                {info.persona && <span className="flujo-nodo-persona">({info.persona})</span>}
+                            </button>
+                            {i < nodos.length - 1 && <span className="flujo-flecha">→</span>}
+                        </React.Fragment>
+                    );
+                })}
                 <span className="flujo-flecha flujo-flecha-rama" title="Formularios rechazados en cualquier punto del proceso">↘</span>
                 <button
                     type="button"
@@ -895,10 +903,13 @@ function FlujoVisacion({ anioSeleccionado, estadoSel, onSelectEstado }) {
                         const actual = estadoSel || [];
                         onSelectEstado(actual.includes('R') ? actual.filter(c => c !== 'R') : [...actual, 'R']);
                     }}
-                    title={`Rechazados — ${fmtN(flujo.rechazados.cantidad)} formulario(s)\nClic para filtrar/agregar a filtro`}
+                    title={`${ESTADO_FSC_INFO.R.nombre} — ${fmtN(flujo.rechazados.cantidad)} formulario(s)\nClic para filtrar/agregar a filtro`}
                 >
-                    <span className="flujo-nodo-circulo">{fmtN(flujo.rechazados.cantidad)}</span>
-                    <span className="flujo-nodo-label">R</span>
+                    <span className="flujo-nodo-circulo-wrap">
+                        <span className="flujo-nodo-circulo">{fmtN(flujo.rechazados.cantidad)}</span>
+                        <span className="flujo-nodo-codigo-tag">R</span>
+                    </span>
+                    <span className="flujo-nodo-label">{ESTADO_FSC_INFO.R.nombre}</span>
                 </button>
             </div>
             {estadoSel?.length > 0 ? (
@@ -994,8 +1005,10 @@ function TablaSolicitudes({ filtroBandeja, onFiltroChange, anioSeleccionado, sub
                             onFiltroChange(actual.includes(codigo)
                                 ? actual.filter(c => c !== codigo)
                                 : [...actual, codigo]);
-                        }}>
+                        }}
+                        title={info.persona ? `${info.nombre} (${info.persona})` : info.nombre}>
                         {codigo} · {info.nombre}
+                        {info.persona && <em style={{ fontStyle: 'italic', opacity: 0.75, marginLeft: 4 }}>({info.persona})</em>}
                     </FiltroChip>
                 ))}
             </div>

@@ -64,6 +64,8 @@ html {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 body {
@@ -74,12 +76,25 @@ body {
   display: flex;
   min-height: 100vh;
   letter-spacing: -0.01em;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Red de seguridad anti-desborde horizontal — ningún elemento de texto/medio
+   debe poder empujar el ancho de su contenedor. No reemplaza el manejo de
+   overflow explícito de tablas/tabs (.table-scroll, etc.), solo cubre los
+   casos no contemplados. */
+img, svg, canvas, video {
+  max-width: 100%;
+  height: auto;
 }
 
 #root {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-width: 100vw;
 }
 
 a {
@@ -457,6 +472,7 @@ button {
   margin-left: 68px;
   margin-top: 40px;
   flex: 1;
+  min-width: 0;
   min-height: calc(100vh - 40px);
   transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -538,6 +554,7 @@ button {
   display: flex;
   min-height: 100vh;
   flex-direction: column;
+  min-width: 0;
 }
 
 /* ════════════════════════════════════════════════════
@@ -545,6 +562,8 @@ button {
    ════════════════════════════════════════════════════ */
 .content {
   padding: 24px 28px 48px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Feature pages (features/) — rendered inside AppLayout's .content.
@@ -1585,9 +1604,10 @@ canvas {
 /* KPI Grid */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 14px;
   margin-bottom: 16px;
+  max-width: 100%;
 }
 
 .kpi-card {
@@ -1883,6 +1903,14 @@ canvas {
 
 .progress-fill.rojo {
   background: var(--gob-rojo);
+}
+
+.progress-fill.amarillo {
+  background: var(--gob-amarillo);
+}
+
+.progress-fill.verde {
+  background: var(--gob-verde);
 }
 
 .progress-val {
@@ -5224,16 +5252,18 @@ select.boleta-input {
 .card-subtitle { font-size: 12px; color: #9ca3af; margin: -8px 0 12px; }
 
 /* Flujo de Visación FSC — pipeline de bandejas en círculos */
-.flujo-pipeline { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 28px 16px 8px; }
+.flujo-pipeline { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px; padding: 28px 16px 10px; }
 .flujo-nodo {
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    background: none; border: none; cursor: pointer; padding: 6px 8px; border-radius: 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    background: none; border: none; cursor: pointer; padding: 8px 6px; border-radius: 14px;
+    width: 108px; font-family: var(--font-body);
     transition: transform .15s ease, background .15s ease;
 }
 .flujo-nodo:hover { background: #f8fafc; transform: translateY(-2px); }
 .flujo-nodo.activo { background: #eff6ff; }
+.flujo-nodo-circulo-wrap { position: relative; display: inline-flex; }
 .flujo-nodo-circulo {
-    width: 60px; height: 60px; border-radius: 50%;
+    width: 56px; height: 56px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     font-size: 14px; font-weight: 700; color: #fff;
     background: var(--nodo-color, #94a3b8);
@@ -5243,8 +5273,21 @@ select.boleta-input {
 .flujo-nodo.activo .flujo-nodo-circulo {
     box-shadow: 0 0 0 5px rgba(59,130,246,0.18), 0 4px 14px rgba(0,0,0,0.22), inset 0 0 0 2px var(--nodo-color, #94a3b8);
 }
-.flujo-nodo-label { font-size: 11px; font-weight: 700; color: #475569; letter-spacing: .5px; }
-.flujo-flecha { font-size: 18px; color: #cbd5e1; padding: 0 2px; }
+.flujo-nodo-codigo-tag {
+    position: absolute; top: -5px; right: -8px;
+    background: #1e293b; color: #fff; font-size: 9px; font-weight: 700;
+    padding: 1px 6px; border-radius: 8px; letter-spacing: .3px;
+    border: 1.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.flujo-nodo-label {
+    font-size: 11.5px; font-weight: 700; color: #334155; letter-spacing: .1px;
+    text-align: center; line-height: 1.25; white-space: normal;
+}
+.flujo-nodo-persona {
+    font-size: 10.5px; font-weight: 500; font-style: italic; color: #94a3b8;
+    text-align: center; line-height: 1.2; white-space: normal; margin-top: -2px;
+}
+.flujo-flecha { font-size: 18px; color: #cbd5e1; padding: 20px 0 0; align-self: flex-start; }
 .flujo-flecha-rama { color: #fca5a5; font-size: 16px; }
 .flujo-detalle { margin-top: 16px; }
 

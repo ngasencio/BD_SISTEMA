@@ -47,8 +47,13 @@ src/
     ├── auth/                 # Login
     ├── compra-agil/          # /compra-agil — ML análisis incluido
     ├── pac/                  # /pac — PAC, Res.188, indicadores
-    ├── abastecimiento/       # /abastecimiento/* — FSC, boletas
-    ├── finanzas/             # /finanzas/* — devengo, dashboard finanzas
+    ├── pac-cumplimiento/     # /pac-cumplimiento — Cumplimiento Interno PAC (Dentro/Fuera, temporal, jerarquía, rankings, reportes)
+    ├── abastecimiento/       # /abastecimiento/* — FSC, boletas, contratos
+    ├── fsc-oc-pac/           # /fsc-oc-pac — Enlace FSC-OC-PAC (sistema de diseño DV-UI propio, ver más abajo)
+    ├── compras/              # /compras/mis-formularios — módulo Gestión de Compras (bandeja del comprador)
+    ├── usuarios/             # /admin/usuarios, /perfil — CRUD de usuarios y roles (PerfilUsuario)
+    ├── facturas/             # /facturas
+    ├── finanzas/             # /finanzas/dashboard — devengo, dashboard finanzas
     ├── devengo-sigfe/        # /anexo3/reporte-sigfe — Anexo N°3, reporte jerárquico SIGFE (iframe + fetch autenticado)
     └── anexo1-sigfe/         # /anexo1/base-datos — Anexo N°1, 11 tabs de ejecución presupuestaria + PDF real (reportlab)
 ```
@@ -72,7 +77,9 @@ const { user, role, isAuthenticated, login, logout } = useAuth();
 ```
 
 ### Roles disponibles
-`admin` | `abastecimiento` | `finanzas` | `viewer`
+`admin` | `abastecimiento` | `finanzas` | `viewer` | `comprador` | `jefatura` | `general`
+
+Fuente única de verdad (labels, colores, descripción de módulos por rol): `features/usuarios/constants/roles.js` — debe reflejar exactamente los guards `RequireRole` de `App.jsx`; si cambia un guard, actualizar también ese archivo. El modelo backend es `PerfilUsuario.role` (`backend/api/models.py`), no un `Group` de Django — ver tabla de roles en el `CLAUDE.md` raíz.
 
 Rol se extrae del JWT payload: `user.role` o `user.groups?.[0]` o `'viewer'` por defecto.
 
@@ -85,17 +92,26 @@ Rol se extrae del JWT payload: `user.role` o `user.groups?.[0]` o `'viewer'` por
 | `/login` | `features/auth/pages/LoginPage` | Público |
 | `/` | `pages/Home` | Autenticado |
 | `/licitaciones` | `pages/Dashboard` | Autenticado |
-| `/anexo3/reporte-sigfe` | `features/devengo-sigfe/components/ReporteSigfePage` | Autenticado |
-| `/anexo1/base-datos` | `features/anexo1-sigfe/components/Anexo1SigfePage` | Autenticado |
 | `/ordenes-compra` | `pages/OrdenesCompraDashboard` | Autenticado |
-| `/compra-agil` | `features/compra-agil/components/CompraAgilPage` | Autenticado |
+| `/ordenes-compra-v2` | `features/ordenes-compra/components/OCDashboardPage` | Autenticado |
 | `/pac` | `features/pac/components/PacDashboardPage` | Autenticado |
-| `/abastecimiento/dashboard` | `features/abastecimiento/components/AbastecimientoDashboard` | admin, abastecimiento, viewer |
-| `/abastecimiento/fsc` | `features/abastecimiento/components/FSCManager` | admin, abastecimiento, viewer |
-| `/abastecimiento/boletas` | `features/abastecimiento/components/BoletasPage` | admin, abastecimiento, viewer |
-| `/abastecimiento/contratos` | `features/abastecimiento/components/GestionContratosPage` | admin, abastecimiento, viewer |
-| `/abastecimiento/formularios` | `features/abastecimiento/components/FormulariosPage` | admin, abastecimiento, viewer |
-| `/finanzas/dashboard` | `features/finanzas/components/FinanzasDashboard` | admin, finanzas |
+| `/pac-cumplimiento` | `features/pac-cumplimiento/components/PacCumplimientoPage` | Autenticado |
+| `/compra-agil` | `features/compra-agil/components/CompraAgilPage` | Autenticado |
+| `/abastecimiento/dashboard` | `features/abastecimiento/components/AbastecimientoDashboard` | admin, abastecimiento, comprador, general |
+| `/abastecimiento/fsc` | `features/abastecimiento/components/FSCManager` | admin, abastecimiento, comprador, general |
+| `/abastecimiento/boletas` | `features/abastecimiento/components/BoletasPage` | admin, abastecimiento, comprador, general |
+| `/abastecimiento/contratos` | `features/abastecimiento/components/GestionContratosPage` | admin, abastecimiento, comprador, general |
+| `/abastecimiento/formularios` | `features/abastecimiento/components/FormulariosPage` | admin, abastecimiento, comprador, general |
+| `/fsc-oc-pac` | `features/fsc-oc-pac/components/FscOcPacPage` | admin, abastecimiento, comprador, general |
+| `/compras/mis-formularios` | `features/compras/components/MisFormulariosPage` | admin, comprador, jefatura, general |
+| `/finanzas/dashboard` | `features/finanzas/components/FinanzasDashboard` | admin, finanzas, general |
+| `/anexo3/reporte-sigfe` | `features/devengo-sigfe/components/ReporteSigfePage` | admin, finanzas, general |
+| `/anexo1/base-datos` | `features/anexo1-sigfe/components/Anexo1SigfePage` | admin, finanzas, general |
+| `/facturas` | `features/facturas/components/FacturasPage` | admin, finanzas, general |
+| `/perfil` | `features/usuarios/pages/PerfilPage` | Autenticado |
+| `/admin/usuarios` | `features/usuarios/pages/UsuariosPage` | admin |
+
+`viewer` ya no está en ningún guard de módulo — hoy solo cae en el bloque "Autenticado" de arriba (licitaciones, OC, PAC, Compra Ágil) y no tiene acceso a Abastecimiento, Gestión de Compras ni Finanzas. Ver guards reales en `App.jsx:73-109`.
 
 ---
 
@@ -280,6 +296,8 @@ Si necesitas una clase nueva → agregarla en `frontend/src/index.css`.
 | Gestión Contratos SSO | `/abastecimiento/contratos` | ✅ Fase 2 lista | ETL + 4 tabs analíticos: Evaluaciones, Seguimiento Financiero (RadiografiaContrato), Plazos y Vigencia (Resumen Visual + Carta Gantt + Patrón de Uso), Cruce PAC |
 | Formularios FSC | `/abastecimiento/formularios` | ✅ Completo | Reemplaza el Excel `FSC 2025.xlsx` — datos sincronizados en vivo desde Panel SSO vía Selenium. Botón "Actualizar" pide credenciales (rut/dv/clave) por modal. **Estado actual (2026-06-10):** 5 tabs: Solicitudes / Derivados / **Compras Conjuntas🔗** / Alertas⏰ / **📦 Historial de Compras**. **`ModalDocumento`:** botón "🖨️ Imprimir ficha" en footer izquierdo — abre ventana HTML A4 con todos los campos + tabla de productos, llama `window.print()`. **Tab Historial de Compras:** `TabHistorial` carga `GET /api/formularios/historial/?anho=` (excluye R y P), filtra client-side por Unidad/Usuario. 3 sub-tabs: `SubTabRepeticiones` (productos agrupados con badge ⚠️×N, expandible por FSC, checkbox "solo repetidos", KpiMini), `SubTabPivote` (mapa de calor ítem/categoría/producto × mes con 3 métricas y sticky column), `SubTabCronologico` (FSC cronológico expandible con carro de productos). "Carro de Productos" fue reemplazado por "Compras Conjuntas". **`TabUnificacion`**: grafo D3 force-simulation (clusters por item_presupuestario, nodos=FSC coloreados por estado, tamaño=monto, drag+zoom); sidebar derecho con lista de grupos rankeados; segunda capa de cards por categoría. Usa D3 v7 (`import * as d3 from 'd3'`). `GrafoUnificacion` gestiona 2 `useEffect` separados: uno para construcción del grafo (deps: nodos/grupos) y otro para highlight (dep: grupoResaltado) — sin reiniciar simulación. `GET /api/formularios/unificacion/?anho=` (5 min cache, invalidado al sincronizar). `filtroBandeja` es `string[]` (multi-select); backend acepta `?estado=DC,AA` (CSV). `ModalDocumento` (720px): 8 secciones; header muestra badge `👤 destino_actual` al lado del estado; sección Identificación incluye "Actualmente en bandeja de" (destino_actual), "Ítem Presupuestario" y "Folio Requerimiento". **`FlujoVisacion`:** al seleccionar un estado muestra sub-fila "Actualmente en bandeja de:" con chips `👤 NOMBRE (n)` calculados desde `flujo.estados_pipeline[i].formularios` (sin llamada adicional; `destino_actual` incluido en el flujo response). **Tabla Solicitudes:** columna "Destino Actual" ordenable con `👤 nombre` truncado. **`PanelCambiosFSC`:** drawer 680px post-sync con 4 tabs. **`DiasBadge`:** verde <5, amarillo 5-10, naranja 10-30, rojo >30. **Tab Alertas:** `GET /api/formularios/alertas/` incluye `destino_actual` en respuesta. |
 | Enlace FSC-OC-PAC | `/fsc-oc-pac` | ✅ Completo | Agregado 2026-08-28. 7 tabs: Resumen, Jerarquía, Revisión Pendientes, Corregidas, Impacto, Detalle, Compra Ágil. Sidebar bajo Abastecimiento → submódulo PAC (junto a "Cumplimiento Interno PAC"). **Único módulo con el sistema de diseño DV-UI** (`features/fsc-oc-pac/styles/dv-ui.css`) — ver sección "Sistema de diseño DV-UI" más abajo antes de tocar sus componentes o de extenderlo a otro módulo. Modales `DetalleFscModal`/`DetalleOcModal` son el primer visor de detalle de OC genérico del sistema — considerar extraerlos a `components/` compartido si se necesitan en otro lado. |
+| Gestión de Compras | `/compras/mis-formularios` | ⚠️ En desarrollo activo | Rol `comprador` agregado 2026-09-01 (`PerfilUsuario.ROLES`, migración `0043`) — bandeja de `ProcesoCompra` por comprador logueado, mapeado vía `ComprasCompradorPerfil` (nombre del Panel SSO → `auth.User`, catálogo separado del rol). Backend: `ComprasMisFormulariosView`, `ProcesoCompraViewSet`, `_IsComprador` en `views.py`. `FscProcesoPanel.jsx`/`MisFormulariosPage.jsx`/`comprasApi.js`/`estadosProceso.js` con cambios sin commitear a la fecha de esta nota; `ResumenComprador.jsx` nuevo, sin trackear todavía. |
+| Gestión de Usuarios | `/admin/usuarios` | ✅ Completo | Solo `admin`. CRUD sobre `auth.User` + `PerfilUsuario` vía `/api/usuarios/` (`UsuarioViewSet`). Selector de rol en `ModalUsuario.jsx` itera `ROLES` de `features/usuarios/constants/roles.js` (7 roles, ver "Roles disponibles" arriba). `LeyendaRoles.jsx` muestra módulos por rol. |
 | Gestión Inventario | — | 🔲 Próximo | Placeholder en Sidebar |
 
 ---

@@ -431,6 +431,32 @@ def sigfe_anexo1_serie_nivel1(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, _IsFinanzas])
+def sigfe_anexo1_mapa_gasto(request):
+    # Sin parámetro `ue`: en este tab el establecimiento es el EJE de la
+    # tabla (fila), no un filtro — a diferencia del resto de endpoints
+    # sigfe-anexo1/*, que siempre devuelven un único establecimiento o el
+    # consolidado "todas".
+    anho = _int_o_none(request.GET.get('anho'))
+    mes_desde = _int_o_none(request.GET.get('mes_desde'))
+    mes_hasta = _int_o_none(request.GET.get('mes_hasta'))
+    subtitulo = request.GET.get('subtitulo') or None
+    excluir_34_35 = _bool_query(request.GET.get('excluir_34_35'))
+
+    cache_key = f'sigfe_anexo1_mapa_gasto_{anho}_{mes_desde}_{mes_hasta}_{subtitulo}_{excluir_34_35}'
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    from .services_anexo1_ejecucion import calcular_anexo1_mapa_gasto
+    response_data = calcular_anexo1_mapa_gasto(
+        anho=anho, mes_desde=mes_desde, mes_hasta=mes_hasta, subtitulo=subtitulo, excluir_34_35=excluir_34_35,
+    )
+    cache.set(cache_key, response_data, timeout=300)
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsFinanzas])
 def sigfe_anexo1_guia_simple(request):
     ue = request.GET.get('ue') or None
     anho = _int_o_none(request.GET.get('anho'))
@@ -1012,6 +1038,7 @@ def _ejecutar_actualizacion_sigfe(task_id: str, usuario: str, password: str,
             "establecimientos_fallidos": resultado["establecimientos_fallidos"],
             "filas_leidas": consolidacion.get("filas_leidas", 0),
             "insertadas": consolidacion.get("insertadas", 0),
+            "actualizadas": consolidacion.get("actualizadas", 0),
             "ya_existian": consolidacion.get("ya_existian", 0),
             "nuevos_detalle": consolidacion.get("nuevos_detalle", []),
             "nuevos_detalle_truncado": consolidacion.get("nuevos_detalle_truncado", False),
@@ -1027,7 +1054,8 @@ def _ejecutar_actualizacion_sigfe(task_id: str, usuario: str, password: str,
         _tareas_actualizacion_sigfe[task_id].update(
             status="completado", paso=5,
             paso_desc=(
-                f"Completado: {consolidacion.get('insertadas', 0)} documentos nuevos "
+                f"Completado: {consolidacion.get('insertadas', 0)} documentos nuevos, "
+                f"{consolidacion.get('actualizadas', 0)} con saldo actualizado "
                 f"({len(resultado['establecimientos_ok'])}/{len(resultado['establecimientos_ok']) + len(resultado['establecimientos_fallidos'])} establecimientos)."
             ),
             logs_recientes=logs[-40:],
@@ -2021,7 +2049,7 @@ class ComprasMisFormulariosView(generics.ListAPIView):
     serializer_class = ComprasMisFormularioSerializer
     permission_classes = [IsAuthenticated, _IsComprador]
     filter_backends = [drf_filters.SearchFilter, drf_filters.OrderingFilter]
-    search_fields = ['requerimiento', 'especificaciones_tecnicas', 'unidad_requirente']
+    search_fields = ['folio', 'requerimiento', 'especificaciones_tecnicas', 'unidad_requirente']
     ordering_fields = ['fecha_derivado', 'folio', 'monto_estimado']
     ordering = ['-fecha_derivado']
 
@@ -2161,6 +2189,13 @@ class ProcesoCompraViewSet(viewsets.ModelViewSet):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, _IsComprador])
+def compras_resumen_view(request):
+    from .services import calcular_compras_resumen_comprador
+    return Response(calcular_compras_resumen_comprador(request.user))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsComprador])
 def compras_buscar_licitacion_view(request):
     """Búsqueda local de Licitaciones para enlazar a un Proceso de Compra.
     Fase 3 agrega el fallback a la API de Mercado Público cuando no hay
@@ -2195,7 +2230,8 @@ def compras_importar_licitacion_view(request):
     codigo = (request.data.get('codigo') or '').strip()
     if not codigo:
         return Response({'error': 'codigo es requerido'}, status=400)
-    resumen, creada, diagnostico = buscar_o_importar_licitacion(codigo)
+    forzar = bool(request.data.get('forzar'))
+    resumen, creada, diagnostico = buscar_o_importar_licitacion(codigo, forzar=forzar)
     if resumen is None:
         return Response({'error': diagnostico['motivo'], 'diagnostico': diagnostico}, status=404)
     resumen['_creada'] = creada
@@ -2210,7 +2246,8 @@ def compras_importar_compra_agil_view(request):
     codigo = (request.data.get('codigo') or '').strip()
     if not codigo:
         return Response({'error': 'codigo es requerido'}, status=400)
-    resumen, creada, diagnostico = buscar_o_importar_compra_agil(codigo)
+    forzar = bool(request.data.get('forzar'))
+    resumen, creada, diagnostico = buscar_o_importar_compra_agil(codigo, forzar=forzar)
     if resumen is None:
         return Response({'error': diagnostico['motivo'], 'diagnostico': diagnostico}, status=404)
     resumen['_creada'] = creada
@@ -2225,7 +2262,8 @@ def compras_importar_oc_view(request):
     codigo = (request.data.get('codigo') or '').strip()
     if not codigo:
         return Response({'error': 'codigo es requerido'}, status=400)
-    resumen, creada, diagnostico = buscar_o_importar_oc(codigo)
+    forzar = bool(request.data.get('forzar'))
+    resumen, creada, diagnostico = buscar_o_importar_oc(codigo, forzar=forzar)
     if resumen is None:
         return Response({'error': diagnostico['motivo'], 'diagnostico': diagnostico}, status=404)
     resumen['_creada'] = creada

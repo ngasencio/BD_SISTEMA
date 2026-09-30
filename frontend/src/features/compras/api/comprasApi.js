@@ -3,6 +3,11 @@ import apiClient from '../../../lib/axios';
 export const getMisFormularios = (params = {}) =>
     apiClient.get('compras/mis-formularios/', { params });
 
+// Panel "Resumen" — alertas de plazo (Licitación/Compra Ágil próximas a
+// cerrar o ya cerradas sin tramitar), FSC en gestión interna sin enlace MP,
+// y el pivote tipo×estado. Todo acotado al comprador logueado.
+export const getResumenComprador = () => apiClient.get('compras/resumen/');
+
 export const getProcesos      = (params = {}) => apiClient.get('compras-procesos/', { params });
 export const getProceso       = (id)          => apiClient.get(`compras-procesos/${id}/`);
 export const crearProceso     = (data)        => apiClient.post('compras-procesos/', data);
@@ -37,7 +42,13 @@ export const buscarOc = (q) => apiClient.get('compras/buscar-oc/', { params: { q
 // Fase 3: si el código exacto no está sincronizado localmente, lo trae en
 // vivo de Mercado Público y lo guarda en la base de datos general (no una
 // tabla aparte) — queda disponible para todo el sistema desde ese momento.
-export const importarLicitacion = (codigo) => apiClient.post('compras/importar-licitacion/', { codigo });
-export const importarCompraAgil = (codigo) => apiClient.post('compras/importar-compra-agil/', { codigo });
-export const importarOc = (codigo) => apiClient.post('compras/importar-oc/', { codigo });
+// `forzar=true` (botón "🔄 Actualizar" de un enlace ya existente) se salta el
+// atajo "ya está en la BD local" y siempre vuelve a consultar Mercado
+// Público, sobrescribiendo el registro local con lo último.
+export const importarLicitacion = (codigo, forzar = false) =>
+    apiClient.post('compras/importar-licitacion/', { codigo, forzar });
+export const importarCompraAgil = (codigo, forzar = false) =>
+    apiClient.post('compras/importar-compra-agil/', { codigo, forzar });
+export const importarOc = (codigo, forzar = false) =>
+    apiClient.post('compras/importar-oc/', { codigo, forzar });
 

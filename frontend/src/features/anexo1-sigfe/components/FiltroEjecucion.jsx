@@ -7,7 +7,7 @@ const MESES = [
 // Filtro compartido por todos los tabs de "Análisis de Ejecución Presupuestaria"
 // (UE + Año + rango de mes + excluir Subt. 34/35). Filtros propios de cada tab
 // (Subtítulo, Año de comparación, Concepto) viven dentro de cada Tab*.
-export default function FiltroEjecucion({ establecimientos = [], anhos = [], value, onChange }) {
+export default function FiltroEjecucion({ establecimientos = [], anhos = [], value, onChange, ocultarEstablecimiento = false }) {
     const set = (campo) => (e) => {
         const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
         onChange({ ...value, [campo]: v });
@@ -17,15 +17,17 @@ export default function FiltroEjecucion({ establecimientos = [], anhos = [], val
         <div className="filter-zone">
             <div className="filter-zone-title">🔍 Filtro de ejecución presupuestaria</div>
             <div className="filter-row">
-                <div className="filter-group">
-                    <label className="filter-label">🏥 Establecimiento</label>
-                    <select className="filter-input" value={value.ue || 'todas'} onChange={set('ue')}>
-                        <option value="todas">Todas (consolidado SSO)</option>
-                        {establecimientos.map((e) => (
-                            <option key={e.codigo_ue} value={e.codigo_ue}>{e.nombre}</option>
-                        ))}
-                    </select>
-                </div>
+                {!ocultarEstablecimiento && (
+                    <div className="filter-group">
+                        <label className="filter-label">🏥 Establecimiento</label>
+                        <select className="filter-input" value={value.ue || 'todas'} onChange={set('ue')}>
+                            <option value="todas">Todas (consolidado SSO)</option>
+                            {establecimientos.map((e) => (
+                                <option key={e.codigo_ue} value={e.codigo_ue}>{e.nombre}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
                 <div className="filter-group">
                     <label className="filter-label">Año</label>
                     <select className="filter-input" value={value.anho || ''} onChange={set('anho')}>

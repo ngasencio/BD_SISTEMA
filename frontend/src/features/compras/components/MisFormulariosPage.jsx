@@ -2,14 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { getMisFormularios } from '../api/comprasApi';
 import FscProcesoPanel from './FscProcesoPanel';
 import ModalDetalleFsc from './ModalDetalleFsc';
-import { TIPOS_PROCESO, tipoLabel, estadoLabel } from '../constants/estadosProceso';
-
-// Color del chip "Estado de Gestión" por TIPO de proceso (no por estado) — así
-// se distingue de un vistazo si el FSC quedó en Licitación (amarillo) o
-// Compra Ágil (azul) sin tener que leer el texto. Los demás tipos heredan su
-// color de TIPOS_PROCESO.
-const TIPO_CHIP_COLOR = { LICITACION: '#d97706', COMPRA_AGIL: '#0ea5e9' };
-const colorPorTipo = (tipo) => TIPO_CHIP_COLOR[tipo] || TIPOS_PROCESO.find(t => t.value === tipo)?.color || '#64748b';
+import { tipoLabel, estadoLabel, colorPorTipo } from '../constants/estadosProceso';
+import ResumenComprador from './ResumenComprador';
 
 const fmtN = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
 const fmtCLP = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
@@ -57,6 +51,42 @@ function DiasBadge({ dias }) {
     );
 }
 
+// El Panel SSO es otra plataforma (Panel Documental SS Osorno) — su propio
+// campo `estado_compra` ("Licitación - Proceso Finalizado", etc.) puede
+// tardar hasta el próximo sync en reflejar que el comprador ya cerró el
+// proceso ACÁ (Estado de Gestión = Proceso Finalizado). Esta columna hace
+// visible ese desfase en vez de dejarlo implícito: "Cerrado acá, pendiente
+// en Panel SSO" cuando nuestro estado interno ya cerró pero el texto del
+// Panel todavía no lo dice.
+function panelCerrado(estadoCompra) {
+    return /proceso finalizado/i.test(estadoCompra || '');
+}
+
+function EstadoPanelChip({ procesos, estadoCompra }) {
+    const cerradoAca = (procesos || []).some(p => p.estado_proceso === 'FINALIZADO');
+    const cerradoPanel = panelCerrado(estadoCompra);
+
+    if (cerradoPanel) {
+        return (
+            <span title={estadoCompra} style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#f0fdf4', color: '#16a34a', border: '1px solid rgba(22,163,74,.3)', whiteSpace: 'nowrap' }}>
+                ✅ Cerrado en Panel SSO
+            </span>
+        );
+    }
+    if (cerradoAca) {
+        return (
+            <span title="Este sistema ya marcó el proceso como Finalizado — el Panel SSO aún no lo refleja (se actualizará en el próximo sync de Formularios)." style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#fffbeb', color: '#b45309', border: '1px solid rgba(217,119,6,.3)', whiteSpace: 'nowrap' }}>
+                ⏳ Pendiente en Panel SSO
+            </span>
+        );
+    }
+    return (
+        <span style={{ fontSize: 12, color: '#94a3b8' }} title={estadoCompra || ''}>
+            {estadoCompra || '—'}
+        </span>
+    );
+}
+
 function EstadoGestionChip({ procesos }) {
     if (!procesos || procesos.length === 0) {
         return (
@@ -89,7 +119,7 @@ function EstadoGestionChip({ procesos }) {
 // lateral (FscProcesoPanel) para clasificar, enlazar Mercado Público y
 // registrar avances — sin una pantalla/pestaña separada para "mis procesos".
 export default function MisFormulariosPage() {
-    const [tab, setTab] = useState('activos');
+    const [tab, setTab] = useState('panel');
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [data, setData] = useState({ results: [], count: 0 });
@@ -101,6 +131,7 @@ export default function MisFormulariosPage() {
     useEffect(() => { setPage(1); }, [search, tab]);
 
     useEffect(() => {
+        if (tab === 'panel') return undefined;
         let activo = true;
         setCargando(true);
         getMisFormularios({
@@ -129,6 +160,9 @@ export default function MisFormulariosPage() {
             </div>
 
             <div className="tabs-bar" style={{ marginBottom: 12 }}>
+                <button className={`tab-btn ${tab === 'panel' ? 'active' : ''}`} onClick={() => setTab('panel')}>
+                    🖥️ Panel
+                </button>
                 <button className={`tab-btn ${tab === 'activos' ? 'active' : ''}`} onClick={() => setTab('activos')}>
                     📋 Formularios
                 </button>
@@ -137,6 +171,11 @@ export default function MisFormulariosPage() {
                 </button>
             </div>
 
+            {tab === 'panel' && (
+                <ResumenComprador refreshKey={refreshKey} onGestionar={setFscSeleccionado} />
+            )}
+
+            {tab !== 'panel' && (
             <div className="card">
                 <div className="card-header card-header-accent">
                     <span>{tab === 'finalizados' ? '✅' : '📋'}</span>
@@ -148,7 +187,7 @@ export default function MisFormulariosPage() {
                 <div style={{ padding: '12px 16px' }}>
                     <input
                         type="text"
-                        placeholder="Buscar por requerimiento, especificaciones o unidad…"
+                        placeholder="Buscar por folio, requerimiento, especificaciones o unidad…"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, width: '100%', maxWidth: 420 }}
@@ -173,6 +212,7 @@ export default function MisFormulariosPage() {
                                     <th style={thStyle}>Fecha Derivado</th>
                                     <th style={thStyle}>Días</th>
                                     <th style={thStyle}>Estado de Gestión</th>
+                                    <th style={thStyle}>Estado Panel SSO</th>
                                     <th style={thStyle}></th>
                                 </tr>
                             </thead>
@@ -190,6 +230,7 @@ export default function MisFormulariosPage() {
                                         <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{f.fecha_derivado || '—'}</td>
                                         <td style={{ padding: '8px 10px' }}><DiasBadge dias={diasDesde(f.fecha_derivado)} /></td>
                                         <td style={{ padding: '8px 10px' }}><EstadoGestionChip procesos={f.procesos} /></td>
+                                        <td style={{ padding: '8px 10px' }}><EstadoPanelChip procesos={f.procesos} estadoCompra={f.estado_compra} /></td>
                                         <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                                                 <button type="button" className="btn-secondary" style={{ padding: '5px 10px', fontSize: 12 }}
@@ -217,6 +258,7 @@ export default function MisFormulariosPage() {
                     </div>
                 )}
             </div>
+            )}
 
             {fscSeleccionado && (
                 <FscProcesoPanel

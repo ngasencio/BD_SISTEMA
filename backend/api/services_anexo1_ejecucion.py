@@ -22,7 +22,7 @@ from collections import defaultdict
 from django.db.models import Max, Sum
 
 from .models import SigfeAnexo1, DevengoSigfeAnual
-from .services import _construir_hier_lookup, _resolver_hier
+from .services import _construir_hier_lookup, _resolver_hier, ESTABLECIMIENTOS_ANEXO1
 
 # Largos de código por nivel (N1=Subtítulo..N5=Detalle), mismo criterio
 # documentado en el modelo ConceptoJerarquia — los códigos SIGFE son
@@ -358,6 +358,114 @@ def calcular_anexo1_serie_nivel1_establecimiento(codigo_ue, excluir_34_35=True):
     _enriquecer_jerarquia(por_concepto)
 
     return {'periodos': periodos, 'total': {'devengado': total_dev, 'efectivo': total_efec}, 'por_concepto': por_concepto}
+
+
+# =============================================================================
+# Mapa de Gasto — Establecimiento × Mes para un concepto (o consolidado N1)
+# =============================================================================
+
+def calcular_anexo1_mapa_gasto(anho=None, mes_desde=None, mes_hasta=None, subtitulo=None, excluir_34_35=True):
+    """Pivot Establecimiento × Mes de Devengado/Efectivo — la vista que faltaba
+    en Anexo N°1: todos los demás tabs fijan un establecimiento (o "todas"
+    consolidado) ANTES de analizar; acá el establecimiento es el EJE de la
+    tabla, no un filtro, para poder comparar de un vistazo cómo cada hospital
+    ejecuta el mismo concepto mes a mes. `subtitulo=None` = consolidado Nivel 1
+    (todos los subtítulos sumados); `subtitulo=<concepto>` acota a un concepto
+    puntual de cualquier nivel, igual convención que usan rRes/rBr (`concepto_
+    presupuestario` exacto, no por prefijo).
+
+    `ley_anual` se calcula con una query SEPARADA, sin aplicar mes_desde/mes_hasta:
+    `ley_presupuestos` solo viene poblado en el mes 1 de cada (ue, concepto) (ver
+    comentario de módulo) — respetar el rango de meses acá haría que un filtro
+    mes_desde>1 devolviera Ley=0 para todos los establecimientos, lo cual sería
+    incorrecto: la Ley es el monto anual completo, no cambia según qué meses se
+    estén mirando (mismo dato, se muestre uno o los doce meses)."""
+    meses_vacios = [{'mes': m, 'devengado': 0.0, 'efectivo': 0.0} for m in range(1, 13)]
+    vacio = {
+        'anho': anho, 'subtitulo': subtitulo, 'conceptos_disponibles': [], 'establecimientos': [],
+        'totales_por_mes': meses_vacios,
+        'total_general': {'ley_anual': 0.0, 'devengado': 0.0, 'efectivo': 0.0, 'pct_ejecucion': None},
+    }
+    if not anho:
+        return vacio
+
+    qs_anho = SigfeAnexo1.objects.filter(anho=anho)
+    if subtitulo:
+        qs_concepto = qs_anho.filter(concepto_presupuestario=subtitulo)
+    else:
+        qs_concepto = qs_anho.filter(nivel=1)
+        if excluir_34_35:
+            qs_concepto = qs_concepto.exclude(concepto_presupuestario__startswith='34').exclude(concepto_presupuestario__startswith='35')
+
+    # --- Ley anual por establecimiento: sin filtro de mes (ver docstring) ---
+    ley_por_ue = {
+        f['codigo_ue']: float(f['ley'] or 0)
+        for f in qs_concepto.values('codigo_ue').annotate(ley=Sum('ley_presupuestos'))
+    }
+
+    # --- Devengado/Efectivo por (establecimiento, mes), respetando el rango ---
+    qs_periodo = qs_concepto
+    if mes_desde:
+        qs_periodo = qs_periodo.filter(mes__gte=mes_desde)
+    if mes_hasta:
+        qs_periodo = qs_periodo.filter(mes__lte=mes_hasta)
+    filas = qs_periodo.values('codigo_ue', 'mes').annotate(dev=Sum('devengado'), efec=Sum('efectivo'))
+    por_clave = {(f['codigo_ue'], f['mes']): (float(f['dev'] or 0), float(f['efec'] or 0)) for f in filas}
+
+    # Igual que calcular_sigfe_anexo1_estado_bd: sin filtrar por año, para que
+    # el nombre se resuelva aunque el establecimiento no tenga filas en `anho`.
+    nombres_bd = dict(SigfeAnexo1.objects.values_list('codigo_ue', 'nombre_establecimiento').distinct())
+
+    establecimientos = []
+    totales_por_mes = [{'mes': m, 'devengado': 0.0, 'efectivo': 0.0} for m in range(1, 13)]
+    total_general_dev = total_general_efec = total_general_ley = 0.0
+
+    for codigo_ue, nombre_default in ESTABLECIMIENTOS_ANEXO1:
+        valores = []
+        total_dev_ue = total_efec_ue = 0.0
+        for m in range(1, 13):
+            dev, efec = por_clave.get((codigo_ue, m), (0.0, 0.0))
+            valores.append({'mes': m, 'devengado': dev, 'efectivo': efec})
+            total_dev_ue += dev
+            total_efec_ue += efec
+            totales_por_mes[m - 1]['devengado'] += dev
+            totales_por_mes[m - 1]['efectivo'] += efec
+
+        ley_ue = ley_por_ue.get(codigo_ue, 0.0)
+        establecimientos.append({
+            'codigo_ue': codigo_ue,
+            'nombre': nombres_bd.get(codigo_ue, nombre_default),
+            'ley_anual': ley_ue,
+            'valores': valores,
+            'total_devengado': total_dev_ue,
+            'total_efectivo': total_efec_ue,
+            'pct_ejecucion': (total_dev_ue / ley_ue * 100) if ley_ue else None,
+        })
+        total_general_dev += total_dev_ue
+        total_general_efec += total_efec_ue
+        total_general_ley += ley_ue
+
+    qs_conceptos_n1 = SigfeAnexo1.objects.filter(anho=anho, nivel=1)
+    if excluir_34_35:
+        qs_conceptos_n1 = qs_conceptos_n1.exclude(concepto_presupuestario__startswith='34').exclude(concepto_presupuestario__startswith='35')
+    conceptos_disponibles = []
+    for concepto in sorted(set(qs_conceptos_n1.values_list('concepto_presupuestario', flat=True))):
+        codigo, _, nombre = concepto.partition(' ')
+        conceptos_disponibles.append({'concepto': concepto, 'codigo': codigo, 'nombre': nombre.strip()})
+
+    return {
+        'anho': anho,
+        'subtitulo': subtitulo,
+        'conceptos_disponibles': conceptos_disponibles,
+        'establecimientos': establecimientos,
+        'totales_por_mes': totales_por_mes,
+        'total_general': {
+            'ley_anual': total_general_ley,
+            'devengado': total_general_dev,
+            'efectivo': total_general_efec,
+            'pct_ejecucion': (total_general_dev / total_general_ley * 100) if total_general_ley else None,
+        },
+    }
 
 
 # =============================================================================

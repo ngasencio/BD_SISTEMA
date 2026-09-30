@@ -40,7 +40,7 @@ from .views import (
     formularios_organigrama_view,
     UsuarioViewSet, user_me, DepartamentoViewSet, EstablecimientoViewSet,
     SigfeAnexo1ViewSet, sigfe_anexo1_estado_bd, sigfe_anexo1_resumen, sigfe_anexo1_guia_simple,
-    sigfe_anexo1_serie_nivel1,
+    sigfe_anexo1_serie_nivel1, sigfe_anexo1_mapa_gasto,
     sigfe_anexo1_alertas, sigfe_anexo1_semaforo, sigfe_anexo1_burn_rate, sigfe_anexo1_deuda_flotante,
     sigfe_anexo1_tendencias, sigfe_anexo1_financiero,
     sigfe_anexo1_detallado, sigfe_anexo1_detallado_pareto, sigfe_anexo1_detallado_temporal, sigfe_anexo1_detallado_control,
@@ -62,6 +62,7 @@ from .views import (
     fsc_oc_pac_fsc_detalle_view, fsc_oc_pac_oc_detalle_view, fsc_oc_pac_corregir_pac_view,
     fsc_oc_pac_corregidas_view, fsc_oc_pac_impacto_view,
     ComprasCompradorPerfilViewSet, ComprasMisFormulariosView, ProcesoCompraViewSet,
+    compras_resumen_view,
     compras_buscar_licitacion_view, compras_buscar_compra_agil_view, compras_buscar_oc_view,
     compras_importar_licitacion_view, compras_importar_compra_agil_view, compras_importar_oc_view,
 )
@@ -131,6 +132,7 @@ urlpatterns = [
     path('sigfe-anexo1/resumen/', sigfe_anexo1_resumen, name='sigfe_anexo1_resumen'),
     path('sigfe-anexo1/guia-simple/', sigfe_anexo1_guia_simple, name='sigfe_anexo1_guia_simple'),
     path('sigfe-anexo1/serie-nivel1/', sigfe_anexo1_serie_nivel1, name='sigfe_anexo1_serie_nivel1'),
+    path('sigfe-anexo1/mapa-gasto/', sigfe_anexo1_mapa_gasto, name='sigfe_anexo1_mapa_gasto'),
     path('sigfe-anexo1/alertas/', sigfe_anexo1_alertas, name='sigfe_anexo1_alertas'),
     path('sigfe-anexo1/semaforo/', sigfe_anexo1_semaforo, name='sigfe_anexo1_semaforo'),
     path('sigfe-anexo1/burn-rate/', sigfe_anexo1_burn_rate, name='sigfe_anexo1_burn_rate'),
@@ -264,6 +266,7 @@ urlpatterns = [
 
     # Módulo Gestión de Compras
     path('compras/mis-formularios/', ComprasMisFormulariosView.as_view(), name='compras_mis_formularios'),
+    path('compras/resumen/', compras_resumen_view, name='compras_resumen'),
     path('compras/buscar-licitacion/', compras_buscar_licitacion_view, name='compras_buscar_licitacion'),
     path('compras/buscar-compra-agil/', compras_buscar_compra_agil_view, name='compras_buscar_compra_agil'),
     path('compras/buscar-oc/', compras_buscar_oc_view, name='compras_buscar_oc'),

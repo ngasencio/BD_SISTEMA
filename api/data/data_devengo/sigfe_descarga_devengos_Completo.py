@@ -7,7 +7,9 @@ por establecimiento (cobertura) del Servicio de Salud Osorno.
 
 Al terminar el lote de descargas, invoca automáticamente
 consolidar_devengo_anual.py para normalizar los .xlsx nuevos y sincronizarlos
-(upsert incremental, sin duplicar) contra la tabla api_sigfe_devengo_anual.
+por REEMPLAZO (upsert por doc_key — el saldo vivo del documento se
+actualiza en su misma fila, nunca se duplica) contra la tabla
+api_sigfe_devengo_anual.
 Requiere correrse desde esta misma carpeta (api/data/data_devengo/), porque
 ambos scripts resuelven sus rutas relativas al directorio de trabajo actual.
 

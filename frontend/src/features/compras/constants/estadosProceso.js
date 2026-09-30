@@ -58,3 +58,12 @@ export const ESTADO_COLOR = (codigo) => {
 
 export const tipoLabel = (value) => TIPOS_PROCESO.find(t => t.value === value)?.label || value;
 export const estadoLabel = (codigo) => ESTADO_LABELS[codigo] || codigo;
+
+// Color por TIPO de proceso (no por estado) para chips/badges que necesitan
+// distinguir Licitación de Compra Ágil de un vistazo — Licitación=amarillo,
+// Compra Ágil=azul; el resto hereda el color definido en TIPOS_PROCESO.
+// Usado en MisFormulariosPage (columna "Estado de Gestión") y en
+// ResumenComprador (panel de alertas).
+const TIPO_CHIP_COLOR_OVERRIDE = { LICITACION: '#d97706', COMPRA_AGIL: '#0ea5e9' };
+export const colorPorTipo = (tipo) =>
+    TIPO_CHIP_COLOR_OVERRIDE[tipo] || TIPOS_PROCESO.find(t => t.value === tipo)?.color || '#64748b';

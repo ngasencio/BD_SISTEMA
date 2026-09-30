@@ -9,12 +9,13 @@ const tdP = { padding: '7px 10px', fontSize: 12, color: '#374151', whiteSpace: '
 export default function PanelCambiosSigfe({ diff, onCerrar }) {
     if (!diff) return null;
 
-    const { establecimientos_ok = [], establecimientos_fallidos = [], insertadas = 0, ya_existian = 0,
+    const { establecimientos_ok = [], establecimientos_fallidos = [], insertadas = 0, actualizadas = 0, ya_existian = 0,
         resumen_por_ue = [], nuevos_detalle = [], nuevos_detalle_truncado = false } = diff;
 
     const kpis = [
         { icono: '🆕', label: 'Documentos nuevos', valor: insertadas },
-        { icono: '♻️', label: 'Ya existían', valor: ya_existian },
+        { icono: '🔄', label: 'Saldo actualizado', valor: actualizadas },
+        { icono: '♻️', label: 'Sin cambios', valor: ya_existian },
         { icono: '✅', label: 'Establecimientos OK', valor: establecimientos_ok.length },
         { icono: '⚠️', label: 'Establecimientos con error', valor: establecimientos_fallidos.length },
     ];
@@ -35,7 +36,7 @@ export default function PanelCambiosSigfe({ diff, onCerrar }) {
             </div>
 
             {/* KPIs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, padding: '14px 24px', borderBottom: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, padding: '14px 24px', borderBottom: '1px solid #f1f5f9' }}>
                 {kpis.map(k => (
                     <div key={k.label} style={{ padding: '10px 8px', borderRadius: 10, textAlign: 'center', border: '1px solid #e2e8f0' }}>
                         <div style={{ fontSize: 18 }}>{k.icono}</div>
@@ -60,7 +61,7 @@ export default function PanelCambiosSigfe({ diff, onCerrar }) {
                         <thead>
                             <tr>
                                 <th style={thP}>Establecimiento</th>
-                                <th style={{ ...thP, textAlign: 'right' }}>Docs. nuevos</th>
+                                <th style={{ ...thP, textAlign: 'right' }}>Docs. nuevos/actualizados</th>
                                 <th style={{ ...thP, textAlign: 'right' }}>Monto vigente</th>
                             </tr>
                         </thead>
@@ -80,12 +81,12 @@ export default function PanelCambiosSigfe({ diff, onCerrar }) {
             {/* Detalle de documentos nuevos */}
             <div style={{ padding: '16px 24px 4px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>
-                    Documentos nuevos {nuevos_detalle_truncado && <span style={{ fontWeight: 400, color: '#94a3b8' }}>(mostrando los primeros {nuevos_detalle.length})</span>}
+                    Documentos nuevos o con saldo actualizado {nuevos_detalle_truncado && <span style={{ fontWeight: 400, color: '#94a3b8' }}>(mostrando los primeros {nuevos_detalle.length})</span>}
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                     {nuevos_detalle.length === 0 ? (
                         <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-                            No se agregaron documentos nuevos en esta sincronización.
+                            No hubo documentos nuevos ni cambios de saldo en esta sincronización.
                         </div>
                     ) : (
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
