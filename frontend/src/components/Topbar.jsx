@@ -1,10 +1,17 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import logoImg from '../assets/logo.jpg';
 
 export default function Topbar() {
+    const navigate = useNavigate();
     return (
         <div className="gob-header-strip">
-            <div className="gob-logo">
+            <div
+                className="gob-logo"
+                onClick={() => navigate('/')}
+                title="Ir al Inicio"
+                style={{ cursor: 'pointer' }}
+            >
                 <div style={{
                     width: 24, height: 24, borderRadius: 4, overflow: 'hidden',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',

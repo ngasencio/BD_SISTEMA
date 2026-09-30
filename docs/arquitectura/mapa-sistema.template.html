@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mapa del Sistema</title>
+<style>
+  :root {
+    --bg: #05060f;
+    --panel: rgba(13, 19, 38, 0.86);
+    --border: rgba(125, 211, 252, 0.18);
+    --text: #dbe7ff;
+    --dim: #7c8db5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: var(--text); }
+  #scene { position: fixed; inset: 0; display: block; }
+
+  .panel {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+    z-index: 10;
+  }
+
+  #header { top: 18px; left: 18px; padding: 14px 18px; max-width: 400px; }
+  #header h1 {
+    font-size: 18px; font-weight: 700; letter-spacing: 1.5px;
+    background: linear-gradient(90deg, #7dd3fc, #a78bfa, #4ade80);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  #header p { font-size: 11.5px; color: var(--dim); margin-top: 5px; line-height: 1.5; }
+  #header .stats { margin-top: 8px; font-size: 10.5px; color: #5d6f99; letter-spacing: 1px; }
+
+  #legend { top: 18px; right: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; max-height: 70vh; overflow-y: auto; }
+  #legend .ltitle { font-size: 10px; letter-spacing: 2px; color: var(--dim); margin-bottom: 2px; }
+  .chip {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; padding: 5px 10px; border-radius: 8px;
+    cursor: pointer; border: 1px solid transparent;
+    transition: all .18s ease; user-select: none;
+  }
+  .chip:hover { background: rgba(125,211,252,0.08); }
+  .chip.active { border-color: rgba(125,211,252,0.5); background: rgba(125,211,252,0.1); }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 8px currentColor; flex-shrink: 0; }
+
+  /* Panel de detalle: fijo en el lateral izquierdo, NUNCA un overlay de
+     pantalla completa — así el mapa (drag / rueda / clic en otro nodo)
+     sigue respondiendo aunque el panel este abierto. Se desliza con
+     transform en vez de display:none/flex para poder animar la entrada
+     y salida. */
+  #detailPanel {
+    top: 165px; left: 18px; bottom: 90px; width: min(380px, calc(100vw - 36px));
+    padding: 20px 22px; overflow-y: auto;
+    transform: translateX(-130%);
+    transition: transform 0.28s ease;
+    pointer-events: none;
+  }
+  #detailPanel.open { transform: translateX(0); pointer-events: auto; }
+  #detailPanel .close {
+    position: absolute; top: 12px; right: 14px; cursor: pointer;
+    color: var(--dim); font-size: 18px; line-height: 1;
+  }
+  #detailPanel .close:hover { color: #fff; }
+  #detailPanel h2 { font-size: 17px; margin-bottom: 4px; padding-right: 24px; }
+  #detailPanel .meta-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 12px; align-items: center; }
+  #detailPanel .cluster-tag {
+    display: inline-block; font-size: 10px; letter-spacing: 1.5px;
+    padding: 3px 9px; border-radius: 20px;
+    border: 1px solid currentColor;
+  }
+  #detailPanel .type-tag {
+    display: inline-block; font-size: 10px; letter-spacing: 1px;
+    padding: 3px 9px; border-radius: 20px; color: var(--dim);
+    border: 1px solid var(--border);
+  }
+  #detailPanel .path { font-size: 10.5px; color: #5d6f99; font-family: 'Consolas', monospace; margin-bottom: 12px; word-break: break-all; }
+  #detailPanel .desc { font-size: 12.5px; color: var(--text); line-height: 1.6; margin-bottom: 14px; }
+  #detailPanel .conn-title { font-size: 10px; letter-spacing: 2px; color: var(--dim); margin-bottom: 6px; }
+  .conn-row {
+    font-size: 11.5px; padding: 7px 8px; color: #aabbe0; border-bottom: 1px dashed rgba(125,211,252,0.12);
+    cursor: pointer; border-radius: 6px;
+  }
+  .conn-row:hover { background: rgba(125,211,252,0.08); }
+  .conn-row .conn-main { display: flex; gap: 6px; align-items: baseline; }
+  .conn-row .conn-main b { color: var(--text); font-weight: 600; }
+  .conn-row .conn-rel { color: #f472b6; font-size: 10.5px; }
+  .conn-row .conn-evi { color: #5d6f99; font-size: 10px; font-family: 'Consolas', monospace; margin-top: 2px; }
+  .conn-row .conn-inf { color: #fb923c; font-size: 9.5px; margin-left: 4px; }
+
+  #toolbar { bottom: 18px; left: 18px; padding: 10px 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: calc(100vw - 36px); }
+  .btn {
+    font-size: 11.5px; padding: 7px 13px; border-radius: 8px; cursor: pointer;
+    background: rgba(125,211,252,0.07); color: var(--text); white-space: nowrap;
+    border: 1px solid var(--border); transition: all .18s ease; user-select: none;
+  }
+  .btn:hover { background: rgba(125,211,252,0.16); }
+  .btn.on { background: rgba(167,139,250,0.22); border-color: rgba(167,139,250,0.55); }
+  #buscador {
+    font-size: 12px; padding: 7px 10px; border-radius: 8px;
+    background: rgba(5,6,15,0.6); color: var(--text);
+    border: 1px solid var(--border); outline: none; width: 160px;
+  }
+  #buscador::placeholder { color: #5d6f99; }
+
+  #tooltip {
+    position: fixed; pointer-events: none; display: none; z-index: 20;
+    background: rgba(10,14,30,0.92); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 11px; font-size: 12px;
+    transform: translate(14px, 14px); white-space: nowrap;
+  }
+  #tooltip small { display: block; color: var(--dim); font-size: 10px; margin-top: 2px; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(125,211,252,0.25); border-radius: 3px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="header" class="panel">
+  <h1 id="hTitle">SISTEMA</h1>
+  <p id="hDesc"></p>
+  <div class="stats" id="stats"></div>
+</div>
+
+<div id="legend" class="panel">
+  <div class="ltitle">CLUSTERS</div>
+</div>
+
+<div id="detailPanel" class="panel">
+  <span class="close" id="panelClose">✕</span>
+  <h2 id="mName"></h2>
+  <div class="meta-row">
+    <span class="cluster-tag" id="mCluster"></span>
+    <span class="type-tag" id="mTipo"></span>
+    <span class="type-tag" id="mTech"></span>
+  </div>
+  <div class="path" id="mPath"></div>
+  <div class="desc" id="mDesc"></div>
+  <div class="conn-title">CONEXIONES</div>
+  <div id="mConns"></div>
+</div>
+
+<div id="toolbar" class="panel">
+  <div class="btn" id="btnReset">⟲ Centrar cámara</div>
+  <div class="btn on" id="btnRotate">Rotación</div>
+  <div class="btn" id="btnAll">Ver todo</div>
+  <div class="btn on" id="btnInferidas">Mostrar inferidas</div>
+  <input id="buscador" type="text" placeholder="Buscar nodo..." />
+</div>
+
+<div id="tooltip"></div>
+
+<script id="graph-data" type="application/json">
+{}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================
+   CARGA DEL GRAFO (inyectado por build_graph.py)
+   ============================================================ */
+const GRAPH = JSON.parse(document.getElementById('graph-data').textContent);
+const CLUSTERS = GRAPH.clusters || {};
+const NODES = GRAPH.nodes || [];
+const EDGES = GRAPH.edges || [];
+const META = GRAPH.meta || {};
+
+document.getElementById('hTitle').textContent = (META.sistema || 'Sistema').toUpperCase();
+document.getElementById('hDesc').textContent = META.descripcion || '';
+
+/* ============================================================
+   ESCENA
+   ============================================================ */
+const canvas   = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05060f);
+scene.fog = new THREE.FogExp2(0x05060f, 0.00085);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 1, 6000);
+const CAMERA_HOME = new THREE.Vector3(0, 140, 780);
+camera.position.copy(CAMERA_HOME);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.4;
+controls.minDistance = 80;
+controls.maxDistance = 2400;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+const keyLight = new THREE.PointLight(0x8fb8ff, 1.2, 3000);
+keyLight.position.set(300, 400, 300);
+scene.add(keyLight);
+
+/* ---------- Fondo estrellado ---------- */
+{
+  const N = 1400, pos = new Float32Array(N*3);
+  for (let i=0;i<N;i++){
+    const r = 1400 + Math.random()*2200;
+    const t = Math.random()*Math.PI*2, p = Math.acos(2*Math.random()-1);
+    pos[i*3]   = r*Math.sin(p)*Math.cos(t);
+    pos[i*3+1] = r*Math.sin(p)*Math.sin(t);
+    pos[i*3+2] = r*Math.cos(p);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({
+    color:0x5f74b8, size:2.2, sizeAttenuation:true, transparent:true, opacity:0.55
+  })));
+}
+
+/* ---------- Texturas de canvas ---------- */
+function glowTexture(hex){
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  const col = new THREE.Color(hex);
+  const rgb = `${col.r*255|0},${col.g*255|0},${col.b*255|0}`;
+  const g = x.createRadialGradient(128,128,0,128,128,128);
+  g.addColorStop(0, `rgba(${rgb},0.9)`);
+  g.addColorStop(0.28, `rgba(${rgb},0.38)`);
+  g.addColorStop(1, `rgba(${rgb},0)`);
+  x.fillStyle = g; x.fillRect(0,0,256,256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function labelTexture(text, hex, scale=1){
+  const fs = 42*scale, pad = 16*scale;
+  const c = document.createElement('canvas');
+  let x = c.getContext('2d');
+  x.font = `600 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+  c.width  = Math.ceil(x.measureText(text).width) + pad*2;
+  c.height = fs + pad*2;
+  x = c.getContext('2d');
+  x.font = `600 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+  x.textAlign='center'; x.textBaseline='middle';
+  x.shadowColor='rgba(0,0,0,0.9)'; x.shadowBlur=10*scale;
+  x.fillStyle = hex;
+  x.fillText(text, c.width/2, c.height/2);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return { tex:t, aspect:c.width/c.height };
+}
+
+const glowTexCache = {};
+function getGlow(hex){ return glowTexCache[hex] ??= glowTexture(hex); }
+
+/* ---------- Grado de cada nodo (para tamaño) ---------- */
+const grado = {};
+NODES.forEach(n => grado[n.id] = 0);
+EDGES.forEach(e => { grado[e.a] = (grado[e.a]||0)+1; grado[e.b] = (grado[e.b]||0)+1; });
+
+/* ---------- Anclas de cluster en esfera de Fibonacci ---------- */
+const clusterIds = Object.keys(CLUSTERS);
+const anchors = {};
+clusterIds.forEach((cid,i)=>{
+  const k = i + 0.5, n = clusterIds.length;
+  const phi = Math.acos(1 - 2*k/n), theta = Math.PI*(1+Math.sqrt(5))*k;
+  anchors[cid] = new THREE.Vector3(
+    Math.sin(phi)*Math.cos(theta), Math.cos(phi), Math.sin(phi)*Math.sin(theta)
+  ).multiplyScalar(230);
+});
+
+/* ---------- Construcción de nodos ---------- */
+const nodeById = {};
+const pickables = [];
+
+NODES.forEach((d)=>{
+  const clusterInfo = CLUSTERS[d.cluster] || { color: '#94a3b8', name: d.cluster };
+  const col = new THREE.Color(clusterInfo.color);
+  const group = new THREE.Group();
+
+  const radio = 9 + Math.min(grado[d.id]||0, 10) * 0.9;
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(radio, 24, 24),
+    new THREE.MeshBasicMaterial({ color: col })
+  );
+  core.userData.nodeId = d.id;
+  group.add(core);
+
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: getGlow(clusterInfo.color), transparent:true,
+    blending: THREE.AdditiveBlending, depthWrite:false, opacity:0.85
+  }));
+  glow.scale.setScalar(52 + radio);
+  group.add(glow);
+
+  const { tex, aspect } = labelTexture(d.label, '#eaf2ff');
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:tex, transparent:true, depthWrite:false
+  }));
+  const lh = 24; label.scale.set(lh*aspect, lh, 1);
+  label.position.y = -(radio + 20);
+  group.add(label);
+
+  group.position.copy(anchors[d.cluster] || new THREE.Vector3()).add(new THREE.Vector3(
+    (Math.random()-0.5)*150,(Math.random()-0.5)*150,(Math.random()-0.5)*150
+  ));
+
+  scene.add(group);
+  nodeById[d.id] = { data:d, group, core, glow, label,
+                     vel:new THREE.Vector3(), pulse:Math.random()*Math.PI*2 };
+  pickables.push(core);
+});
+
+/* ---------- Construcción de aristas ---------- */
+const SEGS = 28;
+const edges = EDGES.map((e,i)=>{
+  const na = nodeById[e.a], nb = nodeById[e.b];
+  if (!na || !nb) return null;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array((SEGS+1)*3),3));
+  const colA = new THREE.Color((CLUSTERS[na.data.cluster]||{}).color || '#94a3b8');
+  const colB = new THREE.Color((CLUSTERS[nb.data.cluster]||{}).color || '#94a3b8');
+  const col = colA.clone().lerp(colB, 0.5);
+  const inferida = e.confianza === 'inferida';
+  const material = inferida
+    ? new THREE.LineDashedMaterial({ color: col, transparent:true, opacity:0.5, dashSize:6, gapSize:4 })
+    : new THREE.LineBasicMaterial({ color: col, transparent:true, opacity:0.4 });
+  const line = new THREE.Line(g, material);
+  scene.add(line);
+
+  const { tex, aspect } = labelTexture(e.rel || '', '#8fa4d0', 0.68);
+  const relSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:tex, transparent:true, depthWrite:false, opacity:0.55
+  }));
+  const rh = 11; relSprite.scale.set(rh*aspect, rh, 1);
+  scene.add(relSprite);
+
+  const bend = ((i*37)%11 - 5) / 5 * 0.22 + 0.14;
+
+  // Nota: no usar `rel` como nombre de propiedad aqui — `...e` ya trae
+  // `rel` (el texto de la relacion, usado en el modal); llamar `rel` al
+  // sprite 3D lo pisaria silenciosamente (bug real detectado al probar
+  // el mapa: el modal mostraba "[object Object]" en vez del texto).
+  return { ...e, na, nb, line, relSprite, bend, inferida,
+           packets:[{t:Math.random()},{t:(Math.random()+0.5)%1}] };
+}).filter(Boolean);
+
+/* ---------- Puntos-paquete viajando por las aristas ---------- */
+const packetCount = edges.reduce((s,e)=>s+e.packets.length,0);
+const packetGeo = new THREE.BufferGeometry();
+packetGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(Math.max(packetCount,1)*3),3));
+const packetCols = new Float32Array(Math.max(packetCount,1)*3);
+{
+  let k = 0;
+  edges.forEach(e=>{
+    const c = e.line.material.color;
+    e.packets.forEach(()=>{
+      packetCols[k]=c.r; packetCols[k+1]=c.g; packetCols[k+2]=c.b;
+      k += 3;
+    });
+  });
+}
+packetGeo.setAttribute('color', new THREE.BufferAttribute(packetCols,3));
+const packets = new THREE.Points(packetGeo, new THREE.PointsMaterial({
+  size:8, map:getGlow('#ffffff'), vertexColors:true, transparent:true,
+  blending:THREE.AdditiveBlending, depthWrite:false, opacity:0.95
+}));
+scene.add(packets);
+
+/* ---------- Física force-directed ---------- */
+const tmpV = new THREE.Vector3(), tmpF = new THREE.Vector3();
+let alpha = 1;
+
+function stepPhysics(dt){
+  const ids = Object.keys(nodeById);
+  for (let i=0;i<ids.length;i++){
+    const A = nodeById[ids[i]];
+    for (let j=i+1;j<ids.length;j++){
+      const B = nodeById[ids[j]];
+      tmpV.subVectors(A.group.position, B.group.position);
+      let d = tmpV.length() || 1;
+      const f = Math.min(26000/(d*d), 40) * alpha;
+      tmpV.normalize().multiplyScalar(f*dt);
+      A.vel.add(tmpV); B.vel.sub(tmpV);
+    }
+    tmpF.copy(anchors[A.data.cluster] || new THREE.Vector3()).sub(A.group.position)
+         .multiplyScalar(0.010*alpha*dt*60);
+    A.vel.add(tmpF);
+    tmpF.copy(A.group.position).multiplyScalar(-0.0016*alpha*dt*60);
+    A.vel.add(tmpF);
+  }
+  edges.forEach(e=>{
+    const A = e.na.group.position, B = e.nb.group.position;
+    tmpV.subVectors(B, A);
+    const d = tmpV.length() || 1;
+    const f = (d - 150) * 0.012 * alpha;
+    tmpV.normalize().multiplyScalar(f*dt);
+    e.na.vel.add(tmpV); e.nb.vel.sub(tmpV);
+  });
+  ids.forEach(id=>{
+    const n = nodeById[id];
+    n.vel.multiplyScalar(0.86);
+    if (n.vel.length()>30) n.vel.setLength(30);
+    n.group.position.addScaledVector(n.vel, dt*60);
+  });
+  // Antes el piso era 0.035: la simulación nunca se detenía del todo y
+  // cada frame, para siempre, recalculaba las 62 curvas de las aristas
+  // (~1800 puntos) + el layout de fuerzas O(n²) aunque el grafo ya
+  // estuviera visualmente quieto. Ese trabajo continuo hacía variar el
+  // tiempo por frame y el zoom con la rueda se sentía entrecortado.
+  // Dejamos que llegue a 0 — el loop principal congela el recálculo
+  // pesado una vez asentado (ver ALPHA_QUIETO más abajo).
+  alpha = Math.max(0, alpha*0.995);
+}
+
+/* ---------- Actualización visual por frame ---------- */
+// Umbral bajo el cual el layout se considera "asentado" y se deja de
+// recalcular la física y la geometría de las curvas — pero los paquetes
+// que viajan por cada arista se siguen animando siempre (usan la última
+// curva calculada, que ya no cambia porque los nodos dejaron de moverse).
+const ALPHA_QUIETO = 0.002;
+const pArr = packetGeo.attributes.position.array;
+function updateEdges(time, quieto){
+  let pi = 0;
+  edges.forEach(e=>{
+    if (!quieto || !e.curve){
+      const A = e.na.group.position, B = e.nb.group.position;
+      tmpV.addVectors(A,B).multiplyScalar(0.5);
+      const mid = tmpV.clone();
+      const dir = new THREE.Vector3().subVectors(B,A);
+      const perp = new THREE.Vector3(-dir.z, dir.y*0.4+30, dir.x).normalize();
+      const ctrl = mid.clone().addScaledVector(perp, dir.length()*e.bend);
+      e.curve = new THREE.QuadraticBezierCurve3(A.clone(), ctrl, B.clone());
+
+      const pos = e.line.geometry.attributes.position;
+      for (let s=0;s<=SEGS;s++){
+        const p = e.curve.getPoint(s/SEGS);
+        pos.setXYZ(s, p.x, p.y, p.z);
+      }
+      pos.needsUpdate = true;
+      if (e.inferida) e.line.computeLineDistances();
+
+      e.relSprite.position.copy(e.curve.getPoint(0.5));
+    }
+
+    e.packets.forEach(pk=>{
+      pk.t = (pk.t + 0.0035 + 0.0015*Math.sin(time*0.7)) % 1;
+      const p = e.curve.getPoint(pk.t);
+      pArr[pi++]=p.x; pArr[pi++]=p.y; pArr[pi++]=p.z;
+    });
+  });
+  packetGeo.attributes.position.needsUpdate = true;
+}
+
+function updateNodes(){
+  Object.values(nodeById).forEach(n=>{
+    n.pulse += 0.03;
+    const s = 1 + Math.sin(n.pulse)*0.10;
+    if (n !== hovered && n !== selected) n.core.scale.setScalar(s);
+  });
+}
+
+/* ---------- Interacción: hover, click, modal ---------- */
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hovered = null, selected = null, isolatedCluster = null, showInferidas = true;
+const tooltip = document.getElementById('tooltip');
+
+function nodeAt(ev){
+  mouse.set(ev.clientX/innerWidth*2-1, -(ev.clientY/innerHeight)*2+1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObjects(pickables, false)[0];
+  return hit ? nodeById[hit.object.userData.nodeId] : null;
+}
+
+function applyHighlight(){
+  const focus = hovered || selected;
+  const involved = new Set();
+  if (focus) involved.add(focus.data.id);
+  if (focus) edges.forEach(e=>{
+    if (e.a===focus.data.id||e.b===focus.data.id){ involved.add(e.a); involved.add(e.b); }
+  });
+
+  Object.values(nodeById).forEach(n=>{
+    let op = 1, dimCore = 1;
+    if (isolatedCluster && n.data.cluster!==isolatedCluster){ op=0.08; dimCore=0.35; }
+    if (focus && !involved.has(n.data.id)){ op=0.12; dimCore=0.4; }
+    n.label.material.opacity = op;
+    n.glow.material.opacity  = 0.85*op;
+    const baseColor = new THREE.Color((CLUSTERS[n.data.cluster]||{}).color || '#94a3b8');
+    n.core.material.color.copy(baseColor.multiplyScalar(dimCore));
+    n.core.material.transparent = op<1;
+    n.core.material.opacity = Math.max(op,0.15);
+    const target = (n===focus)?1.55:1;
+    n.core.scale.setScalar(THREE.MathUtils.lerp(n.core.scale.x,target,0.4));
+  });
+
+  edges.forEach(e=>{
+    let op = 0.4, rop = 0.55;
+    if (e.inferida && !showInferidas){ op = 0; rop = 0; e.line.visible = false; e.relSprite.visible = false; }
+    else {
+      e.line.visible = true; e.relSprite.visible = true;
+      const hot = focus && (e.a===focus.data.id||e.b===focus.data.id);
+      if (isolatedCluster){
+        const inC = e.na.data.cluster===isolatedCluster && e.nb.data.cluster===isolatedCluster;
+        if (!inC){ op=0.05; rop=0; }
+      }
+      if (focus){ op = hot?0.95:0.07; rop = hot?1:0; }
+    }
+    e.line.material.opacity = op;
+    e.relSprite.material.opacity  = rop;
+  });
+}
+
+addEventListener('pointermove', (ev)=>{
+  if (ev.target!==renderer.domElement){ hovered=null; tooltip.style.display='none'; applyHighlight(); return; }
+  const n = nodeAt(ev);
+  if (n!==hovered){ hovered=n; applyHighlight(); }
+  if (n){
+    tooltip.style.display='block';
+    tooltip.style.left=ev.clientX+'px'; tooltip.style.top=ev.clientY+'px';
+    tooltip.textContent = '';
+    const b = document.createElement('b'); b.textContent = n.data.label;
+    const small = document.createElement('small');
+    small.textContent = (CLUSTERS[n.data.cluster]||{}).name + ' — clic para detalles';
+    tooltip.appendChild(b); tooltip.appendChild(small);
+    canvas.style.cursor='pointer';
+  } else { tooltip.style.display='none'; canvas.style.cursor='grab'; }
+});
+
+// OrbitControls dispara 'start' al iniciar CUALQUIER interacción real:
+// drag (rotar/pan) y también la rueda del mouse (zoom) — a diferencia de
+// escuchar solo 'pointerdown', que nunca se dispara con la rueda. Antes,
+// la auto-rotación seguía activa mientras el usuario hacía zoom con la
+// rueda, y la cámara "peleaba" con el zoom (bug reportado: navegación
+// con la rueda no fluida).
+controls.addEventListener('start', () => {
+  controls.autoRotate = false;
+  btnRotate.classList.remove('on');
+  // Cancela cualquier vuelo de cámara en curso (flyTo por búsqueda o por
+  // clic en una conexión). Bug real detectado al probar: mientras esa
+  // animación seguía activa, updateCameraAnim reimponía su posición
+  // programada en cada frame y anulaba por completo el zoom con la
+  // rueda durante ~600ms (el usuario lo percibía como que la rueda "no
+  // respondía" o saltaba de forma rara). Con esto, tocar la rueda o
+  // arrastrar interrumpe el vuelo al instante y el usuario recupera el
+  // control de la cámara de inmediato.
+  camAnim = null;
+});
+
+let downX=0, downY=0;
+addEventListener('pointerdown', e=>{ downX=e.clientX; downY=e.clientY; });
+addEventListener('pointerup', (e)=>{
+  if (Math.hypot(e.clientX-downX,e.clientY-downY)>6 || e.target!==renderer.domElement) return;
+  const n = nodeAt(e);
+  selected = n;
+  applyHighlight();
+  if (n) openModal(n); else closeModal();
+});
+
+/* ---------- Panel de detalle ---------- */
+const detailPanel = document.getElementById('detailPanel');
+function openModal(n){
+  const d = n.data, c = CLUSTERS[d.cluster] || { name: d.cluster, color:'#94a3b8' };
+  document.getElementById('mName').textContent = d.label;
+  const tag = document.getElementById('mCluster');
+  tag.textContent = c.name; tag.style.color = c.color;
+  document.getElementById('mTipo').textContent = d.tipo || '';
+  document.getElementById('mTech').textContent = d.tech || '';
+  document.getElementById('mPath').textContent = d.path || '';
+  document.getElementById('mDesc').textContent = d.desc || '';
+
+  const cont = document.getElementById('mConns');
+  cont.textContent = '';
+  edges.filter(e=>e.a===d.id||e.b===d.id).forEach(e=>{
+    const otherId = e.a===d.id ? e.b : e.a;
+    const other = nodeById[otherId];
+    if (!other) return;
+    const arrow = e.a===d.id ? '→' : '←';
+
+    const row = document.createElement('div');
+    row.className = 'conn-row';
+
+    const main = document.createElement('div');
+    main.className = 'conn-main';
+    const arrowSpan = document.createElement('span'); arrowSpan.textContent = arrow;
+    const nameB = document.createElement('b'); nameB.textContent = other.data.label;
+    const relSpan = document.createElement('span'); relSpan.className = 'conn-rel'; relSpan.textContent = '· ' + (e.rel||'');
+    main.appendChild(arrowSpan); main.appendChild(nameB); main.appendChild(relSpan);
+    if (e.confianza === 'inferida'){
+      const infSpan = document.createElement('span'); infSpan.className = 'conn-inf'; infSpan.textContent = '(inferida)';
+      main.appendChild(infSpan);
+    }
+    row.appendChild(main);
+
+    const evi = document.createElement('div');
+    evi.className = 'conn-evi';
+    evi.textContent = e.evidencia || '';
+    row.appendChild(evi);
+
+    row.addEventListener('click', ()=>{
+      selected = other;
+      applyHighlight();
+      flyTo(other);
+      openModal(other);
+    });
+    cont.appendChild(row);
+  });
+
+  detailPanel.classList.add('open');
+}
+// No hay backdrop que capturar (el panel es lateral, no bloquea el resto
+// de la pantalla) — se cierra solo con la X o con ESC.
+function closeModal(){ detailPanel.classList.remove('open'); selected=null; applyHighlight(); }
+document.getElementById('panelClose').onclick = closeModal;
+addEventListener('keydown', (e)=>{ if (e.key==='Escape') closeModal(); });
+
+/* ---------- Cámara animada hacia un nodo ---------- */
+let camAnim = null;
+function flyTo(n){
+  const targetPos = n.group.position.clone();
+  const offset = camera.position.clone().sub(controls.target);
+  // Si la cámara ya está prácticamente sobre el target (offset ~0),
+  // normalizar ese vector da NaN. Con una cámara/target casi coincidentes
+  // no hay una dirección de aproximación sensata, así que usamos una
+  // dirección fija de respaldo en vez de arriesgar NaN.
+  if (offset.lengthSq() < 1e-6) offset.copy(CAMERA_HOME).sub(new THREE.Vector3(0,0,0));
+  const dist = Math.max(offset.length(), 160);
+  const desiredCam = targetPos.clone().add(offset.setLength(dist));
+  camAnim = {
+    t: 0, duration: 600,
+    fromCam: camera.position.clone(), toCam: desiredCam,
+    fromTarget: controls.target.clone(), toTarget: targetPos,
+  };
+}
+function updateCameraAnim(dtMs){
+  if (!camAnim) return;
+  camAnim.t += dtMs;
+  const p = Math.min(camAnim.t / camAnim.duration, 1);
+  const ease = p<0.5 ? 2*p*p : 1-Math.pow(-2*p+2,2)/2;
+  camera.position.lerpVectors(camAnim.fromCam, camAnim.toCam, ease);
+  controls.target.lerpVectors(camAnim.fromTarget, camAnim.toTarget, ease);
+  if (p>=1) camAnim = null;
+}
+
+/* ---------- Leyenda / aislamiento de clusters ---------- */
+const legend = document.getElementById('legend');
+clusterIds.forEach(cid=>{
+  const c = CLUSTERS[cid];
+  const chip = document.createElement('div');
+  chip.className='chip';
+  const dot = document.createElement('span');
+  dot.className='dot'; dot.style.background = c.color; dot.style.color = c.color;
+  const label = document.createElement('span'); label.textContent = c.name;
+  chip.appendChild(dot); chip.appendChild(label);
+  chip.onclick = ()=>{
+    isolatedCluster = isolatedCluster===cid ? null : cid;
+    document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+    if (isolatedCluster) chip.classList.add('active');
+    applyHighlight();
+  };
+  legend.appendChild(chip);
+});
+
+/* ---------- Buscador ---------- */
+const buscador = document.getElementById('buscador');
+function buscarNodo(){
+  const q = buscador.value.trim().toLowerCase();
+  if (!q) return;
+  const match = NODES.find(n => n.label.toLowerCase().includes(q));
+  if (match){
+    const n = nodeById[match.id];
+    selected = n;
+    applyHighlight();
+    flyTo(n);
+  }
+}
+buscador.addEventListener('keydown', (e)=>{ if (e.key==='Enter') buscarNodo(); });
+
+/* ---------- Toolbar ---------- */
+const btnRotate = document.getElementById('btnRotate');
+const btnInferidas = document.getElementById('btnInferidas');
+document.getElementById('btnReset').onclick = ()=>{
+  camAnim = {
+    t: 0, duration: 600,
+    fromCam: camera.position.clone(), toCam: CAMERA_HOME.clone(),
+    fromTarget: controls.target.clone(), toTarget: new THREE.Vector3(0,0,0),
+  };
+};
+btnRotate.onclick = ()=>{
+  controls.autoRotate = !controls.autoRotate;
+  btnRotate.classList.toggle('on', controls.autoRotate);
+};
+document.getElementById('btnAll').onclick = ()=>{
+  isolatedCluster=null; selected=null; closeModal();
+  document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+  applyHighlight();
+};
+btnInferidas.onclick = ()=>{
+  showInferidas = !showInferidas;
+  btnInferidas.classList.toggle('on', showInferidas);
+  applyHighlight();
+};
+
+document.getElementById('stats').textContent =
+  `${NODES.length} nodos · ${EDGES.length} relaciones · ${clusterIds.length} clusters`;
+
+/* ---------- Loop ---------- */
+const clock = new THREE.Clock();
+(function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  const quieto = alpha <= ALPHA_QUIETO;
+  if (!quieto) stepPhysics(dt);
+  updateEdges(t, quieto);
+  updateNodes();
+  updateCameraAnim(dt*1000);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

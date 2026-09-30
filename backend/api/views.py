@@ -1200,6 +1200,28 @@ def ordenes_compra_raw_all(request):
     return Response(data)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ordenes_compra_detalles_por_oc(request):
+    """
+    Devuelve las líneas de detalle (productos) de la lista de codigo_oc enviada.
+    Usado por el frontend para exportar la hoja "ProductoOC" del Excel de la
+    Tabla Maestra (POST en vez de GET porque la lista de códigos puede ser larga).
+    """
+    codigos = request.data.get('codigos', [])
+    if not isinstance(codigos, list) or not codigos:
+        return Response([])
+
+    codigos = [str(c) for c in codigos][:25000]
+
+    qs = DetalleOrdenCompra.objects.filter(orden_compra_id__in=codigos).values(
+        'orden_compra_id', 'Correlativo', 'CodigoCategoria', 'Categoria',
+        'CodigoProducto', 'Producto', 'EspecificacionComprador', 'EspecificacionProveedor',
+        'Cantidad', 'Unidad', 'PrecioNeto', 'TotalImpuestos', 'TotalLinea',
+    )[:50000]
+    return Response(list(qs))
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def ordenes_compra_proyectos_licitacion(request):

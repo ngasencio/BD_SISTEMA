@@ -142,12 +142,119 @@ function Pagination({ page, setPage, pageSize, setPageSize, total }) {
 
 // ─── TAB GENERAL ─────────────────────────────────────────────────────────────
 
+// Agrega hyperlinks reales (clicables) a las celdas de una columna de un worksheet XLSX,
+// a partir del texto/URL que ya quedó volcado por json_to_sheet en esa misma celda.
+function addHyperlinksToSheet(ws, rows, colKey) {
+    if (!rows.length) return;
+    const colIndex = Object.keys(rows[0]).indexOf(colKey);
+    if (colIndex === -1) return;
+    rows.forEach((row, i) => {
+        const url = row[colKey];
+        if (!url) return;
+        const cellRef = XLSX.utils.encode_cell({ r: i + 1, c: colIndex }); // +1: fila 0 es el encabezado
+        if (ws[cellRef]) ws[cellRef].l = { Target: url, Tooltip: 'Abrir en Mercado Público' };
+    });
+}
+
 function TabGeneral({ data }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [pgPage, setPgPage] = useState(1);
     const [pgSize, setPgSize] = useState(20);
-    useEffect(() => { setPgPage(1); }, [data.length, pgSize]);
-    const pgSlice = data.slice((pgPage - 1) * pgSize, pgPage * pgSize);
+    const [sortCol, setSortCol] = useState('FechaEnvio');
+    const [sortDir, setSortDir] = useState('desc');
+    const [exportando, setExportando] = useState(false);
+
+    const toggleSort = (col) => {
+        if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        else { setSortCol(col); setSortDir('desc'); }
+    };
+
+    const filteredData = useMemo(() => {
+        const s = searchTerm.trim().toLowerCase();
+        if (!s) return data;
+        return data.filter(oc =>
+            oc.codigo_oc?.toLowerCase().includes(s) ||
+            oc.NombreOC?.toLowerCase().includes(s) ||
+            oc.P_Nombre?.toLowerCase().includes(s)
+        );
+    }, [data, searchTerm]);
+
+    const sortedData = useMemo(() => {
+        if (!sortCol) return filteredData;
+        return filteredData.slice().sort((a, b) => {
+            let va, vb;
+            if (sortCol === 'TotalBruto') { va = Number(a.TotalBruto) || 0; vb = Number(b.TotalBruto) || 0; }
+            else { va = a.FechaEnvio ? new Date(a.FechaEnvio).getTime() : 0; vb = b.FechaEnvio ? new Date(b.FechaEnvio).getTime() : 0; }
+            return sortDir === 'asc' ? va - vb : vb - va;
+        });
+    }, [filteredData, sortCol, sortDir]);
+
+    useEffect(() => { setPgPage(1); }, [data.length, searchTerm, pgSize, sortCol, sortDir]);
+    const pgSlice = sortedData.slice((pgPage - 1) * pgSize, pgPage * pgSize);
+
+    const handleExportExcel = async () => {
+        setExportando(true);
+        try {
+            const ocRows = sortedData.map(oc => ({
+                codigo_oc:          oc.codigo_oc,
+                NombreOC:           oc.NombreOC || '',
+                EstadoOC:           oc.EstadoOC || '',
+                TipoOC:             oc.TipoOC || '',
+                TipoMoneda:         oc.TipoMoneda || 'CLP',
+                FechaCreacion:      oc.FechaCreacion || '',
+                FechaEnvio:         oc.FechaEnvio || '',
+                FechaAceptacion:    oc.FechaAceptacion || '',
+                TotalNeto:          Number(oc.TotalNeto) || 0,
+                TotalBruto:         Number(oc.TotalBruto) || 0,
+                C_Unidad:           oc.C_Unidad || '',
+                C_CodigoUnidad:     oc.C_CodigoUnidad || '',
+                P_Nombre:           oc.P_Nombre || '',
+                P_Rut:              oc.P_Rut || '',
+                LinkMP:             oc.LinkMP || '',
+                EnlacePAC:          oc.EnlacePAC || '',
+                CodigoLicitacion:   oc.CodigoLicitacion || '',
+                ID_Proyecto:        oc.ID_Proyecto || '',
+                Nombre_Proyecto:    oc.Nombre_Proyecto || '',
+                TipoCompraInterna:  oc.TipoCompraInterna || '',
+                TipoOCInterno:      oc.TipoOCInterno || '',
+                DescripcionTipoOC:  oc.DescripcionTipoOC || '',
+            }));
+
+            const codigos = sortedData.map(oc => oc.codigo_oc).filter(Boolean);
+            const { data: detalles } = codigos.length
+                ? await api.post('ordenes-compra-detalles/por-oc/', { codigos })
+                : { data: [] };
+
+            const productoRows = detalles.map(d => ({
+                codigo_oc:                d.orden_compra_id,
+                Correlativo:               d.Correlativo ?? '',
+                CodigoCategoria:           d.CodigoCategoria || '',
+                Categoria:                 d.Categoria || '',
+                CodigoProducto:            d.CodigoProducto || '',
+                Producto:                  d.Producto || '',
+                EspecificacionComprador:   d.EspecificacionComprador || '',
+                EspecificacionProveedor:   d.EspecificacionProveedor || '',
+                Cantidad:                  Number(d.Cantidad) || 0,
+                Unidad:                    d.Unidad || '',
+                PrecioNeto:                Number(d.PrecioNeto) || 0,
+                TotalImpuestos:            Number(d.TotalImpuestos) || 0,
+                TotalLinea:                Number(d.TotalLinea) || 0,
+            }));
+
+            const wsOC = XLSX.utils.json_to_sheet(ocRows);
+            addHyperlinksToSheet(wsOC, ocRows, 'LinkMP');
+            const wsProductos = XLSX.utils.json_to_sheet(productoRows);
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, wsOC, 'DetalleOC');
+            XLSX.utils.book_append_sheet(wb, wsProductos, 'ProductoOC');
+            XLSX.writeFile(wb, `Ordenes_Compra_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        } catch (err) {
+            alert('Error al generar el Excel: ' + (err.response?.data?.detail || err.message));
+        } finally {
+            setExportando(false);
+        }
+    };
 
     const totalOCs = data.length;
     const sumaNetoCLP = data.filter(oc => !oc.TipoMoneda || oc.TipoMoneda === 'CLP')
@@ -213,15 +320,26 @@ function TabGeneral({ data }) {
             </div>
 
             <div className="card">
-                <div className="card-header card-header-accent"><span>📋</span><span className="card-title">Tabla Maestra de Órdenes de Compra</span></div>
-                <SearchTable placeholder="🔍 Buscar nombre, código OC o proveedor…" value={searchTerm} onChange={setSearchTerm} count={data.length} total={data.length} />
+                <div className="card-header card-header-accent">
+                    <span>📋</span><span className="card-title">Tabla Maestra de Órdenes de Compra</span>
+                    <button onClick={handleExportExcel} disabled={exportando} style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 7, border: 'none',
+                        background: exportando ? '#94a3b8' : '#16a34a', color: '#fff', fontWeight: 700, fontSize: 12, cursor: exportando ? 'not-allowed' : 'pointer' }}>
+                        {exportando ? '⏳ Generando…' : '⬇ Descargar en Excel'}
+                    </button>
+                </div>
+                <SearchTable placeholder="🔍 Buscar nombre, código OC o proveedor…" value={searchTerm} onChange={setSearchTerm} count={filteredData.length} total={data.length} />
                 <div className="table-responsive">
                     <table className="table-gob">
                         <thead>
                             <tr>
                                 <th>Código OC</th><th>Nombre</th><th>Tipo</th><th>Estado</th>
-                                <th>Proveedor</th><th>Fecha Envío</th>
-                                <th style={{ textAlign: 'right' }}>Monto Bruto</th>
+                                <th>Proveedor</th>
+                                <th style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => toggleSort('FechaEnvio')}>
+                                    Fecha Envío <span style={{ opacity: 0.5 }}>{sortCol === 'FechaEnvio' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                                </th>
+                                <th style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => toggleSort('TotalBruto')}>
+                                    Monto Bruto <span style={{ opacity: 0.5 }}>{sortCol === 'TotalBruto' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                                </th>
                                 <th>EnlacePAC</th><th>Link MP</th>
                             </tr>
                         </thead>
@@ -243,11 +361,11 @@ function TabGeneral({ data }) {
                                     <td>{oc.LinkMP ? <a href={oc.LinkMP} target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>🔗 MP</a> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
                                 </tr>
                             ))}
-                            {data.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>No se encontraron OC</td></tr>}
+                            {sortedData.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>No se encontraron OC</td></tr>}
                         </tbody>
                     </table>
                 </div>
-                <Pagination page={pgPage} setPage={setPgPage} pageSize={pgSize} setPageSize={setPgSize} total={data.length} />
+                <Pagination page={pgPage} setPage={setPgPage} pageSize={pgSize} setPageSize={setPgSize} total={sortedData.length} />
             </div>
         </div>
     );

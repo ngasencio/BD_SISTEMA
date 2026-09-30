@@ -41,6 +41,7 @@ import { devengoSigfeRoutes } from './features/devengo-sigfe/routes';
 import { anexo1SigfeRoutes } from './features/anexo1-sigfe/routes';
 import { facturasRoutes } from './features/facturas/routes';
 import { comprasRoutes } from './features/compras/routes';
+import { mapaSistemaRoutes } from './features/mapa-sistema/routes';
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,8 @@ function AppRoutes() {
             <Route path="/" element={<Home />} />
             <Route path="/licitaciones" element={<Dashboard />} />
             <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
+            {/* Mapa del sistema (todos los autenticados) */}
+            {mapaSistemaRoutes}
             {/* Módulo PAC (todos los autenticados) */}
             {pacRoutes}
             {/* Módulo PAC — Cumplimiento del Plan Anual de Compras (todos los autenticados) */}

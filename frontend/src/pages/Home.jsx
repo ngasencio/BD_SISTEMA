@@ -157,13 +157,27 @@ export default function Home() {
                         </div>
                     </div>
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: '#1e293b', fontFamily: 'monospace', lineHeight: 1 }}>
-                        {hora}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+                    <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: '#1e293b', fontFamily: 'monospace', lineHeight: 1 }}>
+                            {hora}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, textTransform: 'capitalize' }}>
+                            {fecha}
+                        </div>
                     </div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, textTransform: 'capitalize' }}>
-                        {fecha}
-                    </div>
+                    <button
+                        onClick={() => navigate('/mapa-sistema')}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '10px 16px', borderRadius: 8, border: '1px solid #1e293b',
+                            background: '#0f172a', color: '#fff', fontSize: 13, fontWeight: 600,
+                            cursor: 'pointer',
+                        }}
+                        title="Ver cómo está conectado el sistema"
+                    >
+                        🗺️ Ver Mapa
+                    </button>
                 </div>
             </div>
 
