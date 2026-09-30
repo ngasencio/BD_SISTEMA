@@ -175,7 +175,8 @@ function TabGeneral({ data }) {
         return data.filter(oc =>
             oc.codigo_oc?.toLowerCase().includes(s) ||
             oc.NombreOC?.toLowerCase().includes(s) ||
-            oc.P_Nombre?.toLowerCase().includes(s)
+            oc.P_Nombre?.toLowerCase().includes(s) ||
+            oc.CodigoLicitacion?.toLowerCase().includes(s)
         );
     }, [data, searchTerm]);
 
@@ -327,13 +328,13 @@ function TabGeneral({ data }) {
                         {exportando ? '⏳ Generando…' : '⬇ Descargar en Excel'}
                     </button>
                 </div>
-                <SearchTable placeholder="🔍 Buscar nombre, código OC o proveedor…" value={searchTerm} onChange={setSearchTerm} count={filteredData.length} total={data.length} />
+                <SearchTable placeholder="🔍 Buscar nombre, código OC, licitación o proveedor…" value={searchTerm} onChange={setSearchTerm} count={filteredData.length} total={data.length} />
                 <div className="table-responsive">
                     <table className="table-gob">
                         <thead>
                             <tr>
                                 <th>Código OC</th><th>Nombre</th><th>Tipo</th><th>Estado</th>
-                                <th>Proveedor</th>
+                                <th>Proveedor</th><th>Licitación ID</th>
                                 <th style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => toggleSort('FechaEnvio')}>
                                     Fecha Envío <span style={{ opacity: 0.5 }}>{sortCol === 'FechaEnvio' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
                                 </th>
@@ -355,13 +356,18 @@ function TabGeneral({ data }) {
                                         </span>
                                     </td>
                                     <td><div className="truncate-text" title={oc.P_Nombre}>{oc.P_Nombre}</div></td>
+                                    <td>
+                                        {oc.CodigoLicitacion
+                                            ? <span style={{ fontFamily: 'monospace', fontSize: 11, background: '#f0fdf4', color: '#15803d', padding: '2px 6px', borderRadius: 6, border: '1px solid #bbf7d0' }}>{oc.CodigoLicitacion}</span>
+                                            : <span style={{ color: '#94a3b8' }}>—</span>}
+                                    </td>
                                     <td>{fmtDate(oc.FechaEnvio)}</td>
                                     <td style={{ textAlign: 'right' }}>{oc.TotalBruto ? fmt(Number(oc.TotalBruto), oc.TipoMoneda || 'CLP') : '—'}</td>
                                     <td><EnlaceBadge valor={oc.EnlacePAC} /></td>
                                     <td>{oc.LinkMP ? <a href={oc.LinkMP} target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>🔗 MP</a> : <span style={{ color: '#94a3b8' }}>—</span>}</td>
                                 </tr>
                             ))}
-                            {sortedData.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>No se encontraron OC</td></tr>}
+                            {sortedData.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 20, color: '#94a3b8' }}>No se encontraron OC</td></tr>}
                         </tbody>
                     </table>
                 </div>
