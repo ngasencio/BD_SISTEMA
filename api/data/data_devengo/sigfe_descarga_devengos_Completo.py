@@ -57,6 +57,7 @@ from selenium.common.exceptions import (
     NoSuchElementException,
     ElementClickInterceptedException,
     ElementNotInteractableException,
+    WebDriverException,
 )
 
 # --------------------------------------------------------------------------
@@ -345,7 +346,35 @@ class SigfeDevengosScraper:
     def login(self, user: str, password: str):
         log.info("Cargando página de login...")
         self._avisar(paso_desc="Iniciando sesión en SIGFE...", progreso_pct=2, log_msg="Cargando página de login...")
-        self.driver.get(LOGIN_URL)
+
+        # SIGFE puede tardar en responder o cortar la conexión en el primer
+        # intento (net::ERR_CONNECTION_TIMED_OUT visto en producción aunque
+        # el sitio esté arriba y accesible) - reintenta antes de abortar
+        # todo el lote por lo que suele ser un hiccup puntual de red.
+        MAX_REINTENTOS_LOGIN = 3
+        ESPERA_BASE_LOGIN = 5.0
+        ultimo_error = None
+        for intento in range(1, MAX_REINTENTOS_LOGIN + 1):
+            try:
+                self.driver.get(LOGIN_URL)
+                ultimo_error = None
+                break
+            except WebDriverException as e:
+                ultimo_error = e
+                log.warning(
+                    f"No se pudo cargar {LOGIN_URL} (intento {intento}/{MAX_REINTENTOS_LOGIN}): "
+                    f"{type(e).__name__}"
+                )
+                self._avisar(log_msg=f"⚠️ Reintentando conexión a SIGFE ({intento}/{MAX_REINTENTOS_LOGIN})...")
+                if intento < MAX_REINTENTOS_LOGIN:
+                    time.sleep(ESPERA_BASE_LOGIN * intento)
+        if ultimo_error is not None:
+            raise RuntimeError(
+                "No se pudo conectar al portal de SIGFE "
+                f"({LOGIN_URL}) tras {MAX_REINTENTOS_LOGIN} intentos. "
+                "El sitio puede estar caído o lento en este momento, o hay un "
+                "problema de red/firewall en el servidor. Reintenta en unos minutos."
+            ) from ultimo_error
 
         campo_user = WebDriverWait(self.driver, TIMEOUT).until(
             EC.presence_of_element_located((By.ID, "j_username::content"))
