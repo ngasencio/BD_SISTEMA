@@ -10,6 +10,12 @@ con >0 formularios) y contra auth.User (match exacto por nombre completo) el
 2026-09-01 -- no se deriva automáticamente, se mantiene a mano igual criterio que
 cargar_compradores_iniciales.py.
 
+Ampliada el 2026-10-02 con el resto de los compradores que aparecían en
+FormularioFSCDerivado.comprador pero no estaban en el catálogo (detectado porque
+BASTIÁN MIRANDA no veía sus FSC en 'Mis Formularios' -- el mismo hueco afectaba a
+otros 16). 'ANTONIA MENA' (2 FSC, unidad BIENESTAR HBSJO) quedó pendiente: no tiene
+usuario en auth.User con ningún correo/variante de nombre encontrado.
+
 Uso:
     python manage.py cargar_compradores_compras
 """
@@ -28,6 +34,34 @@ COMPRADORES = {
     'DANIELA CONA':        'daniela.cona@redsalud.gob.cl',
     'RUBEN URIBE':         'ruben.uribe@redsalud.gob.cl',
     'JACQUELINE OYARZUN':  'jacqueline.oyarzuna@redsalud.gob.cl',
+    # El valor de la derecha de 'Á' viene mal codificado en el propio dato del
+    # Panel SSO (mojibake: U+00C3 U+0081 en vez de U+00C1) -- hay que matchear
+    # el string EXACTO tal cual quedó guardado en FormularioFSCDerivado.comprador,
+    # no la grafía correcta "BASTIÁN MIRANDA", o el filtro no calza ninguna fila.
+    'BASTIÃ\u0081N MIRANDA': 'bastian.miranda@redsalud.gob.cl',
+    'JUAN FELIPE ROJEL':   'juan.rojelh@redsalud.gob.cl',
+    'VERONICA MARQUEZ':    'veronica.marquez.a@redsalud.gob.cl',
+    'ROSA VASQUEZ':        'rosae.vasquez@redsalud.gob.cl',
+    'ARIELA ACEVEDO':      'ariela.acevedo@redsalud.gob.cl',
+    'LUIS CERDA':          'luis.cerda.a@redsalud.gob.cl',
+    'PAULINA LONCOPAN':    'paulina.loncopan@redsalud.gob.cl',
+    'CELIA CASTRO':        'celia.castro@redsalud.gob.cl',
+    'ALEJANDRA ALMONACID': 'alejandra.almonacidl@redsalud.gob.cl',
+    'LORENA TORRES':       'lorena.torresc@redsalud.gob.cl',
+    'FREDY LUNA':          'fredy.luna@redsalud.gob.cl',
+    'JONATHAN SALVO':      'jonathan.salvoc@redsalud.gob.cl',
+    'DANIEL ROSAS':        'daniel.rosas@redsalud.gob.cl',
+    'RODRIGO LABRIN':      'rodrigoa.labrin@redsalud.gob.cl',
+    'DANIELA JARA':        'daniela.jarac@redsalud.gob.cl',
+    'LUIS ANGULO':         'luis.angulo@redsalud.gob.cl',
+    'HUBERT LOAIZA':       'hubert.loaiza@redsalud.gob.cl',
+    # 'ANTONIA MENA' no existía en auth.User ni en UsuarioPanel (no es una
+    # importación del Panel SSO, es cuenta nueva creada a mano el 2026-10-02
+    # con el mismo perfil tipo que el resto de los compradores -- ver
+    # create_user en la shell, role='comprador', cargo/establecimiento
+    # calcados del perfil más común entre compradores (EJECUTIVO DE COMPRAS
+    # PUBLICAS, establecimiento 197). Sin RUN real: no se fabricó uno.
+    'ANTONIA MENA':        'antonia.mena@redsalud.gob.cl',
 }
 
 # Jefaturas -- no aparecen como 'comprador' en FSC derivados (o si aparecen, además
