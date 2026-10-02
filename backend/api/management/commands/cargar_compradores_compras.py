@@ -40,6 +40,7 @@ COMPRADORES = {
     # no la grafía correcta "BASTIÁN MIRANDA", o el filtro no calza ninguna fila.
     'BASTIÃ\u0081N MIRANDA': 'bastian.miranda@redsalud.gob.cl',
     'JUAN FELIPE ROJEL':   'juan.rojelh@redsalud.gob.cl',
+    'LESLY DIAZ':          'lesly.diaz@redsalud.gob.cl',
     'VERONICA MARQUEZ':    'veronica.marquez.a@redsalud.gob.cl',
     'ROSA VASQUEZ':        'rosae.vasquez@redsalud.gob.cl',
     'ARIELA ACEVEDO':      'ariela.acevedo@redsalud.gob.cl',
