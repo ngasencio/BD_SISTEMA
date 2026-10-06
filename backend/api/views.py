@@ -4874,15 +4874,30 @@ def gestor_plan_temporal_view(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_plan_mensual_view(request):
+    from .services import calcular_gestor_plan_mensual
+    alcance = _gestor_alcance(request)
+    anho = _gestor_anho(request)
+    cache_key = _gestor_cache_key('plan_mensual', alcance, anho or 'todos')
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_gestor_plan_mensual(alcance['depto_ids'], anho=anho)
+    cache.set(cache_key, data, timeout=60)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
 def gestor_plan_items_view(request):
     from .services import calcular_gestor_plan_items
     alcance = _gestor_alcance(request)
     page, page_size = _gestor_pagina(request)
     estado = request.GET.get('estado', '').strip() or None
     search = request.GET.get('search', '').strip() or None
+    mes = request.GET.get('mes', '').strip() or None
     return Response(calcular_gestor_plan_items(
         alcance['depto_ids'], anho=_gestor_anho(request), estado=estado, search=search,
-        page=page, page_size=page_size,
+        page=page, page_size=page_size, mes=mes,
     ))
 
 

@@ -4214,6 +4214,15 @@ def calcular_pac_ficha_detalle(id_proyecto):
         'unidad': primero.unidad, 'tipo_proyecto': primero.tipo_proyecto,
         'nombre_responsable': primero.nombre_responsable, 'cargo_responsable': primero.cargo_responsable,
         'pac': primero.pac, 'estado_ejecucion': estado_ejecucion,
+        # Datos del proyecto agregados sobre todos sus ítems (aditivo — /pac-cumplimiento ignora
+        # las claves que no usa): unidad de compra, códigos presupuestarios, totales y rango de fechas.
+        'unidad_compra': primero.unidad_compra,
+        'codigos_presupuestarios': sorted({it.codigo_presupuestario for it in items if it.codigo_presupuestario}),
+        'monto_total': sum(_to_float_pac(it.monto_total_item) or 0 for it in items),
+        'n_items': len(items),
+        'fecha_mas_proxima': fecha_mas_proxima.isoformat() if fecha_mas_proxima else None,
+        'fecha_ultima_compra': max(fechas_compra).isoformat() if fechas_compra else None,
+        'depto_id': depto_obj.id if depto_obj else None,
         'items': items_data,
         'formularios': formularios_data,
         'ordenes_compra': ocs_data,
@@ -4250,7 +4259,10 @@ def calcular_gestor_plan_temporal(depto_ids, anho=None):
     return calcular_pac_cumplimiento_temporal(anho=anho, depto_ids=list(depto_ids))
 
 
-def calcular_gestor_plan_items(depto_ids, anho=None, estado=None, search=None, page=1, page_size=50):
+_RE_MES_PLAN = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
+
+
+def calcular_gestor_plan_items(depto_ids, anho=None, estado=None, search=None, page=1, page_size=50, mes=None):
     """Fichas PAC (proyectos planificados) de los departamentos del gestor, con su estado
     de ejecución, FSC y OC asociados. Lista vacía de `depto_ids` => resultado vacío:
     _calcular_fichas_pac_completo trata `depto=[]` como "sin filtro" (devolvería TODAS
@@ -4258,9 +4270,76 @@ def calcular_gestor_plan_items(depto_ids, anho=None, estado=None, search=None, p
     if not depto_ids:
         return _plan_gestor_vacio({'page': page, 'page_size': page_size})
     filas = _calcular_fichas_pac_completo(anho=anho, depto=list(depto_ids), estado=estado, search=search)
+    # `mes` ('YYYY-MM') acota a las fichas cuya fecha de compra más próxima cae en ese mes — es la
+    # misma fecha con la que calcular_gestor_plan_mensual arma cada barra, así que tabla y gráfico calzan.
+    if mes and _RE_MES_PLAN.match(mes):
+        filas = [f for f in filas if (f['fecha_mas_proxima'] or '').startswith(mes)]
     inicio = (page - 1) * page_size
     return {'count': len(filas), 'page': page, 'page_size': page_size,
             'results': filas[inicio:inicio + page_size]}
+
+
+_ANIO_MIN_PLAN, _ANIO_MAX_PLAN = 2015, 2045
+_NOMBRES_MES = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+
+def calcular_gestor_plan_mensual(depto_ids, anho=None):
+    """Fichas del PAC del departamento por MES de su fecha de compra más próxima, apiladas por
+    estado de ejecución (ejecutado / pendiente / atrasado), en cantidad y en monto. Cada ficha
+    cuenta UNA vez (en el mes de `fecha_mas_proxima`), igual que la tabla de ítems del plan, de
+    modo que al filtrar la tabla por un mes calce con su barra. Los meses sin fichas entre el
+    primero y el último se rellenan con ceros para que el eje X sea continuo; las fichas sin
+    fecha van aparte en `sin_fecha`. `depto_ids` vacío => serie vacía (nunca "todo")."""
+    vacio = {'meses': [], 'sin_fecha': {'total': 0, 'monto': 0.0}, 'total_fichas': 0}
+    if not depto_ids:
+        return vacio
+    filas = _calcular_fichas_pac_completo(anho=anho, depto=list(depto_ids))
+
+    por_mes = {}
+    sin_fecha = {'total': 0, 'monto': 0.0}
+    clave_estado = {FICHA_EJECUTADO: 'ejecutado', FICHA_PENDIENTE: 'pendiente', FICHA_ATRASADO: 'atrasado'}
+    for f in filas:
+        fecha = f['fecha_mas_proxima']
+        estado = clave_estado.get(f['estado_ejecucion'])
+        # Fechas fuera de rango (típicamente un año mal digitado en el PAC) irían a generar miles de
+        # meses vacíos en el eje continuo: se tratan como "sin fecha" en vez de estirar el gráfico.
+        if not fecha or not estado or not (_ANIO_MIN_PLAN <= int(fecha[:4]) <= _ANIO_MAX_PLAN):
+            sin_fecha['total'] += 1
+            sin_fecha['monto'] += f['monto_total'] or 0
+            continue
+        b = por_mes.setdefault(fecha[:7], {
+            'ejecutado': 0, 'pendiente': 0, 'atrasado': 0,
+            'monto_ejecutado': 0.0, 'monto_pendiente': 0.0, 'monto_atrasado': 0.0,
+        })
+        b[estado] += 1
+        b['monto_' + estado] += f['monto_total'] or 0
+    if not por_mes:
+        return {**vacio, 'sin_fecha': sin_fecha, 'total_fichas': sin_fecha['total']}
+
+    # eje continuo: todos los meses entre el primero y el último
+    primero, ultimo = min(por_mes), max(por_mes)
+    anio, mes = int(primero[:4]), int(primero[5:])
+    meses = []
+    while f'{anio:04d}-{mes:02d}' <= ultimo:
+        clave = f'{anio:04d}-{mes:02d}'
+        b = por_mes.get(clave, {'ejecutado': 0, 'pendiente': 0, 'atrasado': 0,
+                                'monto_ejecutado': 0.0, 'monto_pendiente': 0.0, 'monto_atrasado': 0.0})
+        total = b['ejecutado'] + b['pendiente'] + b['atrasado']
+        meses.append({
+            'mes': clave, 'anio': anio, 'mes_num': mes, 'nombre_mes': _NOMBRES_MES[mes],
+            **{k: (round(v) if k.startswith('monto') else v) for k, v in b.items()},
+            'total': total,
+            'monto_total': round(b['monto_ejecutado'] + b['monto_pendiente'] + b['monto_atrasado']),
+            'pct_ejecutado': round(b['ejecutado'] / total * 100, 1) if total else 0,
+        })
+        mes += 1
+        if mes > 12:
+            mes, anio = 1, anio + 1
+    return {
+        'meses': meses,
+        'sin_fecha': {'total': sin_fecha['total'], 'monto': round(sin_fecha['monto'])},
+        'total_fichas': sum(m['total'] for m in meses) + sin_fecha['total'],
+    }
 
 
 def calcular_gestor_plan_item_detalle(depto_ids, unidades, id_proyecto):
