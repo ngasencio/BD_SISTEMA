@@ -86,7 +86,7 @@ const ESTADO_PAC_RESUMEN = {
     PAC_DISTINTO: { label: 'PAC distinto', color: '#ea580c' },
 };
 
-function EstadoGestionChip({ procesos }) {
+function EstadoGestionChip({ procesos, onVerProceso }) {
     if (!procesos || procesos.length === 0) {
         return (
             <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>
@@ -101,11 +101,16 @@ function EstadoGestionChip({ procesos }) {
                 const pac = ESTADO_PAC_RESUMEN[p.estado_pac];
                 return (
                     <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span title={p.titulo} style={{
-                            display: 'inline-block', padding: '2px 10px', borderRadius: 20,
-                            fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
-                            background: color + '1f', color, border: `1px solid ${color}55`,
-                        }}>
+                        <span
+                            title={onVerProceso ? `${p.titulo} — clic para ver el proceso` : p.titulo}
+                            onClick={onVerProceso ? () => onVerProceso(p.id) : undefined}
+                            role={onVerProceso ? 'button' : undefined}
+                            style={{
+                                display: 'inline-block', padding: '2px 10px', borderRadius: 20,
+                                fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+                                background: color + '1f', color, border: `1px solid ${color}55`,
+                                cursor: onVerProceso ? 'pointer' : 'default',
+                            }}>
                             {tipoLabel(p.tipo_proceso)} · {estadoLabel(p.estado_proceso)}
                         </span>
                         {pac && (
@@ -126,7 +131,13 @@ function EstadoGestionChip({ procesos }) {
 // request.user) y "Búsqueda Personalizada" (jefatura, acotada al comprador
 // elegido en el selector) — mismas columnas, mismo criterio de urgencia por
 // días, mismos chips de estado de gestión/Panel SSO.
-export default function FormulariosTable({ data, cargando, emptyMessage, onVer, onGestionar }) {
+// Props opcionales para el Gestor de Compras (solo lectura): `soloLectura` oculta "Gestionar",
+// `mostrarComprador` agrega la columna del comprador asignado y `onVerProceso(id)` vuelve
+// clickeables los chips de Estado de Gestión. Sin ellas la tabla se ve y actúa como siempre.
+export default function FormulariosTable({
+    data, cargando, emptyMessage, onVer, onGestionar,
+    soloLectura = false, mostrarComprador = false, onVerProceso,
+}) {
     if (cargando) {
         return <div className="loading-spinner">Cargando…</div>;
     }
@@ -140,6 +151,7 @@ export default function FormulariosTable({ data, cargando, emptyMessage, onVer, 
                     <tr>
                         <th style={thStyle}>ID</th>
                         <th style={thStyle}>Unidad Requirente</th>
+                        {mostrarComprador && <th style={thStyle}>Comprador</th>}
                         <th style={thStyle}>Requerimiento</th>
                         <th style={{ ...thStyle, textAlign: 'right' }}>Monto Estimado</th>
                         <th style={thStyle}>Fecha Derivado</th>
@@ -156,13 +168,16 @@ export default function FormulariosTable({ data, cargando, emptyMessage, onVer, 
                                 {f.id_formulario || f.folio}
                             </td>
                             <td style={{ padding: '8px 10px', color: '#374151' }}>{f.unidad_requirente || '—'}</td>
+                            {mostrarComprador && (
+                                <td style={{ padding: '8px 10px', color: '#374151', whiteSpace: 'nowrap' }}>{f.comprador || <span style={{ color: '#94a3b8' }}>Sin asignar</span>}</td>
+                            )}
                             <td style={{ padding: '8px 10px', maxWidth: 300 }}>
                                 <div className="truncate-text" title={f.requerimiento}>{f.requerimiento || '—'}</div>
                             </td>
                             <td style={{ padding: '8px 10px', textAlign: 'right', color: '#374151' }}>{fmtCLP(f.monto_estimado)}</td>
                             <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{f.fecha_derivado || '—'}</td>
                             <td style={{ padding: '8px 10px' }}><DiasBadge dias={diasDesde(f.fecha_derivado)} /></td>
-                            <td style={{ padding: '8px 10px' }}><EstadoGestionChip procesos={f.procesos} /></td>
+                            <td style={{ padding: '8px 10px' }}><EstadoGestionChip procesos={f.procesos} onVerProceso={onVerProceso} /></td>
                             <td style={{ padding: '8px 10px' }}><EstadoPanelChip procesos={f.procesos} estadoCompra={f.estado_compra} /></td>
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                                 <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
@@ -170,10 +185,12 @@ export default function FormulariosTable({ data, cargando, emptyMessage, onVer, 
                                             onClick={() => onVer?.(f.id)}>
                                         Ver
                                     </button>
-                                    <button type="button" className="btn-primary" style={{ padding: '5px 12px', fontSize: 12 }}
-                                            onClick={() => onGestionar?.(f)}>
-                                        Gestionar
-                                    </button>
+                                    {!soloLectura && (
+                                        <button type="button" className="btn-primary" style={{ padding: '5px 12px', fontSize: 12 }}
+                                                onClick={() => onGestionar?.(f)}>
+                                            Gestionar
+                                        </button>
+                                    )}
                                 </div>
                             </td>
                         </tr>

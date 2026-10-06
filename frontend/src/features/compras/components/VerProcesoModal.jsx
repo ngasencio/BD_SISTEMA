@@ -64,7 +64,9 @@ function LineaTiempo({ fechas }) {
 // Proceso de Compra — resumen curado, línea de tiempo de fechas clave,
 // líneas/productos, y las OC ya enlazadas a ese proceso (recibidas via prop,
 // ya cargadas en el panel padre).
-export default function VerProcesoModal({ proceso, onCerrar }) {
+// `cargarDetalle` (opcional): cómo traer el detalle de Mercado Público. Por defecto, el endpoint
+// del comprador; el Gestor de Compras inyecta el suyo, de solo lectura y acotado a su departamento.
+export default function VerProcesoModal({ proceso, onCerrar, cargarDetalle = getDetalleProcesoMp }) {
     const [detalle, setDetalle] = useState(null);
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState(null);
@@ -74,7 +76,7 @@ export default function VerProcesoModal({ proceso, onCerrar }) {
         let activo = true;
         setCargando(true);
         setError(null);
-        getDetalleProcesoMp(proceso.id)
+        cargarDetalle(proceso.id)
             .then(({ data }) => { if (activo) setDetalle(data); })
             .catch(() => { if (activo) setError('No fue posible cargar el detalle del proceso.'); })
             .finally(() => { if (activo) setCargando(false); });

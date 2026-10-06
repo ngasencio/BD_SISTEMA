@@ -20,7 +20,7 @@ const URGENCIA_INFO = {
     baja:    { bg: '#f0fdf4', border: '#bbf7d0', color: '#15803d', dot: '#16a34a', label: 'En plazo' },
 };
 
-function AlertaRow({ a, onVer }) {
+function AlertaRow({ a, onVer, mostrarComprador }) {
     const u = URGENCIA_INFO[a.urgencia] || URGENCIA_INFO.baja;
     const texto = a.dias < 0
         ? `Cerrada hace ${Math.abs(a.dias)} día${Math.abs(a.dias) === 1 ? '' : 's'} — sin ${a.tipo_proceso === 'LICITACION' ? 'adjudicar' : 'tramitar'}`
@@ -49,6 +49,7 @@ function AlertaRow({ a, onVer }) {
                 </div>
                 <div style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {a.codigo_mp} {a.estado_mp ? `· ${a.estado_mp}` : ''}
+                    {mostrarComprador && a.comprador ? ` · Comprador: ${a.comprador}` : ''}
                 </div>
             </div>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: u.color, whiteSpace: 'nowrap', flexShrink: 0 }}>{texto}</span>
@@ -56,7 +57,7 @@ function AlertaRow({ a, onVer }) {
     );
 }
 
-function GestionRow({ f, onGestionar }) {
+function GestionRow({ f, onGestionar, mostrarComprador }) {
     return (
         <div
             onClick={() => onGestionar(f)} role="button"
@@ -71,6 +72,9 @@ function GestionRow({ f, onGestionar }) {
                     <span style={{ fontSize: 11.5, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 0%', minWidth: 0 }}>{f.unidad_requirente}</span>
                 </div>
                 <div style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.requerimiento}</div>
+                {mostrarComprador && (
+                    <div style={{ fontSize: 11, color: '#64748b' }}>Comprador: {f.comprador || 'sin asignar'}</div>
+                )}
             </div>
             <span style={{ fontSize: 11.5, color: '#475569', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtCLP(f.monto_estimado)}</span>
         </div>
@@ -95,7 +99,12 @@ const BUCKET_INFO = [
 // ese mismo resultado se pasa acá para no duplicar la llamada. Sin estas
 // props, el componente se comporta exactamente igual que antes (self-fetch
 // de getResumenComprador() para el comprador logueado).
-export default function ResumenComprador({ onGestionar, refreshKey, data: dataControlada, cargando: cargandoControlada }) {
+// `soloLectura` (opcional, Gestor de Compras): cambia los textos a "su departamento", muestra qué
+// comprador lleva cada proceso/FSC y usa `cargarDetalleMp` en vez del endpoint del comprador.
+export default function ResumenComprador({
+    onGestionar, refreshKey, data: dataControlada, cargando: cargandoControlada,
+    soloLectura = false, cargarDetalleMp,
+}) {
     const modoControlado = dataControlada !== undefined;
     const [dataPropia, setDataPropia] = useState(null);
     const [cargandoPropio, setCargandoPropio] = useState(true);
@@ -173,19 +182,21 @@ export default function ResumenComprador({ onGestionar, refreshKey, data: dataCo
                         <div style={vacio}>Sin plazos pendientes por ahora — todo al día.</div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 280, overflowY: 'auto' }}>
-                            {alertas.map(a => <AlertaRow key={a.proceso_id} a={a} onVer={() => setProcesoVer(a)} />)}
+                            {alertas.map(a => <AlertaRow key={a.proceso_id} a={a} onVer={() => setProcesoVer(a)} mostrarComprador={soloLectura} />)}
                         </div>
                     )}
                 </div>
 
                 <div style={cardStyle}>
                     <div style={sectionTitle}>📂 Proceso de Gestión — Gestión Interna</div>
-                    <div style={sectionSub}>FSC abiertos aún sin enlace real a Mercado Público. Click para gestionar.</div>
+                    <div style={sectionSub}>{soloLectura
+                        ? 'FSC abiertos aún sin enlace real a Mercado Público. Click para ver el formulario.'
+                        : 'FSC abiertos aún sin enlace real a Mercado Público. Click para gestionar.'}</div>
                     {gestion_interna.length === 0 ? (
-                        <div style={vacio}>No tienes FSC pendientes de enlazar — al día.</div>
+                        <div style={vacio}>{soloLectura ? 'No hay FSC pendientes de enlazar — al día.' : 'No tienes FSC pendientes de enlazar — al día.'}</div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 7, maxHeight: 280, overflowY: 'auto' }}>
-                            {gestion_interna.map(f => <GestionRow key={f.id} f={f} onGestionar={onGestionar} />)}
+                            {gestion_interna.map(f => <GestionRow key={f.id} f={f} onGestionar={onGestionar} mostrarComprador={soloLectura} />)}
                         </div>
                     )}
                 </div>
@@ -194,8 +205,8 @@ export default function ResumenComprador({ onGestionar, refreshKey, data: dataCo
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(340px, 100%), 1fr))', gap: 14, alignItems: 'start' }}>
                 <div style={cardStyle}>
                     <div style={sectionTitle}>📊 Procesos por Tipo y Estado</div>
-                    <div style={sectionSub}>Pivote de tus procesos activos y finalizados.</div>
-                    {!barData ? <div style={vacio}>Aún no tienes procesos creados.</div> : (
+                    <div style={sectionSub}>{soloLectura ? 'Pivote de los procesos del departamento, activos y finalizados.' : 'Pivote de tus procesos activos y finalizados.'}</div>
+                    {!barData ? <div style={vacio}>{soloLectura ? 'Aún no hay procesos creados.' : 'Aún no tienes procesos creados.'}</div> : (
                         <>
                             <div style={{ position: 'relative', width: '100%', maxWidth: '100%', height: Math.max(110, pivote.length * 46) }}>
                                 <Bar data={barData} options={barOptions} />
@@ -229,7 +240,7 @@ export default function ResumenComprador({ onGestionar, refreshKey, data: dataCo
 
                 <div style={cardStyle}>
                     <div style={sectionTitle}>⏱️ Nivel de Urgencia</div>
-                    <div style={sectionSub}>Distribución de tus plazos activos.</div>
+                    <div style={sectionSub}>{soloLectura ? 'Distribución de los plazos activos del departamento.' : 'Distribución de tus plazos activos.'}</div>
                     {!donutData ? <div style={vacio}>Sin plazos activos que graficar.</div> : (
                         <div style={{ position: 'relative', width: '100%', maxWidth: 320, height: 220, margin: '0 auto' }}><Doughnut data={donutData} options={donutOptions} /></div>
                     )}
@@ -240,6 +251,7 @@ export default function ResumenComprador({ onGestionar, refreshKey, data: dataCo
                 <VerProcesoModal
                     proceso={{ id: procesoVer.proceso_id, tipo_proceso: procesoVer.tipo_proceso, titulo: procesoVer.titulo }}
                     onCerrar={() => setProcesoVer(null)}
+                    {...(cargarDetalleMp ? { cargarDetalle: cargarDetalleMp } : {})}
                 />
             )}
         </div>

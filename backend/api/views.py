@@ -4785,8 +4785,9 @@ class GestorProcesosViewSet(viewsets.ReadOnlyModelViewSet):
     detalle de Mercado Público. Un proceso ajeno responde 404."""
     serializer_class = GestorProcesoCompraSerializer
     permission_classes = [IsAuthenticated, _IsGestorCompras]
-    filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
     filterset_fields = ['tipo_proceso', 'estado_proceso']
+    search_fields = ['titulo', 'comprador__first_name', 'comprador__last_name']
     ordering_fields = ['creado_en', 'actualizado_en', 'fecha_cierre_estimada']
     ordering = ['-actualizado_en']
 
