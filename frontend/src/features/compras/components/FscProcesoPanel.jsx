@@ -51,19 +51,32 @@ function EstadoMpBadge({ estado }) {
     );
 }
 
-function PacBadge({ idProyecto, enlacePac }) {
-    const ok = enlacePac === 'Enlazada';
+// estado_pac viene calculado por el backend (calcular_estado_pac_proceso_oc en
+// services.py) con el MISMO criterio que /fsc-oc-pac — a diferencia del viejo
+// PacBadge (que solo miraba OrdenCompra.EnlacePAC crudo), esto ya considera
+// OcPacOverride y compara contra el id_plan real del FSC, no solo si la OC
+// "tiene algún PAC" enlazado.
+const ESTADO_PAC_INFO = {
+    PAC_OK:        { label: '✓ PAC OK',       bg: '#f0fdf4', color: '#16a34a', border: 'rgba(22,163,74,.3)' },
+    SIN_PAC:       { label: '✕ Sin PAC',      bg: '#fef2f2', color: '#dc2626', border: 'rgba(220,38,38,.3)' },
+    PAC_DISTINTO:  { label: '⚠ PAC distinto', bg: '#fff7ed', color: '#ea580c', border: 'rgba(234,88,12,.35)' },
+};
+
+function PacBadge({ estadoPac, idProyecto }) {
+    const info = ESTADO_PAC_INFO[estadoPac];
+    if (!info) {
+        return <span style={{ fontSize: 11, color: '#94a3b8' }} title="El FSC de este proceso no declara un PAC (id_plan) para comparar.">— PAC</span>;
+    }
     return (
         <span
-            title={idProyecto ? `Código PAC: ${idProyecto}` : 'Sin código PAC asociado'}
+            title={idProyecto ? `Código PAC de la OC: ${idProyecto}` : 'La OC no tiene código PAC enlazado.'}
             style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 10px', borderRadius: 20,
                 fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
-                background: ok ? '#f0fdf4' : '#fef2f2', color: ok ? '#16a34a' : '#dc2626',
-                border: `1px solid ${ok ? 'rgba(22,163,74,.3)' : 'rgba(220,38,38,.3)'}`,
+                background: info.bg, color: info.color, border: `1px solid ${info.border}`,
             }}
         >
-            {ok ? '✓ PAC' : '✕ PAC'} {idProyecto ? `· ${idProyecto}` : ''}
+            {info.label} {idProyecto ? `· ${idProyecto}` : ''}
         </span>
     );
 }
@@ -299,6 +312,13 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
                 titulo: extra.titulo,
                 formulario_ids: [fsc.id],
                 estado_proceso: 'RECEPCIONADO',
+                // Cuando el panel lo abre jefatura desde Panel Formularios
+                // (fsc.comprador_id viene de calcular_compras_sin_gestion),
+                // el proceso debe quedar asignado al comprador dueño del
+                // FSC, no a quien está gestionando — sin esto, el backend
+                // (ProcesoCompraViewSet.create) usa request.user.id por
+                // defecto y el proceso quedaría mal asignado a jefatura.
+                ...(fsc.comprador_id ? { comprador: fsc.comprador_id } : {}),
                 ...extra.campos,
             });
             onCambiado?.();
@@ -408,6 +428,9 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
         try {
             await cambiarEstadoProceso(procesoActivo.id, nuevoEstado, comentario);
             setComentario('');
+            // El efecto de historial solo depende de procesoActivo.id, que no
+            // cambia al guardar — se recarga explícito para que aparezca ya.
+            getHistorialProceso(procesoActivo.id).then(({ data }) => setHistorial(data)).catch(() => {});
             onCambiado?.();
             cargarProcesos(true);
         } catch (err) {
@@ -425,7 +448,10 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
                 <div className="mu-header">
                     <div className="mu-header-info">
                         <div className="mu-header-title">Proceso de Compra</div>
-                        <div className="mu-header-email">{fsc.id_formulario || `Folio ${fsc.folio}`} — {fsc.unidad_requirente}</div>
+                        <div className="mu-header-email">
+                            {fsc.id_formulario || `Folio ${fsc.folio}`} — {fsc.unidad_requirente}
+                            {fsc.comprador_display && <> — 👤 {fsc.comprador_display}</>}
+                        </div>
                     </div>
                     <button className="modal-close mu-close" onClick={onCerrar} type="button">✕</button>
                 </div>
@@ -612,10 +638,20 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
                                                 {procesoActivo.ordenes_compra_detalle.map(oc => (
                                                     <div key={oc.id} style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', borderRadius: 8, padding: '9px 12px' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                                                            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#15803d', fontSize: 12.5 }}>{oc.codigo_oc}</span>
+                                                            {oc.link_mp ? (
+                                                                <a
+                                                                    href={oc.link_mp} target="_blank" rel="noopener noreferrer"
+                                                                    title="Ver esta Orden de Compra en Mercado Público"
+                                                                    style={{ fontFamily: 'monospace', fontWeight: 700, color: '#15803d', fontSize: 12.5, textDecoration: 'none' }}
+                                                                >
+                                                                    {oc.codigo_oc}
+                                                                </a>
+                                                            ) : (
+                                                                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#15803d', fontSize: 12.5 }}>{oc.codigo_oc}</span>
+                                                            )}
                                                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                                                 <EstadoMpBadge estado={oc.estado_oc} />
-                                                                <PacBadge idProyecto={oc.id_proyecto} enlacePac={oc.enlace_pac} />
+                                                                <PacBadge estadoPac={oc.estado_pac} idProyecto={oc.id_proyecto} />
                                                                 <button
                                                                     type="button" title="Actualizar en vivo desde Mercado Público"
                                                                     disabled={actualizando.has(oc.codigo_oc)}

@@ -139,6 +139,15 @@ export default function Sidebar() {
                                         <span className="nav-item-text">Mis Formularios</span>
                                     </div>
                                 )}
+                                {puede('admin', 'jefatura', 'general') && (
+                                    <div
+                                        className={`nav-item ${isActive('/compras/panel-formularios') ? 'active' : ''}`}
+                                        onClick={() => goTo('/compras/panel-formularios', 'abast', 'compras')}
+                                    >
+                                        <span>📊</span>
+                                        <span className="nav-item-text">Panel Formularios</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                         )}

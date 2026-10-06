@@ -19,7 +19,7 @@ from django.db.models.functions import Cast
 from django.http import HttpResponse, FileResponse
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters as drf_filters, generics, viewsets
+from rest_framework import filters as drf_filters, generics, mixins, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -49,7 +49,7 @@ from .models import (
     PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
     SigfeAnexo1,
     FscOcLink, CompradorInicial,
-    ComprasCompradorPerfil, ProcesoCompra,
+    ComprasCompradorPerfil, ProcesoCompra, ComprasNotificacion,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
@@ -66,7 +66,7 @@ from .serializers import (
     FscOcLinkSerializer, CompradorInicialSerializer,
     DevengoSigfeAnualSerializer, SigfeAnexo1Serializer,
     ComprasCompradorPerfilSerializer, ProcesoCompraSerializer, ProcesoCompraEstadoLogSerializer,
-    ComprasMisFormularioSerializer,
+    ComprasMisFormularioSerializer, ComprasNotificacionSerializer,
 )
 
 # Campos de fecha que mapea EVENT_CFG en CalendarioSect.jsx (17 campos)
@@ -131,6 +131,15 @@ class _IsComprador(BasePermission):
     """Acceso al módulo Gestión de Compras: admin, comprador o jefatura."""
     def has_permission(self, request, view):
         return _tiene_rol(request.user, {'admin', 'comprador', 'jefatura', 'general'})
+
+
+class _IsJefaturaAbastecimiento(BasePermission):
+    """Acceso al Panel Formularios (/compras/panel-formularios): supervisión
+    global de jefatura — a propósito SIN 'comprador', a diferencia de
+    _IsComprador — este panel es de monitoreo, no la bandeja de trabajo
+    individual de cada comprador."""
+    def has_permission(self, request, view):
+        return _tiene_rol(request.user, {'admin', 'jefatura', 'general'})
 
 
 # =============================================================================
@@ -2049,9 +2058,10 @@ def fsc_oc_pac_impacto_view(request):
 # =============================================================================
 # Módulo Gestión de Compras — Procesos de Compra por comprador
 #
-# Fase 2 del plan (2026-09-01): CRUD de ProcesoCompra sin integración en vivo
-# con Mercado Público (Fase 3) ni notificaciones (Fase 4). Ver la sección
-# homónima en services.py para la lógica de negocio.
+# Fase 2 (2026-09-01): CRUD de ProcesoCompra sin integración en vivo con
+# Mercado Público (Fase 3). Fase 4 (notificaciones in-app, panel de
+# jefatura) agregada 2026-10-02. Ver la sección homónima en services.py
+# para la lógica de negocio.
 # =============================================================================
 
 class ComprasCompradorPerfilViewSet(viewsets.ReadOnlyModelViewSet):
@@ -2060,6 +2070,41 @@ class ComprasCompradorPerfilViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ComprasCompradorPerfilSerializer
     permission_classes = [IsAuthenticated, _IsComprador]
     pagination_class = None
+
+
+class ComprasNotificacionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                                  mixins.UpdateModelMixin, viewsets.GenericViewSet):
+    """Campanita global del Topbar — notificaciones in-app del usuario
+    logueado, scoped por `destinatario` (nadie ve notificaciones de otro).
+    Sin create/delete por API: las filas las crea _notificar_jefaturas()
+    server-side. 'leida' es el único campo editable (vía PATCH estándar,
+    ver ComprasNotificacionSerializer) — 'marcar como leída' no necesita
+    una action dedicada."""
+    serializer_class = ComprasNotificacionSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        # Sin recortar acá — recortar con [:N] en get_queryset() rompe
+        # retrieve/update (Django no permite filtrar un queryset ya
+        # sliceado, y get_object() hace exactamente eso). El límite para el
+        # dropdown de la campanita se aplica solo en list().
+        return ComprasNotificacion.objects.filter(destinatario=self.request.user).select_related('proceso')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())[:50]
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='no-leidas')
+    def no_leidas(self, request):
+        count = ComprasNotificacion.objects.filter(destinatario=request.user, leida=False).count()
+        return Response({'count': count})
+
+    @action(detail=False, methods=['post'], url_path='marcar-todas-leidas')
+    def marcar_todas_leidas(self, request):
+        ComprasNotificacion.objects.filter(destinatario=request.user, leida=False).update(leida=True)
+        return Response({'ok': True})
 
 
 class ComprasMisFormulariosView(generics.ListAPIView):
@@ -2081,7 +2126,12 @@ class ComprasMisFormulariosView(generics.ListAPIView):
             qs = listar_fsc_finalizados_comprador(self.request.user)
         else:
             qs = listar_fsc_pendientes_comprador(self.request.user, incluir_ya_clasificados=True)
-        return qs.prefetch_related('procesos_compra')
+        # Prefetch anidado hasta orden_compra: sin esto, get_procesos() del
+        # serializer dispara una query por cada ProcesoCompra de cada FSC de
+        # la página (vinculos_oc no viaja con el prefetch de 'procesos_compra'
+        # solo). Con esto, toda la página (50 FSC por default) resuelve en un
+        # puñado fijo de queries en vez de escalar con filas x procesos.
+        return qs.prefetch_related('procesos_compra__vinculos_oc__orden_compra')
 
 
 class ProcesoCompraViewSet(viewsets.ModelViewSet):
@@ -2291,6 +2341,76 @@ def compras_importar_oc_view(request):
     resumen['_creada'] = creada
     resumen['_diagnostico'] = diagnostico
     return Response(resumen)
+
+
+# =============================================================================
+# Panel Formularios — monitoreo global de jefatura (2026-10-02)
+# =============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsJefaturaAbastecimiento])
+def compras_jefatura_actividad_view(request):
+    """Feed de últimos movimientos (Tab General). `?desde=<ISO datetime>`
+    acota a eventos posteriores — lo usa el polling del frontend para traer
+    solo lo nuevo en cada refresco en vez de la lista completa."""
+    from .services import calcular_compras_actividad_jefatura
+    desde = request.GET.get('desde') or None
+    try:
+        limit = min(int(request.GET.get('limit', 100)), 200)
+    except (ValueError, TypeError):
+        limit = 100
+    return Response(calcular_compras_actividad_jefatura(desde=desde, limit=limit))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsJefaturaAbastecimiento])
+def compras_jefatura_sin_gestion_view(request):
+    """Tabla de FSC sin ProcesoCompra, de todos los compradores (Tab General)."""
+    from .services import calcular_compras_sin_gestion
+    cache_key = 'compras_jefatura_sin_gestion'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_compras_sin_gestion()
+    cache.set(cache_key, data, timeout=60)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsJefaturaAbastecimiento])
+def compras_jefatura_avance_view(request):
+    """KPIs globales + tabla comparativa por comprador (Tab Avance)."""
+    from .services import calcular_compras_avance_global
+    cache_key = 'compras_jefatura_avance'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_compras_avance_global()
+    cache.set(cache_key, data, timeout=60)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsJefaturaAbastecimiento])
+def compras_jefatura_resumen_view(request):
+    """Mismo panel 'Resumen' que ve un comprador en Mis Formularios, pero
+    para el comprador elegido por la jefatura (Tab Búsqueda Personalizada).
+    Reutiliza calcular_compras_resumen_comprador tal cual, solo cambia de
+    quién es el `usuario` — cero lógica nueva de agregación."""
+    from .services import calcular_compras_resumen_comprador, listar_fsc_pendientes_comprador
+    comprador_id = request.GET.get('comprador_id')
+    if not comprador_id:
+        return Response({'error': 'comprador_id es requerido'}, status=400)
+    try:
+        comprador = User.objects.get(pk=comprador_id)
+    except (User.DoesNotExist, ValueError):
+        return Response({'error': 'Comprador no encontrado.'}, status=404)
+    data = calcular_compras_resumen_comprador(comprador)
+    # Mismo serializer + mismo prefetch que ComprasMisFormulariosView.get_queryset()
+    # (ver views.py arriba) — sin el prefetch, ComprasMisFormularioSerializer.get_procesos()
+    # dispara una query por cada FSC de la página.
+    formularios = listar_fsc_pendientes_comprador(comprador, incluir_ya_clasificados=True) \
+        .prefetch_related('procesos_compra__vinculos_oc__orden_compra')
+    data['formularios'] = ComprasMisFormularioSerializer(formularios, many=True).data
+    return Response(data)
 
 
 # =============================================================================
@@ -4444,7 +4564,7 @@ class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = FormularioFSCDerivadoSerializer
     permission_classes = [IsAuthenticated, _IsAbastecimiento]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
-    filterset_fields = ["estado_compra", "anho", "unidad_requirente", "comprador", "dentro_fuera_pac"]
+    filterset_fields = ["estado_compra", "anho", "unidad_requirente", "comprador", "dentro_fuera_pac", "estado"]
     search_fields = [
         "folio", "anho", "formulario", "objetivo_compra", "usuario_requirente",
         "unidad_requirente", "comprador", "estado_compra", "encargado", "jefe", "correo",
@@ -4652,6 +4772,64 @@ def pac_cumplimiento_rankings_view(request):
     if data := cache.get(cache_key):
         return Response(data)
     data = calcular_pac_rankings(anho=anho_int, tipo=tipo)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+# ─── Temporalidad de Formularios (pestaña "Temporalidad" en /abastecimiento/formularios) ──
+# Distinto de "temporalidad-mensual" de arriba (esa es del dashboard /pac-cumplimiento,
+# mes a mes para el año en curso). Esta sección vive aquí porque reutiliza
+# calcular_pac_jerarquia/_qs_fsc_derivado_pac_cumplimiento, pero su UI está en la
+# página de Formularios, acotada siempre a estado='AC' (ver services.py).
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_temporalidad_formularios_comparativo_view(request):
+    from .services import calcular_pac_temporalidad_comparativo
+    cache_key = 'pac_temporalidad_formularios_comparativo_v1'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_temporalidad_comparativo()
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_temporalidad_formularios_jerarquia_view(request):
+    from .services import calcular_pac_temporalidad_jerarquia
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    cache_key = f'pac_temporalidad_formularios_jerarquia_v1_{anho_int}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_temporalidad_jerarquia(anho=anho_int)
+    cache.set(cache_key, data, timeout=300)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pac_temporalidad_formularios_usuarios_view(request):
+    """`?depto_ids=1,2,3`/`?sin_clasificar=1` acotan el ranking a una rama de la
+    jerarquía — mismo contrato que `?sso_departamento_in=`/`?sin_clasificar=` de
+    `FormularioFSCDerivadoViewSet`, usado por el drill-down del tab Jerarquía."""
+    from .services import calcular_pac_temporalidad_usuarios
+    anho = request.GET.get('anho', '').strip()
+    anho_int = int(anho) if anho.isdigit() else None
+    try:
+        limite = min(int(request.GET.get('limite', 50)), 200)
+    except (ValueError, TypeError):
+        limite = 50
+    depto_ids_raw = request.GET.get('depto_ids', '').strip()
+    depto_ids = sorted({int(v) for v in depto_ids_raw.split(',') if v.strip().isdigit()}) or None
+    sin_clasificar = request.GET.get('sin_clasificar', '').strip() in ('1', 'true', 'True')
+    cache_key = f'pac_temporalidad_formularios_usuarios_v2_{anho_int}_{limite}_{depto_ids}_{sin_clasificar}'
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_pac_temporalidad_usuarios(
+        anho=anho_int, limite=limite, depto_ids=depto_ids, sin_clasificar=sin_clasificar,
+    )
     cache.set(cache_key, data, timeout=300)
     return Response(data)
 

@@ -52,3 +52,10 @@ export const importarCompraAgil = (codigo, forzar = false) =>
 export const importarOc = (codigo, forzar = false) =>
     apiClient.post('compras/importar-oc/', { codigo, forzar });
 
+// Panel Formularios — supervisión global de jefatura (sin 'comprador').
+export const getJefaturaActividad = (params = {}) => apiClient.get('compras/jefatura/actividad/', { params });
+export const getJefaturaSinGestion = () => apiClient.get('compras/jefatura/sin-gestion/');
+export const getJefaturaAvance = () => apiClient.get('compras/jefatura/avance/');
+export const getJefaturaResumen = (compradorId) =>
+    apiClient.get('compras/jefatura/resumen/', { params: { comprador_id: compradorId } });
+

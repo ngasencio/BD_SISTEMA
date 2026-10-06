@@ -89,20 +89,32 @@ const BUCKET_INFO = [
 // próximas a cerrar o ya cerradas sin tramitar) y lo que le falta clasificar,
 // y decida qué atender primero — "trabajar como un reloj" en vez de descubrir
 // un vencimiento abriendo formulario por formulario.
-export default function ResumenComprador({ onGestionar, refreshKey }) {
-    const [data, setData] = useState(null);
-    const [cargando, setCargando] = useState(true);
+// `data`/`cargando` (opcionales): modo "controlado" — cuando el panel lo usa
+// Búsqueda Personalizada (jefatura), el fetch ya lo hizo el padre (vía
+// getJefaturaResumen, que además trae `formularios` para su propia tabla) y
+// ese mismo resultado se pasa acá para no duplicar la llamada. Sin estas
+// props, el componente se comporta exactamente igual que antes (self-fetch
+// de getResumenComprador() para el comprador logueado).
+export default function ResumenComprador({ onGestionar, refreshKey, data: dataControlada, cargando: cargandoControlada }) {
+    const modoControlado = dataControlada !== undefined;
+    const [dataPropia, setDataPropia] = useState(null);
+    const [cargandoPropio, setCargandoPropio] = useState(true);
     const [procesoVer, setProcesoVer] = useState(null);
 
     useEffect(() => {
+        if (modoControlado) return undefined;
         let activo = true;
-        setCargando(true);
+        setCargandoPropio(true);
         getResumenComprador()
-            .then(({ data: res }) => { if (activo) setData(res); })
-            .catch(() => { if (activo) setData(null); })
-            .finally(() => { if (activo) setCargando(false); });
+            .then(({ data: res }) => { if (activo) setDataPropia(res); })
+            .catch(() => { if (activo) setDataPropia(null); })
+            .finally(() => { if (activo) setCargandoPropio(false); });
         return () => { activo = false; };
-    }, [refreshKey]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [refreshKey, modoControlado]);
+
+    const data = modoControlado ? dataControlada : dataPropia;
+    const cargando = modoControlado ? !!cargandoControlada : cargandoPropio;
 
     if (cargando) {
         return <div className="card" style={{ padding: 18, marginBottom: 16 }}><div className="loading-spinner">Cargando resumen…</div></div>;

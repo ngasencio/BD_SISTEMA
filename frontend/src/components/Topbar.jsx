@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoImg from '../assets/logo.jpg';
+import CampanitaNotificaciones from '../features/notificaciones/components/CampanitaNotificaciones';
 
 export default function Topbar() {
     const navigate = useNavigate();
@@ -23,6 +24,7 @@ export default function Topbar() {
             </div>
             <span className="gob-org">Servicio de Salud Osorno</span>
             <div className="gob-header-spacer" />
+            <CampanitaNotificaciones />
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-title)' }}>
                 Sistema Gestión Interno
             </span>

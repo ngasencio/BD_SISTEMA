@@ -1,9 +1,11 @@
 import calendar
+import logging
 import re
 from collections import defaultdict
 from datetime import date, datetime
 from difflib import SequenceMatcher
 
+from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Avg, CharField, Count, DecimalField, Max, Q, Sum, Value
 from django.db.models.functions import Cast, Concat, Substr
@@ -21,6 +23,8 @@ from .models import (
     ComprasCompradorPerfil, ProcesoCompra, ProcesoCompraFormulario,
     ProcesoCompraOrdenCompra, ProcesoCompraEstadoLog, ComprasNotificacion,
 )
+
+logger = logging.getLogger(__name__)
 
 # Todas las variantes que puede tomar el flag "proveedor seleccionado" en CA
 _GANADOR_FLAGS = frozenset(['1', 'Si', 'si', 'True', 'true'])
@@ -2835,7 +2839,7 @@ ESTABLECIMIENTO_PAC_CUMPLIMIENTO = 1  # Dirección SS Osorno (código 197) — �
 MUESTRA_MINIMA_PAC = 3  # bajo este total, un % Dentro/Fuera no es representativo (1 formulario = 0% o 100%)
 
 
-def _qs_fsc_derivado_pac_cumplimiento():
+def _qs_fsc_derivado_pac_cumplimiento(estado=None):
     """Queryset base para TODO el módulo PAC Cumplimiento — Resumen, Jerarquía, Rankings,
     Cumplimiento Temporal y la reportería Word/PPT/PDF (que reutiliza estas mismas
     funciones, así que filtrar aquí basta para que el alcance impacte todo el módulo).
@@ -2848,14 +2852,22 @@ def _qs_fsc_derivado_pac_cumplimiento():
     ahora — el usuario los identificará por `unidad_requirente` (expuesto en
     `calcular_pac_detalle_formularios`) y corregirá la relación en la BD; una vez
     reclasificados quedarán dentro o fuera del establecimiento automáticamente.
+
+    `estado` (opcional) filtra adicionalmente por `FormularioFSCDerivado.estado`
+    (ej. 'AC') — agregado para la pestaña Temporalidad de `/abastecimiento/formularios`
+    (`ESTADO_TEMPORALIDAD_FORMULARIOS`). Ningún llamador existente lo pasa, así que el
+    comportamiento del resto del módulo PAC Cumplimiento no cambia.
     """
-    return FormularioFSCDerivado.objects.filter(
+    qs = FormularioFSCDerivado.objects.filter(
         Q(sso_departamento__establecimiento_id=ESTABLECIMIENTO_PAC_CUMPLIMIENTO) |
         Q(sso_departamento__isnull=True)
     )
+    if estado:
+        qs = qs.filter(estado=estado)
+    return qs
 
 
-def calcular_pac_dentro_fuera_stats(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None):
+def calcular_pac_dentro_fuera_stats(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None, estado=None):
     """% Dentro/Fuera PAC + comparativa histórica por año, a nivel FSC individual.
 
     Granularidad y fuente de verdad acordadas con el usuario: 100% desde
@@ -2863,9 +2875,10 @@ def calcular_pac_dentro_fuera_stats(anho=None, fecha_desde=None, fecha_hasta=Non
     agrupado por el año de fecha_derivado — nunca depende de PlanerPAC.
     `fecha_desde`/`fecha_hasta` (ISO 'YYYY-MM-DD') tienen prioridad sobre `anho`;
     se usan para las comparativas de período de la reportería (ver Fase E).
+    `estado` (opcional) ver `_qs_fsc_derivado_pac_cumplimiento`.
     """
     qs_base = (
-        _qs_fsc_derivado_pac_cumplimiento()
+        _qs_fsc_derivado_pac_cumplimiento(estado=estado)
         .exclude(dentro_fuera_pac__isnull=True)
         .exclude(fecha_derivado__isnull=True).exclude(fecha_derivado='')
     )
@@ -2984,13 +2997,14 @@ def _eventos_planificados_por_proyecto(anho=None, subdireccion=None, depto=None)
     return {k: sorted(v) for k, v in eventos.items()}
 
 
-def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None):
+def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None, estado=None):
     """Cumplimiento temporal del PAC: cruza FormularioFSCDerivado (solo los Dentro
     PAC) contra los eventos planificados de PlanerPAC. Tolerancia: mes calendario
     (acordado con el usuario). Acotado a los años que PlanerPAC tenga cargados.
 
     `fecha_desde`/`fecha_hasta` (ISO 'YYYY-MM-DD') tienen prioridad sobre `anho` —
     usados por la reportería (Fase E) para acotar a un mes/trimestre específico.
+    `estado` (opcional) ver `_qs_fsc_derivado_pac_cumplimiento`.
 
     Un proyecto con varias fechas planificadas se compara contra el evento MÁS
     CERCANO a la fecha_derivado de cada FSC — es una aproximación documentada
@@ -3008,7 +3022,7 @@ def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=
     eventos = _eventos_planificados_por_proyecto(anho, subdireccion=subdireccion, depto=depto)
 
     fsc_qs_base = (
-        _qs_fsc_derivado_pac_cumplimiento()
+        _qs_fsc_derivado_pac_cumplimiento(estado=estado)
         .filter(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)
         .exclude(fecha_derivado__isnull=True).exclude(fecha_derivado='')
         .exclude(id_plan__isnull=True).exclude(id_plan='')
@@ -3176,7 +3190,7 @@ def _orden_por_rendimiento_pac(d):
     return (d['total'] < MUESTRA_MINIMA_PAC, -d['pct_dentro'], -d['total'])
 
 
-def calcular_pac_jerarquia(anho=None, fecha_desde=None, fecha_hasta=None):
+def calcular_pac_jerarquia(anho=None, fecha_desde=None, fecha_hasta=None, estado=None):
     """Árbol Subdirección/Hospital → Departamento (raíz) → Sub-departamento con
     métricas PAC agregadas (Dentro/Fuera, % en fecha, monto). Incluye el bucket
     'Sin Clasificar' (formularios cuyo unidad_requirente no calzó con ningún
@@ -3190,9 +3204,11 @@ def calcular_pac_jerarquia(anho=None, fecha_desde=None, fecha_hasta=None):
     sub-departamento real se conserva en `subdepartamentos` para drill-down.
 
     `fecha_desde`/`fecha_hasta` (ISO) tienen prioridad sobre `anho` — usados por
-    la reportería para acotar a un mes/trimestre específico.
+    la reportería para acotar a un mes/trimestre específico. `estado` (opcional)
+    ver `_qs_fsc_derivado_pac_cumplimiento` — se reenvía también al cálculo interno
+    de `% en fecha` para que ambos usen el mismo universo de formularios.
     """
-    fsc_qs = _qs_fsc_derivado_pac_cumplimiento().exclude(dentro_fuera_pac__isnull=True)
+    fsc_qs = _qs_fsc_derivado_pac_cumplimiento(estado=estado).exclude(dentro_fuera_pac__isnull=True)
     if fecha_desde:
         fsc_qs = fsc_qs.filter(fecha_derivado__gte=fecha_desde)
     if fecha_hasta:
@@ -3212,7 +3228,7 @@ def calcular_pac_jerarquia(anho=None, fecha_desde=None, fecha_hasta=None):
 
     # % en fecha por depto real (antes de rollup), reutilizando el detalle ya
     # calculado en cumplimiento temporal (evita recalcular evento-más-cercano acá).
-    temporal = calcular_pac_cumplimiento_temporal(anho=anho, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+    temporal = calcular_pac_cumplimiento_temporal(anho=anho, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, estado=estado)
     en_fecha_por_depto = defaultdict(lambda: [0, 0])  # [en_fecha, evaluados_con_evento]
     for d in temporal['detalle_formularios']:
         if d['estado'] in (EN_FECHA, ATRASADO):
@@ -3431,6 +3447,167 @@ def calcular_pac_rankings(anho=None, fecha_desde=None, fecha_hasta=None, tipo='d
     return {
         'mejores': filas[:limite_efectivo], 'peores': list(reversed(filas))[:limite_efectivo],
         'total_elegibles': total_elegibles, 'score_promedio': score_promedio,
+    }
+
+
+# =============================================================================
+# Módulo PAC — Temporalidad de Formularios (pestaña "Temporalidad" en
+# /abastecimiento/formularios) — agregado 2026-10-01
+# =============================================================================
+#
+# Reutiliza la infraestructura de jerarquía/queryset de PAC Cumplimiento (mismo
+# alcance: Establecimiento 1, Dirección SS Osorno — decisión explícita del
+# usuario, para que los dos módulos muestren siempre el mismo universo de
+# formularios) pero acotada además a FormularioFSCDerivado.estado='AC' (pedido
+# explícito), con una dimensión nueva (usuario_requirente) y una nota de
+# desempeño 1.0-7.0 que no existían en el módulo original (ver `_score_compuesto`,
+# que es un score 0-100 de 3 factores para Rankings — distinto propósito).
+
+ESTADO_TEMPORALIDAD_FORMULARIOS = 'AC'
+
+
+def _nota_desempeno_pac(total, dentro_cant, monto_dentro, monto_total):
+    """Nota de desempeño PAC en escala chilena 1.0-7.0: 50% peso al % Dentro por
+    CANTIDAD de formularios + 50% peso al % Dentro por MONTO (pedido explícito del
+    usuario: "ponderar tanto por montos como por cantidad de formularios"; Dentro
+    suma, Fuera resta, porque ambos son la misma proporción complementaria — no
+    hace falta restar aparte). `None` si la muestra es insuficiente
+    (< MUESTRA_MINIMA_PAC) — mismo criterio que `calcular_pac_rankings`, para no
+    mostrar una nota 7.0 "perfecta" calculada sobre 1 solo formulario.
+    """
+    if total < MUESTRA_MINIMA_PAC:
+        return None
+    pct_cantidad = dentro_cant / total * 100
+    pct_monto = (monto_dentro / monto_total * 100) if monto_total else pct_cantidad
+    score_0_100 = 0.5 * pct_cantidad + 0.5 * pct_monto
+    return round(1.0 + score_0_100 / 100 * 6.0, 1)
+
+
+def calcular_pac_temporalidad_comparativo():
+    """Serie anual COMPLETA (todos los años con datos, sin parámetro de filtro) de
+    Dentro/Fuera PAC por CANTIDAD y por MONTO, acotada a estado='AC'. El frontend
+    elige qué años graficar sobre esta serie — así la pestaña crece sola cada vez
+    que llegue un año nuevo de datos, sin tocar el backend (rango de años dinámico).
+    """
+    qs = (
+        _qs_fsc_derivado_pac_cumplimiento(estado=ESTADO_TEMPORALIDAD_FORMULARIOS)
+        .exclude(dentro_fuera_pac__isnull=True)
+        .exclude(fecha_derivado__isnull=True).exclude(fecha_derivado='')
+    )
+    por_anho = defaultdict(lambda: {'dentro_cant': 0, 'fuera_cant': 0, 'dentro_monto': 0.0, 'fuera_monto': 0.0})
+    for fecha_derivado, estado_pac, monto in qs.values_list('fecha_derivado', 'dentro_fuera_pac', 'monto_estimado'):
+        if not fecha_derivado or len(fecha_derivado) < 4:
+            continue
+        bucket = por_anho[fecha_derivado[:4]]
+        monto_f = float(monto or 0)
+        if estado_pac == FormularioFSCDerivado.DENTRO:
+            bucket['dentro_cant'] += 1
+            bucket['dentro_monto'] += monto_f
+        else:
+            bucket['fuera_cant'] += 1
+            bucket['fuera_monto'] += monto_f
+
+    serie = []
+    for anho_str in sorted(por_anho):
+        b = por_anho[anho_str]
+        total_cant = b['dentro_cant'] + b['fuera_cant']
+        total_monto = b['dentro_monto'] + b['fuera_monto']
+        serie.append({
+            'anho': int(anho_str),
+            'dentro_cantidad': b['dentro_cant'], 'fuera_cantidad': b['fuera_cant'], 'total_cantidad': total_cant,
+            'pct_dentro_cantidad': round(b['dentro_cant'] / total_cant * 100, 1) if total_cant else 0,
+            'dentro_monto': b['dentro_monto'], 'fuera_monto': b['fuera_monto'], 'total_monto': total_monto,
+            'pct_dentro_monto': round(b['dentro_monto'] / total_monto * 100, 1) if total_monto else 0,
+            'nota': _nota_desempeno_pac(total_cant, b['dentro_cant'], b['dentro_monto'], total_monto),
+        })
+    return {'serie_anual': serie, 'anhos_disponibles': [s['anho'] for s in serie]}
+
+
+def calcular_pac_temporalidad_jerarquia(anho=None):
+    """Árbol Subdirección→Departamento→Sub-departamento (reutiliza por completo el
+    rollup de `calcular_pac_jerarquia`/`_resolver_depto_raiz` — cero duplicación de
+    esa lógica) acotado a estado='AC', con `nota` (1.0-7.0) agregada a cada nodo.
+    Wrapper delgado: solo decora el resultado ya calculado, no vuelve a armar el árbol.
+    """
+    jerarquia = calcular_pac_jerarquia(anho=anho, estado=ESTADO_TEMPORALIDAD_FORMULARIOS)
+
+    def _decorar(nodo):
+        monto_total = nodo['monto_dentro'] + nodo['monto_fuera']
+        nodo['nota'] = _nota_desempeno_pac(nodo['total'], nodo['dentro'], nodo['monto_dentro'], monto_total)
+        return nodo
+
+    for sub in jerarquia['subdirecciones']:
+        _decorar(sub)
+        for depto in sub['departamentos']:
+            _decorar(depto)
+            for subdepto in depto['subdepartamentos']:
+                _decorar(subdepto)
+    return jerarquia
+
+
+def calcular_pac_temporalidad_usuarios(anho=None, limite=50, depto_ids=None, sin_clasificar=False):
+    """Ranking de usuarios requirentes por desempeño PAC (Dentro/Fuera por cantidad
+    y monto + nota 1.0-7.0), acotado a estado='AC'. `FormularioFSCDerivado.usuario_requirente`
+    es un CharField de texto libre (no hay FK a una tabla de usuarios) — se agrupa
+    directo por ese valor, mismo patrón de `calcular_pac_rankings(tipo='formulario')`
+    pero con GROUP BY SQL en vez de iterar fila a fila (acá no importa el detalle
+    individual, solo el agregado por usuario).
+
+    `depto_ids`/`sin_clasificar` (opcionales) acotan el universo a una rama de la
+    jerarquía — mismo contrato que `?sso_departamento_in=`/`?sin_clasificar=` de
+    `FormularioFSCDerivadoViewSet` (el frontend ya resuelve el rollup de
+    sub-departamentos al hacer clic en un nodo de `calcular_pac_temporalidad_jerarquia`,
+    igual que hace para la tabla de formularios del drill-down).
+    """
+    fsc_qs = (
+        _qs_fsc_derivado_pac_cumplimiento(estado=ESTADO_TEMPORALIDAD_FORMULARIOS)
+        .exclude(dentro_fuera_pac__isnull=True)
+        .exclude(usuario_requirente__isnull=True).exclude(usuario_requirente='')
+    )
+    if anho:
+        fsc_qs = fsc_qs.filter(fecha_derivado__gte=f'{anho}-01-01', fecha_derivado__lte=f'{anho}-12-31')
+    if depto_ids or sin_clasificar:
+        filtro_org = Q()
+        if depto_ids:
+            filtro_org |= Q(sso_departamento_id__in=depto_ids)
+        if sin_clasificar:
+            filtro_org |= Q(sso_departamento__isnull=True)
+        fsc_qs = fsc_qs.filter(filtro_org)
+
+    filas_qs = fsc_qs.values('usuario_requirente').annotate(
+        total=Count('id'),
+        dentro=Count('id', filter=Q(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)),
+        monto_dentro=Sum('monto_estimado', filter=Q(dentro_fuera_pac=FormularioFSCDerivado.DENTRO)),
+        monto_fuera=Sum('monto_estimado', filter=Q(dentro_fuera_pac=FormularioFSCDerivado.FUERA)),
+    )
+
+    filas = []
+    for f in filas_qs:
+        total, dentro = f['total'], f['dentro']
+        monto_dentro, monto_fuera = float(f['monto_dentro'] or 0), float(f['monto_fuera'] or 0)
+        monto_total = monto_dentro + monto_fuera
+        filas.append({
+            'usuario_requirente': f['usuario_requirente'],
+            'total': total, 'dentro': dentro, 'fuera': total - dentro,
+            'pct_dentro_cantidad': round(dentro / total * 100, 1) if total else 0,
+            'monto_dentro': monto_dentro, 'monto_fuera': monto_fuera,
+            'pct_dentro_monto': round(monto_dentro / monto_total * 100, 1) if monto_total else 0,
+            'nota': _nota_desempeno_pac(total, dentro, monto_dentro, monto_total),
+            'muestra_insuficiente': total < MUESTRA_MINIMA_PAC,
+        })
+
+    # Elegibles = con nota calculable (muestra suficiente); orden por nota desc,
+    # total como desempate — mismo criterio que `_orden_por_rendimiento_pac`.
+    elegibles = [f for f in filas if f['nota'] is not None]
+    elegibles.sort(key=lambda f: (-f['nota'], -f['total']))
+    insuficientes = [f for f in filas if f['nota'] is None]
+    insuficientes.sort(key=lambda f: -f['total'])
+
+    nota_promedio = round(sum(f['nota'] for f in elegibles) / len(elegibles), 1) if elegibles else None
+    return {
+        'usuarios': (elegibles + insuficientes)[:limite],
+        'total_usuarios': len(filas), 'total_elegibles': len(elegibles),
+        'nota_promedio': nota_promedio,
     }
 
 
@@ -4942,6 +5119,64 @@ def enlazar_fsc_oc_manual(formulario_derivado_id, codigo_oc, usuario, observacio
     return link
 
 
+def _confirmar_fsc_oc_desde_proceso(formulario_derivado_id, codigo_oc, usuario):
+    """Decisión de negocio: vincular FSC↔OC a mano en Mis Formularios
+    (ProcesoCompraFormulario + ProcesoCompraOrdenCompra) es la señal más
+    fuerte posible — el comprador ya lo hizo explícitamente — así que se
+    sincroniza como un FscOcLink MANUAL/CONFIRMADO automáticamente, sin pasar
+    por la cola de revisión de /fsc-oc-pac. Si el link YA está CONFIRMADO
+    (por cualquier vía, incluida una confirmación manual real en /fsc-oc-pac)
+    no se toca — evita pisar `observaciones`/`revisado_por` de una revisión
+    humana independiente, y deja `creado_desde_proceso=False` tal como estaba
+    (ver uso en quitar_oc_de_proceso)."""
+    existente = FscOcLink.objects.filter(
+        formulario_derivado_id=formulario_derivado_id, orden_compra_id=codigo_oc,
+    ).first()
+    if existente and existente.estado == FscOcLink.CONFIRMADO:
+        return existente
+    from django.utils import timezone
+    link, _creado = FscOcLink.objects.update_or_create(
+        formulario_derivado_id=formulario_derivado_id, orden_compra_id=codigo_oc,
+        defaults={
+            'confianza': FscOcLink.MANUAL, 'estado': FscOcLink.CONFIRMADO, 'creado_desde_proceso': True,
+            'revisado_por': usuario, 'fecha_revision': timezone.now(),
+        },
+    )
+    return link
+
+
+def calcular_estado_pac_proceso_oc(oc, ids_plan, overrides=None):
+    """Estado PAC (PAC_OK/SIN_PAC/PAC_DISTINTO) de una OC vista desde un
+    ProcesoCompra — mismo criterio que `_pac_match_estado()` (usado en
+    /fsc-oc-pac), extendido a que un proceso puede tener más de un FSC
+    vinculado (compra conjunta): PAC_OK si CUALQUIERA de los FSC del proceso
+    calza con el PAC real de la OC, PAC_DISTINTO si ninguno calza pero al
+    menos uno declara un PAC distinto, SIN_PAC si la OC no tiene PAC
+    enlazado, None si no hay nada que comparar.
+
+    `ids_plan` (lista de `FormularioFSCDerivado.id_plan`, puede venir vacía)
+    y `overrides` (de `_mapa_overrides_pac()`) se reciben YA RESUELTOS a
+    propósito — esta función se llama una vez POR FILA DE OC en los
+    serializers de Mis Formularios/ProcesoCompra, así que recalcularlos acá
+    adentro significaría releer la tabla OcPacOverride completa (y volver a
+    golpear FormularioFSCDerivado) en cada fila. Los call sites deben
+    resolver `ids_plan` desde objetos ya cargados en memoria cuando se
+    pueda, y cachear `overrides` una sola vez por request (ver
+    get_serializer_context en views.py)."""
+    if overrides is None:
+        overrides = _mapa_overrides_pac()
+    oc_dict = {'codigo_oc': oc.codigo_oc, 'EnlacePAC': oc.EnlacePAC, 'ID_Proyecto': oc.ID_Proyecto}
+    ids_plan = [idp for idp in ids_plan if idp] or [None]
+    resultados = {_pac_match_estado(idp, oc_dict, overrides) for idp in ids_plan}
+    if 'PAC_OK' in resultados:
+        return 'PAC_OK'
+    if 'PAC_DISTINTO' in resultados:
+        return 'PAC_DISTINTO'
+    if 'SIN_PAC' in resultados:
+        return 'SIN_PAC'
+    return None
+
+
 def corregir_oc_pac(codigo_oc, formulario_derivado_id, usuario, observaciones=''):
     """Corrige el PAC real de una OC usando el `id_plan` declarado por el FSC
     que se le confirmó — crea/actualiza el `OcPacOverride` (ver models.py para
@@ -5480,6 +5715,11 @@ def crear_proceso_compra(*, tipo_proceso, titulo, comprador, formulario_ids, usu
             proceso=proceso, estado_anterior=None, estado_nuevo=estado_proceso,
             usuario=usuario_creador, comentario='Proceso creado.',
         )
+    _notificar_jefaturas(
+        ComprasNotificacion.NUEVO_PROCESO, proceso,
+        f'{comprador.get_full_name() or comprador.username} clasificó "{titulo}" '
+        f'({proceso.get_tipo_proceso_display()}).',
+    )
     return proceso
 
 
@@ -5490,8 +5730,9 @@ def cambiar_estado_proceso(proceso_id, nuevo_estado, usuario, comentario=''):
     vacío) — así el comprador puede ir registrando avances para que jefatura
     los revise en el historial aunque el proceso siga en la misma etapa.
     No-op real (sin fila de historial) solo cuando no cambia el estado NI
-    trae comentario. Fase 4 engancha aquí el disparo de notificaciones
-    in-app/email — no implementado todavía."""
+    trae comentario. Notifica a jefatura (_notificar_jefaturas) en ambos
+    casos — cambio de estado o solo comentario — para que el feed de
+    actividad del panel los vea sin tener que abrir cada proceso."""
     proceso = ProcesoCompra.objects.select_related('comprador').get(pk=proceso_id)
     validar_estado_para_tipo(proceso.tipo_proceso, nuevo_estado)
     anterior = proceso.estado_proceso
@@ -5508,6 +5749,14 @@ def cambiar_estado_proceso(proceso_id, nuevo_estado, usuario, comentario=''):
             proceso=proceso, estado_anterior=anterior, estado_nuevo=nuevo_estado,
             usuario=usuario, comentario=comentario,
         )
+    nombre_comprador = proceso.comprador.get_full_name() or proceso.comprador.username
+    if anterior != nuevo_estado:
+        msg = f'{nombre_comprador} cambió "{proceso.titulo}" a {proceso.get_estado_proceso_display()}.'
+    else:
+        msg = f'{nombre_comprador} comentó en "{proceso.titulo}".'
+    if comentario:
+        msg += f' "{comentario[:200]}"'
+    _notificar_jefaturas(ComprasNotificacion.CAMBIO_ESTADO, proceso, msg)
     return proceso
 
 
@@ -5515,13 +5764,19 @@ def agregar_formulario_a_proceso(proceso_id, formulario_id, usuario):
     """Agrega un FSC adicional a un proceso existente (compra conjunta).
     Idempotente vía get_or_create sobre la constraint única
     (proceso, formulario_derivado). Lanza FormularioFSCDerivado.DoesNotExist
-    si el id no existe."""
+    si el id no existe. Si el proceso ya tiene OC enlazadas, sincroniza de
+    inmediato el FscOcLink del FSC nuevo contra cada una (ver
+    _confirmar_fsc_oc_desde_proceso) — así no importa en qué orden el
+    comprador vincule FSC y OC."""
     FormularioFSCDerivado.objects.get(pk=formulario_id)  # valida existencia, 404 explícito en la vista
     proceso = ProcesoCompra.objects.get(pk=proceso_id)
-    vinculo, _creado = ProcesoCompraFormulario.objects.get_or_create(
-        proceso=proceso, formulario_derivado_id=formulario_id,
-        defaults={'creado_por': usuario},
-    )
+    with transaction.atomic():
+        vinculo, _creado = ProcesoCompraFormulario.objects.get_or_create(
+            proceso=proceso, formulario_derivado_id=formulario_id,
+            defaults={'creado_por': usuario},
+        )
+        for codigo_oc in proceso.vinculos_oc.values_list('orden_compra_id', flat=True):
+            _confirmar_fsc_oc_desde_proceso(formulario_id, codigo_oc, usuario)
     return vinculo
 
 
@@ -5651,8 +5906,23 @@ def desvincular_proceso_mp(proceso_id, usuario):
 
 def quitar_oc_de_proceso(proceso_id, codigo_oc, usuario):
     """Quita el enlace de una Orden de Compra a un proceso (borra solo la
-    fila ProcesoCompraOrdenCompra, la OC en sí no se toca)."""
-    ProcesoCompraOrdenCompra.objects.filter(proceso_id=proceso_id, orden_compra_id=codigo_oc).delete()
+    fila ProcesoCompraOrdenCompra, la OC en sí no se toca). También revierte
+    el/los FscOcLink que esta vía creó automáticamente para los FSC de este
+    proceso — solo los que siguen con `creado_desde_proceso=True` (campo
+    dedicado, ver models.py), nunca uno que alguien haya confirmado/anotado
+    de verdad en /fsc-oc-pac después (_confirmar_fsc_oc_desde_proceso deja
+    ese campo en False cuando no toca un link ya CONFIRMADO)."""
+    ids_fsc = list(
+        ProcesoCompraFormulario.objects.filter(proceso_id=proceso_id)
+        .values_list('formulario_derivado_id', flat=True)
+    )
+    with transaction.atomic():
+        ProcesoCompraOrdenCompra.objects.filter(proceso_id=proceso_id, orden_compra_id=codigo_oc).delete()
+        if ids_fsc:
+            FscOcLink.objects.filter(
+                formulario_derivado_id__in=ids_fsc, orden_compra_id=codigo_oc,
+                creado_desde_proceso=True,
+            ).delete()
 
 
 # =============================================================================
@@ -6029,11 +6299,283 @@ def agregar_oc_a_proceso(proceso_id, codigo_oc, usuario):
     proceso puede generar varias OC, ej. despachos parciales). Lanza
     OrdenCompra.DoesNotExist si el código no está sincronizado — la vista
     debe indicarle al frontend que use el buscador de Mercado Público
-    (Fase 3) en ese caso."""
+    (Fase 3) en ese caso. Sincroniza de inmediato el FscOcLink CONFIRMADO de
+    cada FSC vinculado al proceso contra esta OC (ver
+    _confirmar_fsc_oc_desde_proceso) — así el enlace queda reflejado también
+    en /fsc-oc-pac sin pasar por su cola de revisión."""
     OrdenCompra.objects.get(pk=codigo_oc)  # valida existencia, 404 explícito en la vista
-    proceso = ProcesoCompra.objects.get(pk=proceso_id)
-    vinculo, _creado = ProcesoCompraOrdenCompra.objects.get_or_create(
-        proceso=proceso, orden_compra_id=codigo_oc,
-        defaults={'creado_por': usuario},
-    )
+    proceso = ProcesoCompra.objects.select_related('comprador').get(pk=proceso_id)
+    with transaction.atomic():
+        vinculo, creado = ProcesoCompraOrdenCompra.objects.get_or_create(
+            proceso=proceso, orden_compra_id=codigo_oc,
+            defaults={'creado_por': usuario},
+        )
+        for formulario_id in proceso.vinculos_formulario.values_list('formulario_derivado_id', flat=True):
+            _confirmar_fsc_oc_desde_proceso(formulario_id, codigo_oc, usuario)
+    if creado:
+        nombre_comprador = proceso.comprador.get_full_name() or proceso.comprador.username
+        _notificar_jefaturas(
+            ComprasNotificacion.EMISION_OC, proceso,
+            f'{nombre_comprador} vinculó la OC {codigo_oc} a "{proceso.titulo}".',
+        )
     return vinculo
+
+
+# =============================================================================
+# Módulo Gestión de Compras — Panel Jefatura (monitoreo global, 2026-10-02)
+#
+# A diferencia de las funciones de arriba (acotadas a un comprador vía
+# `usuario`), estas agregan sobre TODOS los compradores para el panel de
+# supervisión de jefatura (/compras/panel-formularios). No crean una tabla
+# de auditoría nueva: el feed de actividad se arma leyendo los mismos
+# registros append-only que ya existen (ProcesoCompraEstadoLog,
+# ProcesoCompraOrdenCompra, ProcesoCompra) — ver plan de implementación
+# acordado con el usuario.
+# =============================================================================
+
+# Lista explícita (no por rol): Nicolás Asencio es 'admin', no 'jefatura', y
+# no se quiere notificar a OTROS admins del sistema que no son jefatura de
+# Abastecimiento. Única fuente de verdad — cargar_compradores_compras.py la
+# importa de acá en vez de mantener su propia copia (antes duplicada).
+JEFATURA_ABASTECIMIENTO_USERNAMES = [
+    'cristina.flores@redsalud.gob.cl',
+    'sandrap.espinoza@redsalud.gob.cl',
+    'nicolas.asencio@redsalud.gob.cl',
+]
+
+
+def _notificar_jefaturas(tipo, proceso, mensaje):
+    """Crea una ComprasNotificacion in-app para cada jefatura de
+    Abastecimiento. Nunca propaga una excepción — un fallo acá (ej. un
+    típo en el username) no debe tumbar la acción del comprador que lo
+    disparó, mismo criterio que ya documenta el modelo para el envío de
+    email (que se intenta aparte y puede fallar sin perder la fila in-app)."""
+    try:
+        destinatarios = User.objects.filter(username__in=JEFATURA_ABASTECIMIENTO_USERNAMES)
+        ComprasNotificacion.objects.bulk_create([
+            ComprasNotificacion(destinatario=u, proceso=proceso, tipo=tipo, mensaje=mensaje[:500])
+            for u in destinatarios
+        ])
+    except Exception:
+        logger.exception(
+            'Error creando notificaciones de jefatura (proceso_id=%s, tipo=%s)',
+            proceso.id if proceso else None, tipo,
+        )
+
+
+def _parse_fecha_fsc(fecha_str):
+    """`FormularioFSCDerivado.fecha_derivado` es CharField 'YYYY-MM-DD'
+    (mismo gotcha que `fecha_solicitud` en calcular_formularios_flujo) —
+    nunca hacer aritmética de fechas directo sobre el string."""
+    if not fecha_str:
+        return None
+    try:
+        return datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return None
+
+
+def calcular_compras_actividad_jefatura(desde=None, limit=100):
+    """Feed de 'últimos movimientos' para el Tab General del panel de
+    jefatura: combina 3 fuentes append-only (cambio de estado con
+    comentario, OC vinculada a un proceso, proceso nuevo clasificado) en una
+    sola línea de tiempo ordenada por fecha desc. `desde` (datetime) acota a
+    eventos posteriores — lo usa el frontend para hacer polling incremental
+    sin re-traer todo el feed cada vez. Se recorta cada fuente a `limit`
+    ANTES de mezclar (top-k de 3 listas ya ordenadas) — alcanza para que el
+    top `limit` global salga correcto sin traer la tabla completa.
+
+    No se resuelve FSC/folio por evento a propósito (evitaría un join extra
+    por proceso = N+1): el título del ProcesoCompra ya es un identificador
+    legible para el feed; el detalle completo (incl. FSC vinculados) se abre
+    con 'Ver' sobre el proceso, mismo modal que ya usa el comprador."""
+    filtro_estado = {'fecha__gt': desde} if desde else {}
+    cambios = (
+        ProcesoCompraEstadoLog.objects
+        .filter(**filtro_estado)
+        .select_related('proceso__comprador', 'usuario')
+        .order_by('-fecha')[:limit]
+    )
+    eventos = [
+        {
+            'tipo': 'CAMBIO_ESTADO', 'fecha': c.fecha, 'proceso_id': c.proceso_id,
+            'titulo': c.proceso.titulo, 'tipo_proceso': c.proceso.tipo_proceso,
+            'comprador_id': c.proceso.comprador_id,
+            'comprador_nombre': c.proceso.comprador.get_full_name() or c.proceso.comprador.username,
+            'usuario_nombre': (c.usuario.get_full_name() or c.usuario.username) if c.usuario_id else None,
+            'estado_anterior': c.estado_anterior, 'estado_nuevo': c.estado_nuevo,
+            'comentario': c.comentario,
+        }
+        for c in cambios
+    ]
+
+    filtro_oc = {'creado_en__gt': desde} if desde else {}
+    ocs = (
+        ProcesoCompraOrdenCompra.objects
+        .filter(**filtro_oc)
+        .select_related('proceso__comprador', 'creado_por')
+        .order_by('-creado_en')[:limit]
+    )
+    eventos += [
+        {
+            'tipo': 'OC_VINCULADA', 'fecha': v.creado_en, 'proceso_id': v.proceso_id,
+            'titulo': v.proceso.titulo, 'tipo_proceso': v.proceso.tipo_proceso,
+            'comprador_id': v.proceso.comprador_id,
+            'comprador_nombre': v.proceso.comprador.get_full_name() or v.proceso.comprador.username,
+            'usuario_nombre': (v.creado_por.get_full_name() or v.creado_por.username) if v.creado_por_id else None,
+            'codigo_oc': v.orden_compra_id, 'comentario': '',
+        }
+        for v in ocs
+    ]
+
+    filtro_nuevo = {'creado_en__gt': desde} if desde else {}
+    nuevos = (
+        ProcesoCompra.objects
+        .filter(**filtro_nuevo)
+        .select_related('comprador', 'creado_por')
+        .order_by('-creado_en')[:limit]
+    )
+    eventos += [
+        {
+            'tipo': 'PROCESO_NUEVO', 'fecha': p.creado_en, 'proceso_id': p.id,
+            'titulo': p.titulo, 'tipo_proceso': p.tipo_proceso,
+            'comprador_id': p.comprador_id,
+            'comprador_nombre': p.comprador.get_full_name() or p.comprador.username,
+            'usuario_nombre': (p.creado_por.get_full_name() or p.creado_por.username) if p.creado_por_id else None,
+            'comentario': '',
+        }
+        for p in nuevos
+    ]
+
+    eventos.sort(key=lambda e: e['fecha'], reverse=True)
+    eventos = eventos[:limit]
+    for e in eventos:
+        e['fecha'] = e['fecha'].isoformat()
+    return eventos
+
+
+def calcular_compras_sin_gestion():
+    """FSC en bandeja 'AC' sin ningún ProcesoCompra vinculado y sin cerrar
+    del lado del Panel SSO, de TODOS los compradores (versión global del
+    bloque 'gestion_interna' de calcular_compras_resumen_comprador, sin
+    acotar a un `usuario`). Incluye también los FSC cuyo campo `comprador`
+    (texto crudo del Panel SSO) no calza con ningún usuario activo del
+    catálogo ComprasCompradorPerfil — `comprador_id=None` en ese caso — el
+    mismo hueco que dejó sin bandeja a Bastián Miranda/Lesly Díaz/Antonia
+    Mena hasta que se completó el catálogo (2026-10-02) queda visible acá en
+    vez de pasar desapercibido la próxima vez que entre un comprador nuevo."""
+    catalogo = dict(
+        ComprasCompradorPerfil.objects.filter(activo=True)
+        .values_list('nombre_comprador', 'usuario_id')
+    )
+    usuarios = {u.id: u for u in User.objects.filter(id__in=catalogo.values())}
+    hoy = timezone.localdate()
+
+    qs = (
+        FormularioFSCDerivado.objects
+        .filter(estado='AC', vinculos_proceso__isnull=True)
+        .exclude(estado_compra__icontains='Proceso Finalizado')
+        .exclude(comprador__isnull=True).exclude(comprador__exact='')
+        .order_by('-fecha_derivado')
+    )
+    resultado = []
+    for f in qs:
+        usuario_id = catalogo.get(f.comprador)
+        usuario = usuarios.get(usuario_id) if usuario_id else None
+        fecha = _parse_fecha_fsc(f.fecha_derivado)
+        resultado.append({
+            'id': f.id,
+            'id_formulario': generar_id_formulario(f.folio, f.anho, formulario_texto=f.formulario),
+            'unidad_requirente': f.unidad_requirente,
+            'requerimiento': f.requerimiento,
+            'monto_estimado': f.monto_estimado,
+            'fecha_derivado': f.fecha_derivado,
+            'dias': (hoy - fecha).days if fecha else None,
+            'comprador_nombre_panel': f.comprador,
+            'comprador_id': usuario.id if usuario else None,
+            'comprador_display': (usuario.get_full_name() or usuario.username) if usuario
+                                  else f'{f.comprador} (sin cuenta asignada)',
+        })
+    return resultado
+
+
+def calcular_compras_avance_global():
+    """Tabla comparativa por comprador + KPIs globales para el Tab Avance:
+    de sus FSC activos (AC, no finalizados), cuántos tienen gestión (≥1
+    ProcesoCompra) y cuántos ya tienen OC emitida. Un solo paso por los FSC
+    AC en Python (en vez de 1 query agregada por comprador) para que el
+    costo escale con el volumen de FSC, no con el número de compradores —
+    relevante porque 'cada vez llegarán más formularios' (pedido del
+    usuario) pero los compradores crecen mucho más lento.
+
+    No replica la deduplicación fina de FSC repetidos por el bug de upsert
+    del ETL (_ids_fsc_duplicados_a_ocultar) — a esta escala (~0.4-1% de
+    filas) el sesgo en el ranking es despreciable; si se necesita precisión
+    exacta por comprador, usar calcular_compras_resumen_comprador(usuario)
+    desde el Tab Búsqueda Personalizada."""
+    catalogo = dict(
+        ComprasCompradorPerfil.objects.filter(activo=True)
+        .values_list('nombre_comprador', 'usuario_id')
+    )
+    usuarios = {u.id: u for u in User.objects.filter(id__in=catalogo.values())}
+
+    fsc_rows = list(
+        FormularioFSCDerivado.objects.filter(estado='AC')
+        .exclude(comprador__isnull=True).exclude(comprador__exact='')
+        .values('id', 'comprador', 'fecha_derivado', 'estado_compra')
+    )
+    fsc_a_procesos = defaultdict(set)
+    for fsc_id, proceso_id in ProcesoCompraFormulario.objects.values_list('formulario_derivado_id', 'proceso_id'):
+        fsc_a_procesos[fsc_id].add(proceso_id)
+    estado_por_proceso = dict(ProcesoCompra.objects.values_list('id', 'estado_proceso'))
+    procesos_con_oc = set(ProcesoCompraOrdenCompra.objects.values_list('proceso_id', flat=True).distinct())
+
+    hoy = timezone.localdate()
+    por_comprador = defaultdict(lambda: {
+        'activos': 0, 'con_gestion': 0, 'con_oc': 0, 'finalizados': 0, '_dias_acum': 0, '_dias_n': 0,
+    })
+    for f in fsc_rows:
+        proceso_ids = fsc_a_procesos.get(f['id'], set())
+        finalizado = bool(re.search(r'proceso finalizado', f['estado_compra'] or '', re.I)) or any(
+            estado_por_proceso.get(pid) == 'FINALIZADO' for pid in proceso_ids
+        )
+        bucket = por_comprador[f['comprador']]
+        if finalizado:
+            bucket['finalizados'] += 1
+            continue
+        bucket['activos'] += 1
+        if proceso_ids:
+            bucket['con_gestion'] += 1
+            if proceso_ids & procesos_con_oc:
+                bucket['con_oc'] += 1
+        fecha = _parse_fecha_fsc(f['fecha_derivado'])
+        if fecha:
+            bucket['_dias_acum'] += (hoy - fecha).days
+            bucket['_dias_n'] += 1
+
+    filas = []
+    for nombre_panel, b in por_comprador.items():
+        usuario_id = catalogo.get(nombre_panel)
+        usuario = usuarios.get(usuario_id) if usuario_id else None
+        filas.append({
+            'comprador_nombre_panel': nombre_panel,
+            'comprador_id': usuario.id if usuario else None,
+            'comprador_display': (usuario.get_full_name() or usuario.username) if usuario
+                                  else f'{nombre_panel} (sin cuenta asignada)',
+            'activos': b['activos'], 'con_gestion': b['con_gestion'], 'con_oc': b['con_oc'],
+            'sin_gestion': b['activos'] - b['con_gestion'], 'finalizados': b['finalizados'],
+            'dias_promedio_pendiente': round(b['_dias_acum'] / b['_dias_n'], 1) if b['_dias_n'] else None,
+        })
+    filas.sort(key=lambda r: -r['activos'])
+
+    kpis = {
+        'total_compradores': len(filas),
+        'total_activos': sum(r['activos'] for r in filas),
+        'total_con_gestion': sum(r['con_gestion'] for r in filas),
+        'total_con_oc': sum(r['con_oc'] for r in filas),
+        'total_finalizados': sum(r['finalizados'] for r in filas),
+    }
+    kpis['pct_con_gestion'] = round(100 * kpis['total_con_gestion'] / kpis['total_activos'], 1) if kpis['total_activos'] else 0
+    kpis['pct_con_oc'] = round(100 * kpis['total_con_oc'] / kpis['total_activos'], 1) if kpis['total_activos'] else 0
+
+    return {'kpis': kpis, 'por_comprador': filas}

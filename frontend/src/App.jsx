@@ -9,7 +9,8 @@
  *  /                            → Protegida → AppLayout > Home
  *  /licitaciones                → Protegida → AppLayout > Dashboard
  *  /abastecimiento/*            → Protegida (rol: admin, abastecimiento, comprador, general)
- *  /compras/*                   → Protegida (rol: admin, comprador, jefatura, general)
+ *  /compras/mis-formularios     → Protegida (rol: admin, comprador, jefatura, general)
+ *  /compras/panel-formularios   → Protegida (rol: admin, jefatura, general — SIN comprador)
  *  /finanzas/*                  → Protegida (rol: admin, finanzas, general)
  *  /anexo1/base-datos           → Protegida (rol: admin, finanzas, general)
  *  /anexo3/reporte-sigfe        → Protegida (rol: admin, finanzas, general) — único reporte Anexo N°3, el viejo AnexoDeudaPage se eliminó
@@ -40,7 +41,7 @@ import { perfilRoute, adminUsuariosRoute } from './features/usuarios/routes';
 import { devengoSigfeRoutes } from './features/devengo-sigfe/routes';
 import { anexo1SigfeRoutes } from './features/anexo1-sigfe/routes';
 import { facturasRoutes } from './features/facturas/routes';
-import { comprasRoutes } from './features/compras/routes';
+import { comprasRoutes, comprasJefaturaRoutes } from './features/compras/routes';
 import { mapaSistemaRoutes } from './features/mapa-sistema/routes';
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
@@ -90,9 +91,14 @@ function AppRoutes() {
               {fscOcPacRoutes}
             </Route>
 
-            {/* Módulo Gestión de Compras (admin + comprador + jefatura + general) */}
+            {/* Módulo Gestión de Compras — bandeja del comprador (admin + comprador + jefatura + general) */}
             <Route element={<RequireRole allowed={['admin', 'comprador', 'jefatura', 'general']} />}>
               {comprasRoutes}
+            </Route>
+
+            {/* Panel Formularios — supervisión de jefatura, SIN 'comprador' a propósito */}
+            <Route element={<RequireRole allowed={['admin', 'jefatura', 'general']} />}>
+              {comprasJefaturaRoutes}
             </Route>
 
             {/* Módulo Finanzas (admin + finanzas + general) */}

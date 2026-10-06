@@ -1174,7 +1174,7 @@ class PerfilUsuario(models.Model):
         ('general',         'General (Todos los módulos)'),
         ('viewer',          'Visualizador'),
         ('comprador',       'Comprador'),
-        ('jefatura',        'Jefatura'),
+        ('jefatura',        'Jefatura Abastecimiento'),
     ]
 
     user               = models.OneToOneField(
@@ -1368,6 +1368,14 @@ class FscOcLink(models.Model):
     criterios_match = models.JSONField(null=True, blank=True)
     motivo_rechazo = models.TextField(null=True, blank=True)
     observaciones = models.TextField(null=True, blank=True)
+    # True solo cuando services._confirmar_fsc_oc_desde_proceso() creó/confirmó
+    # este link al vincular FSC<->OC desde ProcesoCompra (Mis Formularios) —
+    # permite que quitar_oc_de_proceso() revierta EXACTAMENTE lo que esa vía
+    # creó, sin arriesgar pisar una confirmación manual independiente hecha en
+    # /fsc-oc-pac (que deja este campo en False). Campo dedicado e indexado en
+    # vez de parsear `observaciones` por texto — más robusto a medida que
+    # crece el histórico y cambia la redacción de las notas.
+    creado_desde_proceso = models.BooleanField(default=False, db_index=True)
     revisado_por = models.ForeignKey(
         'auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
     )
@@ -1552,7 +1560,7 @@ class ProcesoCompra(models.Model):
 
     creado_por  = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name='procesos_compra_creados')
-    creado_en   = models.DateTimeField(auto_now_add=True)
+    creado_en   = models.DateTimeField(auto_now_add=True, db_index=True)
     actualizado_en = models.DateTimeField(auto_now=True)
     finalizado_en  = models.DateTimeField(null=True, blank=True)
 
@@ -1584,7 +1592,7 @@ class ProcesoCompraFormulario(models.Model):
     proceso = models.ForeignKey('ProcesoCompra', on_delete=models.CASCADE, related_name='vinculos_formulario')
     formulario_derivado = models.ForeignKey('FormularioFSCDerivado', on_delete=models.CASCADE,
                                              related_name='vinculos_proceso')
-    creado_en = models.DateTimeField(auto_now_add=True)
+    creado_en = models.DateTimeField(auto_now_add=True, db_index=True)
     creado_por = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
 
     class Meta:
@@ -1604,7 +1612,7 @@ class ProcesoCompraOrdenCompra(models.Model):
     proceso = models.ForeignKey('ProcesoCompra', on_delete=models.CASCADE, related_name='vinculos_oc')
     orden_compra = models.ForeignKey('OrdenCompra', on_delete=models.DO_NOTHING, db_constraint=False,
                                       related_name='vinculos_proceso')
-    creado_en = models.DateTimeField(auto_now_add=True)
+    creado_en = models.DateTimeField(auto_now_add=True, db_index=True)
     creado_por = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
 
     class Meta:
@@ -1645,10 +1653,12 @@ class ComprasNotificacion(models.Model):
     CAMBIO_ESTADO   = 'CAMBIO_ESTADO'
     CIERRE_PROXIMO  = 'CIERRE_PROXIMO'
     NUEVO_PROCESO   = 'NUEVO_PROCESO'
+    EMISION_OC      = 'EMISION_OC'
     TIPO_CHOICES = [
         (CAMBIO_ESTADO,  'Cambio de Estado'),
         (CIERRE_PROXIMO, 'Alerta de Cierre Próximo'),
         (NUEVO_PROCESO,  'Nuevo Proceso Creado'),
+        (EMISION_OC,     'Orden de Compra Vinculada'),
     ]
     destinatario = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='compras_notificaciones')
     proceso = models.ForeignKey('ProcesoCompra', on_delete=models.CASCADE, null=True, blank=True,

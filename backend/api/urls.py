@@ -51,6 +51,8 @@ from .views import (
     pac_cumplimiento_jerarquia_view, pac_cumplimiento_rankings_view,
     pac_cumplimiento_temporalidad_mensual_view, pac_cumplimiento_resumen_subdireccion_view,
     pac_cumplimiento_serie_mensual_view,
+    pac_temporalidad_formularios_comparativo_view, pac_temporalidad_formularios_jerarquia_view,
+    pac_temporalidad_formularios_usuarios_view,
     pac_ficha_lista_view, pac_ficha_detalle_view,
     pac_temporal_mensual_planer_view, pac_jerarquia_planer_view,
     pac_cumplimiento_actualizar_maestro, pac_cumplimiento_actualizar_jerarquia,
@@ -63,9 +65,12 @@ from .views import (
     fsc_oc_pac_fsc_detalle_view, fsc_oc_pac_oc_detalle_view, fsc_oc_pac_corregir_pac_view,
     fsc_oc_pac_corregidas_view, fsc_oc_pac_impacto_view,
     ComprasCompradorPerfilViewSet, ComprasMisFormulariosView, ProcesoCompraViewSet,
+    ComprasNotificacionViewSet,
     compras_resumen_view,
     compras_buscar_licitacion_view, compras_buscar_compra_agil_view, compras_buscar_oc_view,
     compras_importar_licitacion_view, compras_importar_compra_agil_view, compras_importar_oc_view,
+    compras_jefatura_actividad_view, compras_jefatura_sin_gestion_view,
+    compras_jefatura_avance_view, compras_jefatura_resumen_view,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -109,6 +114,7 @@ router.register(r'compradores-iniciales', CompradorInicialViewSet, basename='com
 # Módulo Gestión de Compras
 router.register(r'compras-procesos', ProcesoCompraViewSet, basename='procesocompra')
 router.register(r'compras-compradores', ComprasCompradorPerfilViewSet, basename='comprascompradorperfil')
+router.register(r'compras-notificaciones', ComprasNotificacionViewSet, basename='comprasnotificacion')
 
 # Módulo Usuarios
 router.register(r'usuarios', UsuarioViewSet, basename='usuario')
@@ -235,6 +241,9 @@ urlpatterns = [
     path('pac-cumplimiento/temporalidad-mensual/', pac_cumplimiento_temporalidad_mensual_view, name='pac_cumplimiento_temporalidad_mensual'),
     path('pac-cumplimiento/resumen-subdireccion/', pac_cumplimiento_resumen_subdireccion_view, name='pac_cumplimiento_resumen_subdireccion'),
     path('pac-cumplimiento/serie-mensual/', pac_cumplimiento_serie_mensual_view, name='pac_cumplimiento_serie_mensual'),
+    path('pac-cumplimiento/temporalidad-formularios/comparativo/', pac_temporalidad_formularios_comparativo_view, name='pac_temporalidad_formularios_comparativo'),
+    path('pac-cumplimiento/temporalidad-formularios/jerarquia/', pac_temporalidad_formularios_jerarquia_view, name='pac_temporalidad_formularios_jerarquia'),
+    path('pac-cumplimiento/temporalidad-formularios/usuarios/', pac_temporalidad_formularios_usuarios_view, name='pac_temporalidad_formularios_usuarios'),
 
     # Módulo PAC — Ejecución del Plan de Compras (Ficha PAC ↔ Formulario ↔ OC)
     path('pac-cumplimiento/fichas/', pac_ficha_lista_view, name='pac_ficha_lista'),
@@ -275,6 +284,12 @@ urlpatterns = [
     path('compras/importar-licitacion/', compras_importar_licitacion_view, name='compras_importar_licitacion'),
     path('compras/importar-compra-agil/', compras_importar_compra_agil_view, name='compras_importar_compra_agil'),
     path('compras/importar-oc/', compras_importar_oc_view, name='compras_importar_oc'),
+
+    # Panel Formularios — monitoreo global de jefatura
+    path('compras/jefatura/actividad/', compras_jefatura_actividad_view, name='compras_jefatura_actividad'),
+    path('compras/jefatura/sin-gestion/', compras_jefatura_sin_gestion_view, name='compras_jefatura_sin_gestion'),
+    path('compras/jefatura/avance/', compras_jefatura_avance_view, name='compras_jefatura_avance'),
+    path('compras/jefatura/resumen/', compras_jefatura_resumen_view, name='compras_jefatura_resumen'),
 
     # Router ViewSets
     path('', include(router.urls)),

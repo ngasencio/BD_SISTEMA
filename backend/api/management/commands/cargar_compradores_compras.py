@@ -24,6 +24,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from api.models import ComprasCompradorPerfil, PerfilUsuario
+from api.services import JEFATURA_ABASTECIMIENTO_USERNAMES
 
 # nombre tal cual en FormularioFSCDerivado.comprador -> username de auth.User
 COMPRADORES = {
@@ -68,12 +69,10 @@ COMPRADORES = {
 # Jefaturas -- no aparecen como 'comprador' en FSC derivados (o si aparecen, además
 # reciben el rol jefatura), reciben solo el rol de PerfilUsuario, sin fila en
 # ComprasCompradorPerfil salvo que también compren (caso de Nicolás Asencio, ya
-# cubierto arriba).
-JEFATURAS_USERNAMES = [
-    'cristina.flores@redsalud.gob.cl',
-    'sandrap.espinoza@redsalud.gob.cl',
-    'nicolas.asencio@redsalud.gob.cl',
-]
+# cubierto arriba). Lista importada de services.JEFATURA_ABASTECIMIENTO_USERNAMES
+# (2026-10-02) -- antes duplicada acá, ahora una sola fuente de verdad que
+# también usa _notificar_jefaturas() para el Panel Formularios.
+JEFATURAS_USERNAMES = JEFATURA_ABASTECIMIENTO_USERNAMES
 
 
 class Command(BaseCommand):

@@ -38,7 +38,7 @@ export const ROLES = [
     },
     {
         value: 'jefatura',
-        label: 'Jefatura',
+        label: 'Jefatura Abastecimiento',
         color: '#be185d',
         descripcion: 'Generales + Procesos de Compra con vista global (todos los compradores), dashboard de KPIs y notificaciones.',
         modulos: [...MODULOS_GENERALES, ...MODULOS_COMPRAS],

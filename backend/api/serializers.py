@@ -487,13 +487,31 @@ class ProcesoCompraOrdenCompraMiniSerializer(serializers.ModelSerializer):
     id_proyecto = serializers.CharField(source='orden_compra.ID_Proyecto', read_only=True)
     nombre_proyecto = serializers.CharField(source='orden_compra.Nombre_Proyecto', read_only=True)
     enlace_pac = serializers.CharField(source='orden_compra.EnlacePAC', read_only=True)
+    # PAC_OK/SIN_PAC/PAC_DISTINTO/None — mismo criterio que el módulo
+    # /fsc-oc-pac (ver calcular_estado_pac_proceso_oc en services.py), para
+    # que "Mis Formularios" no dependa de EnlacePAC/ID_Proyecto crudos (que
+    # ignoran OcPacOverride) ni obligue al comprador a entrar a fsc-oc-pac
+    # para saber si su OC calza con el PAC real.
+    estado_pac = serializers.SerializerMethodField()
 
     class Meta:
         model = ProcesoCompraOrdenCompra
         fields = [
             'id', 'orden_compra', 'codigo_oc', 'nombre_oc', 'estado_oc', 'total_bruto', 'creado_en',
-            'link_mp', 'id_proyecto', 'nombre_proyecto', 'enlace_pac',
+            'link_mp', 'id_proyecto', 'nombre_proyecto', 'enlace_pac', 'estado_pac',
         ]
+
+    def get_estado_pac(self, obj):
+        # ids_plan/overrides vienen YA resueltos por el padre (ver
+        # ProcesoCompraSerializer.get_ordenes_compra_detalle) — evita 2-3
+        # queries (incluyendo un full-scan de OcPacOverride) POR CADA fila de
+        # OC; ver docstring de calcular_estado_pac_proceso_oc en services.py.
+        from .services import calcular_estado_pac_proceso_oc
+        return calcular_estado_pac_proceso_oc(
+            obj.orden_compra,
+            self.context.get('_ids_plan_proceso', []),
+            overrides=self.context.get('_pac_overrides'),
+        )
 
 
 class ProcesoCompraEstadoLogSerializer(serializers.ModelSerializer):
@@ -568,8 +586,22 @@ class ProcesoCompraSerializer(serializers.ModelSerializer):
         return ProcesoCompraFormularioMiniSerializer(vinculos, many=True).data
 
     def get_ordenes_compra_detalle(self, obj):
+        # self.context es el MISMO dict para todas las filas de ProcesoCompra
+        # de este request (DRF reutiliza la misma instancia de serializer en
+        # un many=True) — cachear overrides acá adentro, una sola vez, en vez
+        # de en cada fila de OC (ver ProcesoCompraOrdenCompraMiniSerializer.
+        # get_estado_pac). Son ~2-3 queries por request en vez de por fila.
+        if '_pac_overrides' not in self.context:
+            from .services import _mapa_overrides_pac
+            self.context['_pac_overrides'] = _mapa_overrides_pac()
         vinculos = obj.vinculos_oc.select_related('orden_compra')
-        return ProcesoCompraOrdenCompraMiniSerializer(vinculos, many=True).data
+        ids_plan = list(
+            obj.vinculos_formulario
+            .exclude(formulario_derivado__id_plan__isnull=True).exclude(formulario_derivado__id_plan='')
+            .values_list('formulario_derivado__id_plan', flat=True).distinct()
+        )
+        child_context = {**self.context, '_ids_plan_proceso': ids_plan}
+        return ProcesoCompraOrdenCompraMiniSerializer(vinculos, many=True, context=child_context).data
 
     def get_n_formularios(self, obj):
         return obj.vinculos_formulario.count()
@@ -589,10 +621,44 @@ class ComprasMisFormularioSerializer(FormularioFSCDerivadoSerializer):
     procesos = serializers.SerializerMethodField()
 
     def get_procesos(self, obj):
-        return [
-            {'id': p.id, 'tipo_proceso': p.tipo_proceso, 'estado_proceso': p.estado_proceso, 'titulo': p.titulo}
-            for p in obj.procesos_compra.all()
-        ]
+        # `obj` es el propio FormularioFSCDerivado — su id_plan ya está en
+        # memoria, cero queries extra para resolverlo (a diferencia de
+        # calcular_estado_pac_proceso_oc, que antes lo volvía a buscar en
+        # FormularioFSCDerivado por id en cada llamada).
+        from .services import calcular_estado_pac_proceso_oc, _mapa_overrides_pac
+        if '_pac_overrides' not in self.context:
+            self.context['_pac_overrides'] = _mapa_overrides_pac()
+        overrides = self.context['_pac_overrides']
+        ids_plan = [obj.id_plan] if obj.id_plan else []
+
+        resultado = []
+        for p in obj.procesos_compra.all():
+            # OJO: .all() a propósito, NO .select_related(...) — la vista ya
+            # trae esto prefetcheado (ver get_queryset en views.py); llamar a
+            # otro método del queryset acá clonaría el manager y dispararía
+            # una query nueva, descartando el prefetch.
+            vinculos_oc = list(p.vinculos_oc.all())
+            # Resumen por proceso: PAC_DISTINTO pesa más que SIN_PAC (alerta
+            # real), que a su vez pesa más que un simple "sin información
+            # todavía" — mismo espíritu que calcular_estado_pac_proceso_oc
+            # pero agregado sobre varias OC del mismo proceso.
+            estados = {
+                calcular_estado_pac_proceso_oc(vinculo.orden_compra, ids_plan, overrides=overrides)
+                for vinculo in vinculos_oc
+            }
+            if 'PAC_DISTINTO' in estados:
+                estado_pac = 'PAC_DISTINTO'
+            elif 'SIN_PAC' in estados:
+                estado_pac = 'SIN_PAC'
+            elif estados == {'PAC_OK'}:
+                estado_pac = 'PAC_OK'
+            else:
+                estado_pac = None
+            resultado.append({
+                'id': p.id, 'tipo_proceso': p.tipo_proceso, 'estado_proceso': p.estado_proceso,
+                'titulo': p.titulo, 'estado_pac': estado_pac,
+            })
+        return resultado
 
 
 class ComprasNotificacionSerializer(serializers.ModelSerializer):

@@ -1,0 +1,9 @@
+{
+  "name": "consumo",
+  "version": "0.1.0",
+  "description": "Tablero de consumo de Claude Code: límites del plan (5 h / 7 días), contexto, costo y tokens de la sesión.",
+  "author": {
+    "name": "Nicolás Asencio"
+  },
+  "types": "./types/index.d.ts"
+}

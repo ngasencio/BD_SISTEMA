@@ -9,6 +9,7 @@ import {
     iniciarActualizacionFormularios, estadoActualizacionFormularios, cancelarActualizacionFormularios,
 } from '../api/formulariosApi';
 import { KpiCard } from './KpiCard';
+import TabTemporalidad from './formularios/TabTemporalidad';
 
 // ─── Helpers de fecha ─────────────────────────────────────────────────────────
 
@@ -3547,11 +3548,12 @@ function TabHistorial({ anioSeleccionado }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TABS = [
-    { id: 'solicitudes',  label: 'Solicitudes (FSC)',      icono: '📝' },
-    { id: 'derivados',    label: 'Derivados a Comprador',  icono: '➡️' },
-    { id: 'unificacion',  label: 'Compras Conjuntas',      icono: '🔗' },
-    { id: 'alertas',      label: 'Alertas / Demoras',      icono: '⏰' },
-    { id: 'historial',    label: 'Historial de Compras',   icono: '📦' },
+    { id: 'solicitudes',   label: 'Solicitudes (FSC)',      icono: '📝' },
+    { id: 'derivados',     label: 'Derivados a Comprador',  icono: '➡️' },
+    { id: 'unificacion',   label: 'Compras Conjuntas',      icono: '🔗' },
+    { id: 'alertas',       label: 'Alertas / Demoras',      icono: '⏰' },
+    { id: 'historial',     label: 'Historial de Compras',   icono: '📦' },
+    { id: 'temporalidad',  label: 'Temporalidad',           icono: '📈' },
 ];
 
 // ─── Tab Alertas / Demoras ────────────────────────────────────────────────────
@@ -3896,6 +3898,10 @@ export function FormulariosPage() {
 
             {tab === 'historial' && (
                 <TabHistorial anioSeleccionado={anioGlobal} />
+            )}
+
+            {tab === 'temporalidad' && (
+                <TabTemporalidad />
             )}
 
             {modalAbierto && (
