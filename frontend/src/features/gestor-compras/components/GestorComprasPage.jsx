@@ -8,7 +8,8 @@ import '../styles/gestor.css';
 
 // Panel de solo lectura de un departamento: sus solicitudes (FSC), lo derivado a
 // comprador y su Plan de Compra. Un gestor ve solo su departamento (se resuelve en el
-// servidor desde su pertenencia en el Panel SSO); admin/jefatura/general eligen uno.
+// servidor desde su pertenencia en el Panel SSO); admin/jefatura/general ven TODOS los departamentos
+// a la vez (por defecto) o eligen uno.
 const TABS = [
     { id: 'solicitudes', label: '📝 Solicitudes' },
     { id: 'derivacion', label: '🛒 Derivación a Comprador' },
@@ -42,7 +43,7 @@ function SelectorDepartamento({ disponibles, valor, onChange }) {
         <div className="gc-selector">
             <label htmlFor="gc-depto">Departamento</label>
             <select id="gc-depto" value={valor} onChange={(e) => onChange(e.target.value)}>
-                <option value="">Selecciona un departamento…</option>
+                <option value="">🌐 Todos los departamentos</option>
                 {grupos.map(([subdireccion, deptos]) => (
                     <optgroup key={subdireccion} label={subdireccion}>
                         {deptos.map((d) => (
@@ -123,8 +124,8 @@ export default function GestorComprasPage() {
                         esSupervision ? (
                             <EstadoVacio
                                 icono="🔎"
-                                titulo="Elija un departamento"
-                                texto="Seleccione un departamento en el selector para ver su panel."
+                                titulo="Departamento no encontrado"
+                                texto={`${alcance.motivo || 'El departamento solicitado no existe.'} Elija uno de la lista o vuelva a "Todos los departamentos".`}
                             />
                         ) : (
                             <EstadoVacio

@@ -2460,6 +2460,7 @@ def gestor_mi_alcance_view(request):
     data = {
         'modo': alcance['modo'],
         'motivo': alcance['motivo'],
+        'todos': alcance.get('todos', False),
         'departamentos': alcance['departamentos'],
     }
     if alcance['modo'] == 'supervision':
@@ -4652,11 +4653,19 @@ def _gestor_alcance(request):
     return resolver_alcance_gestor(request.user, request.GET.get('depto_id'))
 
 
+def _gestor_depto_ids(alcance):
+    """IDs de departamento para los cálculos del PAC: la lista del alcance, o None ("sin acotar")
+    SOLO cuando un rol de supervisión pidió ver todos los departamentos. Nunca None por accidente:
+    un gestor o un alcance vacío siempre dan una lista."""
+    return None if alcance.get('todos') else alcance['depto_ids']
+
+
 def _gestor_cache_key(prefijo, alcance, *partes):
     """Clave de caché por CONTENIDO del alcance (no por usuario): dos usuarios con
     las mismas unidades comparten la entrada, y un alcance distinto nunca la pisa."""
     import hashlib
-    contenido = '|'.join(alcance['unidades']) + '#' + ','.join(str(d) for d in alcance['depto_ids'])
+    contenido = ('TODOS' if alcance.get('todos') else '|'.join(alcance['unidades'])) + '#' + (
+        '' if alcance.get('todos') else ','.join(str(d) for d in alcance['depto_ids']))
     huella = hashlib.md5(contenido.encode('utf-8')).hexdigest()[:12]
     return f"gestor_{prefijo}_{huella}_" + '_'.join(str(p) for p in partes)
 
@@ -4853,7 +4862,7 @@ def gestor_plan_resumen_view(request):
     cache_key = _gestor_cache_key('plan_resumen', alcance, anho or 'todos')
     if data := cache.get(cache_key):
         return Response(data)
-    data = calcular_gestor_plan_resumen(alcance['depto_ids'], anho=anho)
+    data = calcular_gestor_plan_resumen(_gestor_depto_ids(alcance), anho=anho)
     cache.set(cache_key, data, timeout=60)
     return Response(data)
 
@@ -4867,7 +4876,7 @@ def gestor_plan_temporal_view(request):
     cache_key = _gestor_cache_key('plan_temporal', alcance, anho or 'todos')
     if data := cache.get(cache_key):
         return Response(data)
-    data = calcular_gestor_plan_temporal(alcance['depto_ids'], anho=anho)
+    data = calcular_gestor_plan_temporal(_gestor_depto_ids(alcance), anho=anho)
     cache.set(cache_key, data, timeout=60)
     return Response(data)
 
@@ -4881,7 +4890,7 @@ def gestor_plan_mensual_view(request):
     cache_key = _gestor_cache_key('plan_mensual', alcance, anho or 'todos')
     if data := cache.get(cache_key):
         return Response(data)
-    data = calcular_gestor_plan_mensual(alcance['depto_ids'], anho=anho)
+    data = calcular_gestor_plan_mensual(_gestor_depto_ids(alcance), anho=anho)
     cache.set(cache_key, data, timeout=60)
     return Response(data)
 
@@ -4896,7 +4905,7 @@ def gestor_plan_items_view(request):
     search = request.GET.get('search', '').strip() or None
     mes = request.GET.get('mes', '').strip() or None
     return Response(calcular_gestor_plan_items(
-        alcance['depto_ids'], anho=_gestor_anho(request), estado=estado, search=search,
+        _gestor_depto_ids(alcance), anho=_gestor_anho(request), estado=estado, search=search,
         page=page, page_size=page_size, mes=mes,
     ))
 
@@ -4906,7 +4915,7 @@ def gestor_plan_items_view(request):
 def gestor_plan_item_detalle_view(request, id_proyecto):
     from .services import calcular_gestor_plan_item_detalle
     alcance = _gestor_alcance(request)
-    data = calcular_gestor_plan_item_detalle(alcance['depto_ids'], alcance['unidades'], id_proyecto)
+    data = calcular_gestor_plan_item_detalle(_gestor_depto_ids(alcance), alcance['unidades'], id_proyecto)
     if data is None:
         return Response({'detail': 'Ficha PAC no encontrada.'}, status=404)
     return Response(data)

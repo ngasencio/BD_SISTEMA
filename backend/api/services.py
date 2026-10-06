@@ -4241,8 +4241,8 @@ def calcular_gestor_plan_resumen(depto_ids, anho=None):
     de los departamentos pertenece al establecimiento que cubre PAC Cumplimiento
     (Dirección SS Osorno) — en ese caso los números vienen en cero por diseño, no por
     falta de datos, y el frontend debe decirlo."""
-    stats = calcular_pac_dentro_fuera_stats(anho=anho, depto_ids=list(depto_ids))
-    stats['pac_disponible'] = Departamento.objects.filter(
+    stats = calcular_pac_dentro_fuera_stats(anho=anho, depto_ids=None if depto_ids is None else list(depto_ids))
+    stats['pac_disponible'] = depto_ids is None or Departamento.objects.filter(
         id__in=list(depto_ids), establecimiento_id=ESTABLECIMIENTO_PAC_CUMPLIMIENTO,
     ).exists()
     stats['anios_pac'] = sorted(
@@ -4256,7 +4256,7 @@ def calcular_gestor_plan_resumen(depto_ids, anho=None):
 
 def calcular_gestor_plan_temporal(depto_ids, anho=None):
     """En fecha / Atrasado / Pendiente / Sin planificación del departamento del gestor."""
-    return calcular_pac_cumplimiento_temporal(anho=anho, depto_ids=list(depto_ids))
+    return calcular_pac_cumplimiento_temporal(anho=anho, depto_ids=None if depto_ids is None else list(depto_ids))
 
 
 _RE_MES_PLAN = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
@@ -4267,9 +4267,10 @@ def calcular_gestor_plan_items(depto_ids, anho=None, estado=None, search=None, p
     de ejecución, FSC y OC asociados. Lista vacía de `depto_ids` => resultado vacío:
     _calcular_fichas_pac_completo trata `depto=[]` como "sin filtro" (devolvería TODAS
     las fichas), así que acá se corta antes de llamarla."""
-    if not depto_ids:
+    if depto_ids is not None and not depto_ids:
         return _plan_gestor_vacio({'page': page, 'page_size': page_size})
-    filas = _calcular_fichas_pac_completo(anho=anho, depto=list(depto_ids), estado=estado, search=search)
+    filas = _calcular_fichas_pac_completo(
+        anho=anho, depto=None if depto_ids is None else list(depto_ids), estado=estado, search=search)
     # `mes` ('YYYY-MM') acota a las fichas cuya fecha de compra más próxima cae en ese mes — es la
     # misma fecha con la que calcular_gestor_plan_mensual arma cada barra, así que tabla y gráfico calzan.
     if mes and _RE_MES_PLAN.match(mes):
@@ -4291,9 +4292,9 @@ def calcular_gestor_plan_mensual(depto_ids, anho=None):
     primero y el último se rellenan con ceros para que el eje X sea continuo; las fichas sin
     fecha van aparte en `sin_fecha`. `depto_ids` vacío => serie vacía (nunca "todo")."""
     vacio = {'meses': [], 'sin_fecha': {'total': 0, 'monto': 0.0}, 'total_fichas': 0}
-    if not depto_ids:
+    if depto_ids is not None and not depto_ids:
         return vacio
-    filas = _calcular_fichas_pac_completo(anho=anho, depto=list(depto_ids))
+    filas = _calcular_fichas_pac_completo(anho=anho, depto=None if depto_ids is None else list(depto_ids))
 
     por_mes = {}
     sin_fecha = {'total': 0, 'monto': 0.0}
@@ -4346,14 +4347,15 @@ def calcular_gestor_plan_item_detalle(depto_ids, unidades, id_proyecto):
     """Detalle de una ficha PAC del gestor. None si la ficha no existe o NO pertenece a sus
     departamentos (la vista responde 404 — no se distingue, para no revelar qué proyectos
     existen en otros departamentos). Los FSC asociados se limitan a las `unidades` del gestor."""
-    if not depto_ids:
+    if depto_ids is not None and not depto_ids:
         return None
     primera = PlanerPAC.objects.filter(id_proyecto=id_proyecto).only('depto').first()
     if not primera:
         return None
-    depto_obj = _resolver_depto_ficha_pac(primera.depto, _mapa_departamentos_por_nombre())
-    if not depto_obj or depto_obj.id not in set(depto_ids):
-        return None
+    if depto_ids is not None:   # None = todos los departamentos (supervisión): no se acota por depto
+        depto_obj = _resolver_depto_ficha_pac(primera.depto, _mapa_departamentos_por_nombre())
+        if not depto_obj or depto_obj.id not in set(depto_ids):
+            return None
     data = calcular_pac_ficha_detalle(id_proyecto)
     if data is None:
         return None
@@ -7019,7 +7021,7 @@ _CACHE_ALCANCE_GESTOR_SEG = 60
 
 
 def _alcance_gestor_vacio(modo, motivo):
-    return {'modo': modo, 'motivo': motivo, 'depto_ids': [], 'departamentos': [], 'unidades': []}
+    return {'modo': modo, 'motivo': motivo, 'todos': False, 'depto_ids': [], 'departamentos': [], 'unidades': []}
 
 
 def _rol_usuario(user):
@@ -7065,7 +7067,10 @@ def resolver_alcance_gestor(user, depto_id=None):
 
     `depto_id` solo lo respetan los roles de supervisión (admin/jefatura/general)
     para inspeccionar el panel de un departamento; para un gestor se ignora y se
-    usa su propia pertenencia.
+    usa su propia pertenencia. Un supervisor SIN `depto_id` (o con ''/'todos') ve TODOS los
+    departamentos a la vez (`todos=True`): esos roles ya ven todo el sistema en Abastecimiento y
+    en el Panel Formularios, así que no es acceso nuevo. Un `depto_id` inválido NO cae en
+    "todos": devuelve alcance vacío.
     """
     if not user or not user.is_authenticated:
         return _alcance_gestor_vacio('sin_alcance', 'Usuario no autenticado.')
@@ -7075,23 +7080,41 @@ def resolver_alcance_gestor(user, depto_id=None):
     if not es_supervisor and rol != 'gestor_compras':
         return _alcance_gestor_vacio('sin_alcance', 'El rol no tiene acceso al módulo Gestor de Compras.')
 
+    todos = False
     if es_supervisor:
-        try:
-            depto_id = int(depto_id) if depto_id not in (None, '') else None
-        except (TypeError, ValueError):
-            depto_id = None
-        if depto_id is None:
-            return _alcance_gestor_vacio('supervision', 'Seleccione un departamento para ver su panel.')
+        if depto_id in (None, '', 'todos'):
+            depto_id, todos = None, True
+        else:
+            try:
+                depto_id = int(depto_id)
+            except (TypeError, ValueError):
+                return _alcance_gestor_vacio('supervision', 'Departamento no encontrado.')
         modo = 'supervision'
     else:
         depto_id = None
         modo = 'gestor'
 
-    cache_key = f'gestor_alcance_{user.id}_{depto_id or 0}'
+    cache_key = f'gestor_alcance_{user.id}_{"todos" if todos else (depto_id or 0)}'
     if (cached := cache.get(cache_key)) is not None:
         return cached
 
     mapa_deptos = _mapa_departamentos()
+
+    if todos:
+        unidades_todas = sorted(
+            FormularioFSC.objects.exclude(unidad_requirente__isnull=True).exclude(unidad_requirente='')
+            .order_by().values_list('unidad_requirente', flat=True).distinct()
+        )
+        resultado = {
+            'modo': 'supervision', 'motivo': None, 'todos': True,
+            'depto_ids': sorted(mapa_deptos), 'unidades': unidades_todas,
+            'departamentos': [{
+                'id': 'todos', 'nombre': 'Todos los departamentos',
+                'subdireccion': 'Todo el Servicio de Salud', 'sub_departamentos': [],
+            }],
+        }
+        cache.set(cache_key, resultado, timeout=_CACHE_ALCANCE_GESTOR_SEG)
+        return resultado
 
     if modo == 'supervision':
         if depto_id not in mapa_deptos:
@@ -7137,7 +7160,7 @@ def resolver_alcance_gestor(user, depto_id=None):
     )
 
     resultado = {
-        'modo': modo, 'motivo': None,
+        'modo': modo, 'motivo': None, 'todos': False,
         'depto_ids': sorted(en_alcance), 'departamentos': departamentos, 'unidades': unidades,
     }
     cache.set(cache_key, resultado, timeout=_CACHE_ALCANCE_GESTOR_SEG)
