@@ -4397,55 +4397,14 @@ def cancelar_actualizacion_formularios(request, task_id):
 @permission_classes([IsAuthenticated, _IsAbastecimiento])
 def formularios_alertas_view(request):
     """Formularios FSC con alerta de demora — estados activos con días desde solicitud calculados."""
-    from datetime import date, datetime
-    from api.models import FormularioFSC
-
-    hoy = date.today()
+    from .services import calcular_formularios_alertas
     try:
         dias_min = int(request.GET.get('dias_min', 10))
     except (ValueError, TypeError):
         dias_min = 10
     anho = request.GET.get('anho', '').strip()
     anho_int = int(anho) if anho.isdigit() else None
-    estados_excluidos = ('AC', 'R')
-
-    qs = FormularioFSC.objects.exclude(estado__in=estados_excluidos)
-    if anho_int:
-        qs = qs.filter(anho=anho_int)
-
-    registros = []
-    for f in qs.only(
-        'id', 'folio', 'anho', 'formulario', 'fecha_solicitud', 'estado',
-        'unidad_requirente', 'usuario_requirente', 'monto_estimado', 'requerimiento',
-        'destino_actual',
-    ):
-        dias = None
-        if f.fecha_solicitud:
-            for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y'):
-                try:
-                    dias = (hoy - datetime.strptime(f.fecha_solicitud, fmt).date()).days
-                    break
-                except ValueError:
-                    continue
-        if dias is None or dias < dias_min:
-            continue
-        registros.append({
-            'id': f.id,
-            'folio': f.folio,
-            'anho': f.anho,
-            'formulario': f.formulario,
-            'fecha_solicitud': f.fecha_solicitud,
-            'estado': f.estado,
-            'unidad_requirente': f.unidad_requirente,
-            'usuario_requirente': f.usuario_requirente,
-            'monto_estimado': f.monto_estimado,
-            'requerimiento': f.requerimiento,
-            'destino_actual': f.destino_actual,
-            'dias': dias,
-        })
-
-    registros.sort(key=lambda x: -x['dias'])
-    return Response({'count': len(registros), 'results': registros})
+    return Response(calcular_formularios_alertas(anho=anho_int, dias_min=dias_min))
 
 
 @api_view(["GET"])
@@ -4656,6 +4615,101 @@ class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
                 filtro |= Q(sso_departamento__isnull=True)
             qs = qs.filter(filtro)
         return qs
+
+
+# =============================================================================
+# Gestor de Compras — tab Solicitudes (solo lectura, filtrado por departamento)
+# =============================================================================
+#
+# Todo el filtrado sale de services.resolver_alcance_gestor(request.user): el
+# cliente no puede ampliar su alcance (el `depto_id` solo lo respetan admin/
+# jefatura/general). Un alcance vacío produce `unidad_requirente__in=[]`, o sea
+# CERO filas — nunca "todo". Un FSC fuera de alcance responde 404 en el detalle.
+
+def _gestor_alcance(request):
+    from .services import resolver_alcance_gestor
+    return resolver_alcance_gestor(request.user, request.GET.get('depto_id'))
+
+
+def _gestor_cache_key(prefijo, alcance, *partes):
+    """Clave de caché por CONTENIDO del alcance (no por usuario): dos usuarios con
+    las mismas unidades comparten la entrada, y un alcance distinto nunca la pisa."""
+    import hashlib
+    huella = hashlib.md5('|'.join(alcance['unidades']).encode('utf-8')).hexdigest()[:12]
+    return f"gestor_{prefijo}_{huella}_" + '_'.join(str(p) for p in partes)
+
+
+class GestorSolicitudesViewSet(viewsets.ReadOnlyModelViewSet):
+    """Tabla 'Solicitudes FSC' del Gestor: mismo contrato que FormularioFSCViewSet
+    (?anho=&estado=DC,AA&search=&ordering=) pero acotado al departamento del usuario."""
+    serializer_class = FormularioFSCSerializer
+    permission_classes = [IsAuthenticated, _IsGestorCompras]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    filterset_class = FormularioFSCFilter
+    search_fields = FormularioFSCViewSet.search_fields
+    ordering_fields = FormularioFSCViewSet.ordering_fields
+
+    def get_queryset(self):
+        alcance = _gestor_alcance(self.request)
+        return FormularioFSC.objects.filter(unidad_requirente__in=alcance['unidades'])
+
+    @action(detail=True, methods=['get'], url_path='productos')
+    def productos(self, request, pk=None):
+        """Carro de productos de un FSC en alcance (get_object() da 404 si no lo está)."""
+        from .services import _extraer_tipo_formulario_fsc
+        fsc = self.get_object()
+        qs = FormularioFSCProducto.objects.filter(folio=fsc.folio, anho=fsc.anho)
+        tipo = _extraer_tipo_formulario_fsc(fsc)
+        if tipo:
+            qs = qs.filter(tipo_formulario=tipo)
+        return Response(FormularioFSCProductoSerializer(qs, many=True).data)
+
+
+def _gestor_anho(request):
+    anho = request.GET.get('anho', '').strip()
+    return int(anho) if anho.isdigit() else None
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_stats_view(request):
+    from .services import calcular_formularios_stats
+    alcance = _gestor_alcance(request)
+    anho = _gestor_anho(request)
+    cache_key = _gestor_cache_key('stats', alcance, anho or 'todos')
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_formularios_stats(anho, unidades=alcance['unidades'])
+    cache.set(cache_key, data, timeout=60)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_flujo_view(request):
+    from .services import calcular_formularios_flujo
+    alcance = _gestor_alcance(request)
+    anho = _gestor_anho(request)
+    cache_key = _gestor_cache_key('flujo', alcance, anho or 'todos')
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_formularios_flujo(anho, unidades=alcance['unidades'])
+    cache.set(cache_key, data, timeout=60)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_alertas_view(request):
+    from .services import calcular_formularios_alertas
+    alcance = _gestor_alcance(request)
+    try:
+        dias_min = max(int(request.GET.get('dias_min', 10)), 0)
+    except (ValueError, TypeError):
+        dias_min = 10
+    return Response(calcular_formularios_alertas(
+        anho=_gestor_anho(request), dias_min=dias_min, unidades=alcance['unidades'],
+    ))
 
 
 class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):

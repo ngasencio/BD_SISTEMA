@@ -2292,10 +2292,16 @@ def generar_id_formulario(folio, anho, tipo_formulario=None, formulario_texto=No
     return f"F{n}-{folio:03d}-{anho % 100:02d}"
 
 
-def calcular_formularios_stats(anho=None):
-    """KPIs agregados de Formularios FSC para el tab 'Formularios' de Abastecimiento."""
+def calcular_formularios_stats(anho=None, unidades=None):
+    """KPIs agregados de Formularios FSC para el tab 'Formularios' de Abastecimiento.
+
+    `unidades` (lista de `unidad_requirente`) acota a un departamento — usado por el
+    módulo Gestor de Compras. None = sin acotar (Abastecimiento); [] = sin resultados."""
     fsc_qs = FormularioFSC.objects.all()
     derivados_qs = FormularioFSCDerivado.objects.all()
+    if unidades is not None:
+        fsc_qs = fsc_qs.filter(unidad_requirente__in=unidades)
+        derivados_qs = derivados_qs.filter(unidad_requirente__in=unidades)
     if anho:
         fsc_qs = fsc_qs.filter(anho=anho)
         derivados_qs = derivados_qs.filter(anho=anho)
@@ -2324,9 +2330,10 @@ def calcular_formularios_stats(anho=None):
         .order_by('-total')
     )
 
-    anios_disponibles = list(
-        FormularioFSC.objects.order_by('-anho').values_list('anho', flat=True).distinct()
-    )
+    anios_base = FormularioFSC.objects.all()
+    if unidades is not None:
+        anios_base = anios_base.filter(unidad_requirente__in=unidades)
+    anios_disponibles = list(anios_base.order_by('-anho').values_list('anho', flat=True).distinct())
 
     return {
         'kpis': {
@@ -2345,7 +2352,7 @@ def calcular_formularios_stats(anho=None):
     }
 
 
-def calcular_formularios_flujo(anho=None):
+def calcular_formularios_flujo(anho=None, unidades=None):
     """Pipeline de visación de FSC 'en camino' (P → AC) para el sub-tab de Flujo.
 
     Para cada formulario informa:
@@ -2354,8 +2361,13 @@ def calcular_formularios_flujo(anho=None):
       - dias_en_estado_actual: días desde que `FormularioFSCEstadoLog` detectó el
         estado vigente. Solo disponible para FSC cuyo cambio fue capturado desde
         2026-06-08 (cuando se empezó a registrar el historial); None si aún no hay dato.
+
+    `unidades` (lista de `unidad_requirente`) acota a un departamento (módulo Gestor
+    de Compras). None = sin acotar; [] = sin resultados.
     """
     qs = FormularioFSC.objects.all()
+    if unidades is not None:
+        qs = qs.filter(unidad_requirente__in=unidades)
     if anho:
         qs = qs.filter(anho=anho)
 
@@ -2425,6 +2437,52 @@ def calcular_formularios_flujo(anho=None):
         'promedio_dias_tramite': round(sum(dias_validos) / len(dias_validos), 1) if dias_validos else 0,
         'historial_disponible_desde': '2026-06-08',
     }
+
+
+def calcular_formularios_alertas(anho=None, dias_min=10, unidades=None):
+    """FSC activos (≠ AC/R) con `dias_min` o más días desde `fecha_solicitud`, ordenados
+    por días desc. `unidades` acota a un departamento (módulo Gestor de Compras):
+    None = sin acotar; [] = sin resultados. Sin caché ni paginación (~200 filas)."""
+    hoy = date.today()
+    qs = FormularioFSC.objects.exclude(estado__in=('AC', 'R'))
+    if unidades is not None:
+        qs = qs.filter(unidad_requirente__in=unidades)
+    if anho:
+        qs = qs.filter(anho=anho)
+
+    registros = []
+    for f in qs.only(
+        'id', 'folio', 'anho', 'formulario', 'fecha_solicitud', 'estado',
+        'unidad_requirente', 'usuario_requirente', 'monto_estimado', 'requerimiento',
+        'destino_actual',
+    ):
+        dias = None
+        if f.fecha_solicitud:
+            for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y'):
+                try:
+                    dias = (hoy - datetime.strptime(f.fecha_solicitud, fmt).date()).days
+                    break
+                except ValueError:
+                    continue
+        if dias is None or dias < dias_min:
+            continue
+        registros.append({
+            'id': f.id,
+            'folio': f.folio,
+            'anho': f.anho,
+            'formulario': f.formulario,
+            'fecha_solicitud': f.fecha_solicitud,
+            'estado': f.estado,
+            'unidad_requirente': f.unidad_requirente,
+            'usuario_requirente': f.usuario_requirente,
+            'monto_estimado': f.monto_estimado,
+            'requerimiento': f.requerimiento,
+            'destino_actual': f.destino_actual,
+            'dias': dias,
+        })
+
+    registros.sort(key=lambda x: -x['dias'])
+    return {'count': len(registros), 'results': registros}
 
 
 def calcular_formularios_unificacion(anho=None):

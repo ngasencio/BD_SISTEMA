@@ -71,7 +71,8 @@ from .views import (
     compras_importar_licitacion_view, compras_importar_compra_agil_view, compras_importar_oc_view,
     compras_jefatura_actividad_view, compras_jefatura_sin_gestion_view,
     compras_jefatura_avance_view, compras_jefatura_resumen_view,
-    gestor_mi_alcance_view,
+    gestor_mi_alcance_view, GestorSolicitudesViewSet,
+    gestor_stats_view, gestor_flujo_view, gestor_alertas_view,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -116,6 +117,7 @@ router.register(r'compradores-iniciales', CompradorInicialViewSet, basename='com
 router.register(r'compras-procesos', ProcesoCompraViewSet, basename='procesocompra')
 router.register(r'compras-compradores', ComprasCompradorPerfilViewSet, basename='comprascompradorperfil')
 router.register(r'compras-notificaciones', ComprasNotificacionViewSet, basename='comprasnotificacion')
+router.register(r'gestor-compras/solicitudes', GestorSolicitudesViewSet, basename='gestor-solicitudes')
 
 # Módulo Usuarios
 router.register(r'usuarios', UsuarioViewSet, basename='usuario')
@@ -294,6 +296,9 @@ urlpatterns = [
 
     # Gestor de Compras (solo lectura, filtrado por departamento del usuario)
     path('gestor-compras/mi-alcance/', gestor_mi_alcance_view, name='gestor_mi_alcance'),
+    path('gestor-compras/stats/', gestor_stats_view, name='gestor_stats'),
+    path('gestor-compras/flujo/', gestor_flujo_view, name='gestor_flujo'),
+    path('gestor-compras/alertas/', gestor_alertas_view, name='gestor_alertas'),
 
     # Router ViewSets
     path('', include(router.urls)),
