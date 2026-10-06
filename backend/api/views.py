@@ -153,6 +153,26 @@ class _IsGestorCompras(BasePermission):
         return _tiene_rol(request.user, {'admin', 'gestor_compras', 'jefatura', 'general'})
 
 
+class _NoGestorCompras(BasePermission):
+    """Excluye SOLO al rol 'gestor_compras' (el resto de roles pasa igual que con
+    IsAuthenticated a secas). Se aplica a /pac-cumplimiento/*: ahí viven los Rankings,
+    la Jerarquía y las comparativas de TODOS los departamentos, y el gestor solo debe ver
+    el suyo (decisión del usuario, 2026-10-06) — su vista propia está en gestor-compras/plan/*.
+    Un superusuario siempre pasa."""
+    message = 'Su rol solo tiene acceso a la información de su departamento (Gestor de Compras).'
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        try:
+            return user.perfil.role != 'gestor_compras'
+        except Exception:
+            return True
+
+
 # =============================================================================
 # Licitaciones
 # =============================================================================
@@ -4961,7 +4981,7 @@ class EstablecimientoViewSet(viewsets.ReadOnlyModelViewSet):
 # =============================================================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_dentro_fuera_view(request):
     from .services import calcular_pac_dentro_fuera_stats
     anho = request.GET.get('anho', '').strip()
@@ -4979,7 +4999,7 @@ def pac_cumplimiento_dentro_fuera_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_temporal_view(request):
     from .services import calcular_pac_cumplimiento_temporal
     anho = request.GET.get('anho', '').strip()
@@ -4997,7 +5017,7 @@ def pac_cumplimiento_temporal_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_jerarquia_view(request):
     from .services import calcular_pac_jerarquia
     anho = request.GET.get('anho', '').strip()
@@ -5011,7 +5031,7 @@ def pac_cumplimiento_jerarquia_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_rankings_view(request):
     from .services import calcular_pac_rankings
     anho = request.GET.get('anho', '').strip()
@@ -5034,7 +5054,7 @@ def pac_cumplimiento_rankings_view(request):
 # página de Formularios, acotada siempre a estado='AC' (ver services.py).
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_temporalidad_formularios_comparativo_view(request):
     from .services import calcular_pac_temporalidad_comparativo
     cache_key = 'pac_temporalidad_formularios_comparativo_v1'
@@ -5046,7 +5066,7 @@ def pac_temporalidad_formularios_comparativo_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_temporalidad_formularios_jerarquia_view(request):
     from .services import calcular_pac_temporalidad_jerarquia
     anho = request.GET.get('anho', '').strip()
@@ -5060,7 +5080,7 @@ def pac_temporalidad_formularios_jerarquia_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_temporalidad_formularios_usuarios_view(request):
     """`?depto_ids=1,2,3`/`?sin_clasificar=1` acotan el ranking a una rama de la
     jerarquía — mismo contrato que `?sso_departamento_in=`/`?sin_clasificar=` de
@@ -5086,7 +5106,7 @@ def pac_temporalidad_formularios_usuarios_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_temporalidad_mensual_view(request):
     from datetime import date
     from .services import calcular_pac_temporalidad_mensual
@@ -5101,7 +5121,7 @@ def pac_cumplimiento_temporalidad_mensual_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_resumen_subdireccion_view(request):
     from datetime import date
     from .services import calcular_pac_resumen_subdireccion
@@ -5116,7 +5136,7 @@ def pac_cumplimiento_resumen_subdireccion_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_serie_mensual_view(request):
     from .services import calcular_pac_serie_mensual_historica
     cache_key = 'pac_serie_mensual_v1'
@@ -5132,7 +5152,7 @@ def pac_cumplimiento_serie_mensual_view(request):
 # =============================================================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_ficha_lista_view(request):
     from .services import calcular_pac_fichas
     anho = request.GET.get('anho', '').strip()
@@ -5159,7 +5179,7 @@ def pac_ficha_lista_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_ficha_detalle_view(request, id_proyecto):
     from .services import calcular_pac_ficha_detalle
     data = calcular_pac_ficha_detalle(id_proyecto)
@@ -5169,7 +5189,7 @@ def pac_ficha_detalle_view(request, id_proyecto):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_temporal_mensual_planer_view(request):
     from datetime import date
     from .services import calcular_pac_temporal_mensual_planer
@@ -5184,7 +5204,7 @@ def pac_temporal_mensual_planer_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_jerarquia_planer_view(request):
     from datetime import date
     from .services import calcular_pac_jerarquia_planer
@@ -5199,7 +5219,7 @@ def pac_jerarquia_planer_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_actualizar_maestro(request):
     """Recarga OCPAC_Maestro.csv → PacProyectoMaestro. Sincrónico (CSV chico,
     sin necesidad del patrón de tarea async con task_id de los demás ETL)."""
@@ -5215,7 +5235,7 @@ def pac_cumplimiento_actualizar_maestro(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_actualizar_jerarquia(request):
     """Recarga los nombres de subdirección desde mapa_sso.xlsx. Sincrónico."""
     from io import StringIO
@@ -5237,7 +5257,7 @@ def _validar_periodo(periodo):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_reporte_word(request):
     periodo = request.GET.get('periodo', '').strip()
     if not _validar_periodo(periodo):
@@ -5253,7 +5273,7 @@ def pac_cumplimiento_reporte_word(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_reporte_ppt(request):
     periodo = request.GET.get('periodo', '').strip()
     if not _validar_periodo(periodo):
@@ -5269,7 +5289,7 @@ def pac_cumplimiento_reporte_ppt(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_cumplimiento_reporte_pdf(request):
     periodo = request.GET.get('periodo', '').strip()
     if not _validar_periodo(periodo):
