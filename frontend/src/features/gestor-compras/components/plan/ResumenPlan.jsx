@@ -1,0 +1,143 @@
+import React, { useMemo } from 'react';
+import { Doughnut, Bar } from 'react-chartjs-2';
+import {
+    Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend,
+} from 'chart.js';
+import { fmtN, fmtCompacto, colorPct } from '../../../pac-cumplimiento/utils/format';
+
+ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+
+const cardStyle = { background: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px', boxShadow: '0 1px 2px rgba(15,23,42,.04)' };
+
+function Kpi({ label, value, sub, color }) {
+    return (
+        <div style={{ background: '#fff', borderRadius: 10, padding: '14px 18px', border: '1px solid #e2e8f0', flex: '1 1 170px', minWidth: 150, borderTop: `4px solid ${color}`, boxShadow: '0 1px 2px rgba(15,23,42,.04)' }}>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#1e293b', lineHeight: 1.2 }}>{value}</div>
+            {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{sub}</div>}
+        </div>
+    );
+}
+
+// Dentro / Fuera del PAC del departamento: qué parte de sus compras estaba planificada, con el
+// histórico por año de derivación. Mismo cálculo que el Resumen de /pac-cumplimiento, acotado
+// al departamento del usuario.
+export default function ResumenPlan({ data }) {
+    const kpis = data?.kpis;
+    const comparativa = useMemo(() => data?.comparativa_anual ?? [], [data]);
+
+    const donutData = useMemo(() => {
+        if (!kpis?.total) return null;
+        return {
+            labels: ['Dentro PAC', 'Fuera PAC'],
+            datasets: [{
+                data: [kpis.pct_dentro, Math.round((100 - kpis.pct_dentro) * 10) / 10],
+                backgroundColor: ['#16a34a', '#dc2626'], borderWidth: 0, hoverOffset: 6,
+            }],
+        };
+    }, [kpis]);
+
+    const barData = useMemo(() => {
+        if (!comparativa.length) return null;
+        return {
+            labels: comparativa.map((r) => String(r.anho)),
+            datasets: [
+                { label: '✅ Dentro PAC', data: comparativa.map((r) => r.dentro), backgroundColor: '#16a34a', borderRadius: 4, stack: 'df' },
+                { label: '⛔ Fuera PAC', data: comparativa.map((r) => r.fuera), backgroundColor: '#dc2626', borderRadius: 4, stack: 'df' },
+            ],
+        };
+    }, [comparativa]);
+
+    const barOptions = {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, padding: 12 } },
+            tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtN(ctx.raw)} formularios` } },
+        },
+        scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 }, precision: 0 } },
+        },
+    };
+    const donutOptions = {
+        cutout: '70%',
+        plugins: {
+            legend: { position: 'bottom', labels: { color: '#64748b', padding: 16, font: { size: 12 } } },
+            tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.parsed}%` } },
+        },
+    };
+
+    if (!kpis || !kpis.total) {
+        return (
+            <div className="card">
+                <div className="gc-empty">
+                    <div className="gc-empty-icon">📭</div>
+                    <div className="gc-empty-title">Sin formularios evaluados</div>
+                    <div className="gc-empty-sub">No hay formularios derivados de su departamento con proyecto PAC declarado en el período seleccionado.</div>
+                </div>
+            </div>
+        );
+    }
+
+    const pocaMuestra = kpis.total < (data.muestra_minima ?? 3);
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {pocaMuestra && (
+                <div className="gc-nota">
+                    ⚠️ Muestra pequeña ({fmtN(kpis.total)} formulario{kpis.total !== 1 ? 's' : ''}): con tan pocos casos el porcentaje no es representativo.
+                </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <Kpi label="Formularios evaluados" value={fmtN(kpis.total)} color="#0ea5e9" sub="derivados con proyecto PAC declarado" />
+                <Kpi label="% Dentro del PAC" value={`${kpis.pct_dentro}%`} color={colorPct(kpis.pct_dentro)} sub={`${fmtN(kpis.dentro)} de ${fmtN(kpis.total)}`} />
+                <Kpi label="⛔ Fuera del PAC" value={fmtN(kpis.fuera)} color="#dc2626" sub={`${Math.round((100 - kpis.pct_dentro) * 10) / 10}% del total`} />
+                <Kpi label="💰 Monto Dentro PAC" value={fmtCompacto(kpis.monto_dentro)} color="#16a34a" />
+                <Kpi label="💸 Monto Fuera PAC" value={fmtCompacto(kpis.monto_fuera)} color="#dc2626" />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 16 }}>
+                <div style={cardStyle}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>📊 Distribución Dentro/Fuera PAC</div>
+                    <div className="chart-box" style={{ height: 240 }}>
+                        {donutData && <Doughnut data={donutData} options={donutOptions} />}
+                    </div>
+                </div>
+                <div style={cardStyle}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>📅 Histórico — Dentro vs Fuera por año de derivación</div>
+                    <div className="chart-box" style={{ height: 240 }}>
+                        {barData ? <Bar data={barData} options={barOptions} /> : (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: 12 }}>Sin datos suficientes para graficar.</div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {comparativa.length > 0 && (
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                            <tr style={{ background: '#f8fafc' }}>
+                                {['Año', 'Dentro PAC', 'Fuera PAC', 'Total', '% Dentro'].map((h) => (
+                                    <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#475569', borderBottom: '2px solid #e2e8f0', fontSize: 12 }}>{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {[...comparativa].reverse().map((r) => (
+                                <tr key={r.anho} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                    <td style={{ padding: '7px 10px', fontWeight: 600 }}>{r.anho}</td>
+                                    <td style={{ padding: '7px 10px', color: '#15803d', fontWeight: 600 }}>{fmtN(r.dentro)}</td>
+                                    <td style={{ padding: '7px 10px', color: '#dc2626', fontWeight: 600 }}>{fmtN(r.fuera)}</td>
+                                    <td style={{ padding: '7px 10px' }}>{fmtN(r.total)}</td>
+                                    <td style={{ padding: '7px 10px', fontWeight: 700, color: colorPct(r.pct_dentro) }}>{r.pct_dentro}%</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
