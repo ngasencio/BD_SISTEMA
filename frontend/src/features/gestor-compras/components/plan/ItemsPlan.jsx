@@ -94,10 +94,10 @@ export default function ItemsPlan({ params, anho, onVerFicha }) {
                                     <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                                         <button
                                             onClick={() => onVerFicha(f.id_proyecto)}
-                                            title="Ver ficha completa"
-                                            style={{ padding: '4px 12px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6, color: '#0369a1', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                            title="Ver todos los datos del proyecto"
+                                            className="gc-btn-ver"
                                         >
-                                            🔍 Revisar
+                                            👁 Ver
                                         </button>
                                     </td>
                                 </tr>

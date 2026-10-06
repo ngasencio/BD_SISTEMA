@@ -31,6 +31,10 @@ function Chip({ estado }) {
     return <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 12, background: e.bg, color: e.color, whiteSpace: 'nowrap' }}>{e.label}</span>;
 }
 
+function BotonVer({ onClick }) {
+    return <button type="button" className="gc-btn-ver" onClick={onClick} title="Ver todos los datos del proyecto">👁 Ver</button>;
+}
+
 function TablaPaginada({ titulo, subtitulo, columnas, filas, vacio, filaKey }) {
     const [pagina, setPagina] = useState(1);
     const totalPaginas = Math.max(1, Math.ceil(filas.length / PAGE));
@@ -139,6 +143,7 @@ export default function TemporalPlan({ data, onVerFicha }) {
                     { titulo: 'ID Proyecto', render: (f) => <button type="button" onClick={() => onVerFicha(f.id_proyecto)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 600, color: '#0369a1' }}>{f.id_proyecto}</button> },
                     { titulo: 'Fecha de compra planificada', render: (f) => f.fecha_inicio_compra },
                     { titulo: 'Estado', render: (f) => <Chip estado={f.estado} /> },
+                    { titulo: '', render: (f) => <BotonVer onClick={() => onVerFicha(f.id_proyecto)} /> },
                 ]}
             />
 
@@ -155,6 +160,7 @@ export default function TemporalPlan({ data, onVerFicha }) {
                     { titulo: 'Fecha planificada', render: (f) => f.fecha_evento_mas_cercano || '—' },
                     { titulo: 'Monto', derecha: true, render: (f) => fmtCLP(f.monto_estimado) },
                     { titulo: 'Estado', render: (f) => <Chip estado={f.estado} /> },
+                    { titulo: '', render: (f) => <BotonVer onClick={() => onVerFicha(f.id_plan)} /> },
                 ]}
             />
         </div>
