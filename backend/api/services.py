@@ -2926,7 +2926,7 @@ def _qs_fsc_derivado_pac_cumplimiento(estado=None):
     return qs
 
 
-def calcular_pac_dentro_fuera_stats(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None, estado=None):
+def calcular_pac_dentro_fuera_stats(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None, estado=None, depto_ids=None):
     """% Dentro/Fuera PAC + comparativa histórica por año, a nivel FSC individual.
 
     Granularidad y fuente de verdad acordadas con el usuario: 100% desde
@@ -2935,6 +2935,9 @@ def calcular_pac_dentro_fuera_stats(anho=None, fecha_desde=None, fecha_hasta=Non
     `fecha_desde`/`fecha_hasta` (ISO 'YYYY-MM-DD') tienen prioridad sobre `anho`;
     se usan para las comparativas de período de la reportería (ver Fase E).
     `estado` (opcional) ver `_qs_fsc_derivado_pac_cumplimiento`.
+    `depto_ids` (opcional, lista de Departamento.id) acota a varios departamentos a la vez
+    — usado por el Gestor de Compras (departamento asignado + sus sub-departamentos).
+    A diferencia de `depto`, `[]` significa "ninguno" (cero resultados), no "sin filtro".
     """
     qs_base = (
         _qs_fsc_derivado_pac_cumplimiento(estado=estado)
@@ -2945,6 +2948,8 @@ def calcular_pac_dentro_fuera_stats(anho=None, fecha_desde=None, fecha_hasta=Non
         qs_base = qs_base.filter(sso_departamento__subdireccion_id=subdireccion)
     if depto:
         qs_base = qs_base.filter(sso_departamento_id=depto)
+    if depto_ids is not None:
+        qs_base = qs_base.filter(sso_departamento_id__in=depto_ids)
 
     qs = qs_base
     if fecha_desde:
@@ -3056,7 +3061,7 @@ def _eventos_planificados_por_proyecto(anho=None, subdireccion=None, depto=None)
     return {k: sorted(v) for k, v in eventos.items()}
 
 
-def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None, estado=None):
+def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=None, subdireccion=None, depto=None, estado=None, depto_ids=None):
     """Cumplimiento temporal del PAC: cruza FormularioFSCDerivado (solo los Dentro
     PAC) contra los eventos planificados de PlanerPAC. Tolerancia: mes calendario
     (acordado con el usuario). Acotado a los años que PlanerPAC tenga cargados.
@@ -3064,6 +3069,8 @@ def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=
     `fecha_desde`/`fecha_hasta` (ISO 'YYYY-MM-DD') tienen prioridad sobre `anho` —
     usados por la reportería (Fase E) para acotar a un mes/trimestre específico.
     `estado` (opcional) ver `_qs_fsc_derivado_pac_cumplimiento`.
+    `depto_ids` (opcional, lista) acota tanto los FSC como los proyectos planificados a
+    varios departamentos (Gestor de Compras); `[]` = ninguno, no "sin filtro".
 
     Un proyecto con varias fechas planificadas se compara contra el evento MÁS
     CERCANO a la fecha_derivado de cada FSC — es una aproximación documentada
@@ -3078,7 +3085,9 @@ def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=
         tiene fecha_inicio_compra cargada en PlanerPAC (años no cargados aún).
     """
     hoy = date.today()
-    eventos = _eventos_planificados_por_proyecto(anho, subdireccion=subdireccion, depto=depto)
+    eventos = _eventos_planificados_por_proyecto(
+        anho, subdireccion=subdireccion, depto=depto if depto_ids is None else depto_ids,
+    )
 
     fsc_qs_base = (
         _qs_fsc_derivado_pac_cumplimiento(estado=estado)
@@ -3090,6 +3099,8 @@ def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=
         fsc_qs_base = fsc_qs_base.filter(sso_departamento__subdireccion_id=subdireccion)
     if depto:
         fsc_qs_base = fsc_qs_base.filter(sso_departamento_id=depto)
+    if depto_ids is not None:
+        fsc_qs_base = fsc_qs_base.filter(sso_departamento_id__in=depto_ids)
 
     fsc_qs = fsc_qs_base
     if fecha_desde:
@@ -4207,6 +4218,69 @@ def calcular_pac_ficha_detalle(id_proyecto):
         'formularios': formularios_data,
         'ordenes_compra': ocs_data,
     }
+
+
+# ── Gestor de Compras: Plan de Compra (PAC) acotado a los departamentos del gestor ──
+
+def _plan_gestor_vacio(extra=None):
+    return {'count': 0, 'page': 1, 'page_size': 50, 'results': [], **(extra or {})}
+
+
+def calcular_gestor_plan_resumen(depto_ids, anho=None):
+    """Dentro/Fuera PAC + histórico por año del departamento del gestor (mismo cálculo
+    que /pac-cumplimiento, acotado por `depto_ids`). `pac_disponible` es False si ninguno
+    de los departamentos pertenece al establecimiento que cubre PAC Cumplimiento
+    (Dirección SS Osorno) — en ese caso los números vienen en cero por diseño, no por
+    falta de datos, y el frontend debe decirlo."""
+    stats = calcular_pac_dentro_fuera_stats(anho=anho, depto_ids=list(depto_ids))
+    stats['pac_disponible'] = Departamento.objects.filter(
+        id__in=list(depto_ids), establecimiento_id=ESTABLECIMIENTO_PAC_CUMPLIMIENTO,
+    ).exists()
+    stats['anios_pac'] = sorted(
+        {int(a) for a in PlanerPAC.objects.exclude(pac__isnull=True).values_list('pac', flat=True).distinct()
+         if str(a).isdigit()},
+        reverse=True,
+    )
+    stats['muestra_minima'] = MUESTRA_MINIMA_PAC
+    return stats
+
+
+def calcular_gestor_plan_temporal(depto_ids, anho=None):
+    """En fecha / Atrasado / Pendiente / Sin planificación del departamento del gestor."""
+    return calcular_pac_cumplimiento_temporal(anho=anho, depto_ids=list(depto_ids))
+
+
+def calcular_gestor_plan_items(depto_ids, anho=None, estado=None, search=None, page=1, page_size=50):
+    """Fichas PAC (proyectos planificados) de los departamentos del gestor, con su estado
+    de ejecución, FSC y OC asociados. Lista vacía de `depto_ids` => resultado vacío:
+    _calcular_fichas_pac_completo trata `depto=[]` como "sin filtro" (devolvería TODAS
+    las fichas), así que acá se corta antes de llamarla."""
+    if not depto_ids:
+        return _plan_gestor_vacio({'page': page, 'page_size': page_size})
+    filas = _calcular_fichas_pac_completo(anho=anho, depto=list(depto_ids), estado=estado, search=search)
+    inicio = (page - 1) * page_size
+    return {'count': len(filas), 'page': page, 'page_size': page_size,
+            'results': filas[inicio:inicio + page_size]}
+
+
+def calcular_gestor_plan_item_detalle(depto_ids, unidades, id_proyecto):
+    """Detalle de una ficha PAC del gestor. None si la ficha no existe o NO pertenece a sus
+    departamentos (la vista responde 404 — no se distingue, para no revelar qué proyectos
+    existen en otros departamentos). Los FSC asociados se limitan a las `unidades` del gestor."""
+    if not depto_ids:
+        return None
+    primera = PlanerPAC.objects.filter(id_proyecto=id_proyecto).only('depto').first()
+    if not primera:
+        return None
+    depto_obj = _resolver_depto_ficha_pac(primera.depto, _mapa_departamentos_por_nombre())
+    if not depto_obj or depto_obj.id not in set(depto_ids):
+        return None
+    data = calcular_pac_ficha_detalle(id_proyecto)
+    if data is None:
+        return None
+    unidades = set(unidades)
+    data['formularios'] = [f for f in data['formularios'] if f['unidad_requirente'] in unidades]
+    return data
 
 
 def calcular_pac_temporal_mensual_planer(anho):

@@ -74,6 +74,8 @@ from .views import (
     gestor_mi_alcance_view, GestorSolicitudesViewSet,
     gestor_stats_view, gestor_flujo_view, gestor_alertas_view,
     GestorDerivacionesViewSet, GestorProcesosViewSet, gestor_resumen_view,
+    gestor_plan_resumen_view, gestor_plan_temporal_view, gestor_plan_items_view,
+    gestor_plan_item_detalle_view,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -303,6 +305,10 @@ urlpatterns = [
     path('gestor-compras/flujo/', gestor_flujo_view, name='gestor_flujo'),
     path('gestor-compras/alertas/', gestor_alertas_view, name='gestor_alertas'),
     path('gestor-compras/resumen/', gestor_resumen_view, name='gestor_resumen'),
+    path('gestor-compras/plan/resumen/', gestor_plan_resumen_view, name='gestor_plan_resumen'),
+    path('gestor-compras/plan/temporal/', gestor_plan_temporal_view, name='gestor_plan_temporal'),
+    path('gestor-compras/plan/items/', gestor_plan_items_view, name='gestor_plan_items'),
+    path('gestor-compras/plan/items/<str:id_proyecto>/', gestor_plan_item_detalle_view, name='gestor_plan_item_detalle'),
 
     # Router ViewSets
     path('', include(router.urls)),

@@ -4636,7 +4636,8 @@ def _gestor_cache_key(prefijo, alcance, *partes):
     """Clave de caché por CONTENIDO del alcance (no por usuario): dos usuarios con
     las mismas unidades comparten la entrada, y un alcance distinto nunca la pisa."""
     import hashlib
-    huella = hashlib.md5('|'.join(alcance['unidades']).encode('utf-8')).hexdigest()[:12]
+    contenido = '|'.join(alcance['unidades']) + '#' + ','.join(str(d) for d in alcance['depto_ids'])
+    huella = hashlib.md5(contenido.encode('utf-8')).hexdigest()[:12]
     return f"gestor_{prefijo}_{huella}_" + '_'.join(str(p) for p in partes)
 
 
@@ -4808,6 +4809,70 @@ def gestor_resumen_view(request):
         return Response(data)
     data = calcular_compras_resumen_gestor(alcance['unidades'])
     cache.set(cache_key, data, timeout=60)
+    return Response(data)
+
+
+# ── Gestor de Compras — tab Plan de Compra (PAC del departamento, solo lectura) ──
+
+def _gestor_pagina(request, maximo=100):
+    def _entero(nombre, defecto):
+        try:
+            return max(int(request.GET.get(nombre, defecto)), 1)
+        except (ValueError, TypeError):
+            return defecto
+    return _entero('page', 1), min(_entero('page_size', 50), maximo)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_plan_resumen_view(request):
+    from .services import calcular_gestor_plan_resumen
+    alcance = _gestor_alcance(request)
+    anho = _gestor_anho(request)
+    cache_key = _gestor_cache_key('plan_resumen', alcance, anho or 'todos')
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_gestor_plan_resumen(alcance['depto_ids'], anho=anho)
+    cache.set(cache_key, data, timeout=60)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_plan_temporal_view(request):
+    from .services import calcular_gestor_plan_temporal
+    alcance = _gestor_alcance(request)
+    anho = _gestor_anho(request)
+    cache_key = _gestor_cache_key('plan_temporal', alcance, anho or 'todos')
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_gestor_plan_temporal(alcance['depto_ids'], anho=anho)
+    cache.set(cache_key, data, timeout=60)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_plan_items_view(request):
+    from .services import calcular_gestor_plan_items
+    alcance = _gestor_alcance(request)
+    page, page_size = _gestor_pagina(request)
+    estado = request.GET.get('estado', '').strip() or None
+    search = request.GET.get('search', '').strip() or None
+    return Response(calcular_gestor_plan_items(
+        alcance['depto_ids'], anho=_gestor_anho(request), estado=estado, search=search,
+        page=page, page_size=page_size,
+    ))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_plan_item_detalle_view(request, id_proyecto):
+    from .services import calcular_gestor_plan_item_detalle
+    alcance = _gestor_alcance(request)
+    data = calcular_gestor_plan_item_detalle(alcance['depto_ids'], alcance['unidades'], id_proyecto)
+    if data is None:
+        return Response({'detail': 'Ficha PAC no encontrada.'}, status=404)
     return Response(data)
 
 
