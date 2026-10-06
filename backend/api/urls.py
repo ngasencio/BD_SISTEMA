@@ -73,6 +73,7 @@ from .views import (
     compras_jefatura_avance_view, compras_jefatura_resumen_view,
     gestor_mi_alcance_view, GestorSolicitudesViewSet,
     gestor_stats_view, gestor_flujo_view, gestor_alertas_view,
+    GestorDerivacionesViewSet, GestorProcesosViewSet, gestor_resumen_view,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -118,6 +119,8 @@ router.register(r'compras-procesos', ProcesoCompraViewSet, basename='procesocomp
 router.register(r'compras-compradores', ComprasCompradorPerfilViewSet, basename='comprascompradorperfil')
 router.register(r'compras-notificaciones', ComprasNotificacionViewSet, basename='comprasnotificacion')
 router.register(r'gestor-compras/solicitudes', GestorSolicitudesViewSet, basename='gestor-solicitudes')
+router.register(r'gestor-compras/derivaciones', GestorDerivacionesViewSet, basename='gestor-derivaciones')
+router.register(r'gestor-compras/procesos', GestorProcesosViewSet, basename='gestor-procesos')
 
 # Módulo Usuarios
 router.register(r'usuarios', UsuarioViewSet, basename='usuario')
@@ -299,6 +302,7 @@ urlpatterns = [
     path('gestor-compras/stats/', gestor_stats_view, name='gestor_stats'),
     path('gestor-compras/flujo/', gestor_flujo_view, name='gestor_flujo'),
     path('gestor-compras/alertas/', gestor_alertas_view, name='gestor_alertas'),
+    path('gestor-compras/resumen/', gestor_resumen_view, name='gestor_resumen'),
 
     # Router ViewSets
     path('', include(router.urls)),

@@ -613,6 +613,34 @@ class ProcesoCompraSerializer(serializers.ModelSerializer):
         return ESTADOS_POR_TIPO_PROCESO.get(obj.tipo_proceso, [])
 
 
+class GestorProcesoCompraSerializer(ProcesoCompraSerializer):
+    """ProcesoCompra para el Gestor de Compras: solo lectura y, dentro de un proceso
+    que agrupa varios FSC (compra conjunta), muestra únicamente los de las
+    `unidades` del gestor (context['unidades']) — los de otros departamentos solo
+    cuentan en `n_formularios_otros`, sin folio ni datos. Sin `unidades` en el
+    contexto no muestra ningún FSC (falla cerrado)."""
+    n_formularios_otros = serializers.SerializerMethodField()
+
+    class Meta(ProcesoCompraSerializer.Meta):
+        fields = ProcesoCompraSerializer.Meta.fields + ['n_formularios_otros']
+        read_only_fields = fields
+
+    def _vinculos_propios(self, obj):
+        return obj.vinculos_formulario.filter(
+            formulario_derivado__unidad_requirente__in=self.context.get('unidades', [])
+        )
+
+    def get_formularios_detalle(self, obj):
+        vinculos = self._vinculos_propios(obj).select_related('formulario_derivado')
+        return ProcesoCompraFormularioMiniSerializer(vinculos, many=True).data
+
+    def get_n_formularios(self, obj):
+        return self._vinculos_propios(obj).count()
+
+    def get_n_formularios_otros(self, obj):
+        return obj.vinculos_formulario.count() - self._vinculos_propios(obj).count()
+
+
 class ComprasMisFormularioSerializer(FormularioFSCDerivadoSerializer):
     """Extiende FormularioFSCDerivadoSerializer con un resumen de los
     ProcesoCompra ya vinculados a este FSC — así 'Mis Formularios' puede

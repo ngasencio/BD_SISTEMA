@@ -66,6 +66,7 @@ from .serializers import (
     FscOcLinkSerializer, CompradorInicialSerializer,
     DevengoSigfeAnualSerializer, SigfeAnexo1Serializer,
     ComprasCompradorPerfilSerializer, ProcesoCompraSerializer, ProcesoCompraEstadoLogSerializer,
+    GestorProcesoCompraSerializer,
     ComprasMisFormularioSerializer, ComprasNotificacionSerializer,
 )
 
@@ -4710,6 +4711,104 @@ def gestor_alertas_view(request):
     return Response(calcular_formularios_alertas(
         anho=_gestor_anho(request), dias_min=dias_min, unidades=alcance['unidades'],
     ))
+
+
+# ── Gestor de Compras — tab Derivación a Comprador (solo lectura) ─────────────
+
+class GestorDerivacionesViewSet(viewsets.ReadOnlyModelViewSet):
+    """FSC derivados a comprador (bandeja 'AC') del departamento del gestor, de todos
+    los compradores. Mismo contrato que /compras/mis-formularios/ (?finalizados=1,
+    ?search=, ?ordering=) y el detalle/productos del FSC para el modal de lectura."""
+    serializer_class = ComprasMisFormularioSerializer
+    permission_classes = [IsAuthenticated, _IsGestorCompras]
+    filter_backends = [drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    search_fields = ['folio', 'requerimiento', 'especificaciones_tecnicas', 'unidad_requirente', 'comprador']
+    ordering_fields = ['fecha_derivado', 'folio', 'monto_estimado']
+    ordering = ['-fecha_derivado']
+    _PREFETCH = 'procesos_compra__vinculos_oc__orden_compra'
+
+    def get_queryset(self):
+        # Base para detalle/productos: cualquier FSC derivado del alcance (get_object()
+        # da 404 si es de otro departamento). La lista usa list() de abajo.
+        alcance = _gestor_alcance(self.request)
+        return FormularioFSCDerivado.objects.filter(
+            unidad_requirente__in=alcance['unidades']
+        ).prefetch_related(self._PREFETCH)
+
+    def list(self, request, *args, **kwargs):
+        from .services import listar_fsc_gestor
+        alcance = _gestor_alcance(request)
+        finalizados = request.GET.get('finalizados', '').strip().lower() in ('1', 'true', 'si')
+        qs = listar_fsc_gestor(alcance['unidades'], finalizados=finalizados).prefetch_related(self._PREFETCH)
+        qs = self.filter_queryset(qs)
+        page = self.paginate_queryset(qs)
+        serializer = self.get_serializer(page if page is not None else qs, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='productos')
+    def productos(self, request, pk=None):
+        from .services import _extraer_tipo_formulario_fsc
+        fsc = self.get_object()
+        qs = FormularioFSCProducto.objects.filter(folio=fsc.folio, anho=fsc.anho)
+        tipo = _extraer_tipo_formulario_fsc(fsc)
+        if tipo:
+            qs = qs.filter(tipo_formulario=tipo)
+        return Response(FormularioFSCProductoSerializer(qs, many=True).data)
+
+
+class GestorProcesosViewSet(viewsets.ReadOnlyModelViewSet):
+    """ProcesoCompra del departamento del gestor (los que tienen al menos un FSC suyo),
+    de todos los compradores. Solo lectura: detalle, historial con observaciones y
+    detalle de Mercado Público. Un proceso ajeno responde 404."""
+    serializer_class = GestorProcesoCompraSerializer
+    permission_classes = [IsAuthenticated, _IsGestorCompras]
+    filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
+    filterset_fields = ['tipo_proceso', 'estado_proceso']
+    ordering_fields = ['creado_en', 'actualizado_en', 'fecha_cierre_estimada']
+    ordering = ['-actualizado_en']
+
+    def get_queryset(self):
+        from .services import procesos_compra_gestor
+        alcance = _gestor_alcance(self.request)
+        qs = procesos_compra_gestor(alcance['unidades']).select_related('comprador', 'licitacion', 'creado_por')
+        formulario_id = self.request.GET.get('formulario_id', '').strip()
+        if formulario_id.isdigit():
+            qs = qs.filter(vinculos_formulario__formulario_derivado_id=formulario_id)
+        return qs
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['unidades'] = _gestor_alcance(self.request)['unidades']
+        return context
+
+    @action(detail=True, methods=['get'], url_path='historial')
+    def historial(self, request, pk=None):
+        proceso = self.get_object()
+        logs = proceso.historial_estados.select_related('usuario').all()
+        return Response(ProcesoCompraEstadoLogSerializer(logs, many=True).data)
+
+    @action(detail=True, methods=['get'], url_path='detalle-mp')
+    def detalle_mp(self, request, pk=None):
+        from .services import calcular_proceso_detalle_mp
+        proceso = self.get_object()
+        return Response(calcular_proceso_detalle_mp(proceso.id))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_resumen_view(request):
+    """Notificaciones de plazos de Mercado Público + Proceso de Gestión interna +
+    Procesos por tipo y estado del departamento (mismos bloques que Mis Formularios)."""
+    from .services import calcular_compras_resumen_gestor
+    alcance = _gestor_alcance(request)
+    cache_key = _gestor_cache_key('resumen', alcance)
+    if data := cache.get(cache_key):
+        return Response(data)
+    data = calcular_compras_resumen_gestor(alcance['unidades'])
+    cache.set(cache_key, data, timeout=60)
+    return Response(data)
 
 
 class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):

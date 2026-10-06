@@ -5557,6 +5557,34 @@ def _ids_fsc_duplicados_a_ocultar(queryset):
     return ocultar
 
 
+def _qs_fsc_finalizados(qs_ac):
+    """Núcleo de listar_fsc_finalizados_comprador sobre un queryset base de
+    FormularioFSCDerivado en 'AC' (por comprador, o por departamento en el módulo
+    Gestor de Compras)."""
+    qs = qs_ac.filter(
+        Q(estado_compra__icontains='Proceso Finalizado') |
+        Q(vinculos_proceso__proceso__estado_proceso='FINALIZADO')
+    ).distinct()
+    ocultos = _ids_fsc_duplicados_a_ocultar(qs)
+    if ocultos:
+        qs = qs.exclude(id__in=ocultos)
+    return qs.order_by('-fecha_derivado', '-folio')
+
+
+def _qs_fsc_pendientes(qs_ac, incluir_ya_clasificados=False):
+    """Núcleo de listar_fsc_pendientes_comprador sobre un queryset base en 'AC'."""
+    qs = qs_ac.exclude(
+        Q(estado_compra__icontains='Proceso Finalizado') |
+        Q(vinculos_proceso__proceso__estado_proceso='FINALIZADO')
+    ).distinct()
+    if not incluir_ya_clasificados:
+        qs = qs.exclude(vinculos_proceso__isnull=False)
+    ocultos = _ids_fsc_duplicados_a_ocultar(qs)
+    if ocultos:
+        qs = qs.exclude(id__in=ocultos)
+    return qs.order_by('-fecha_derivado', '-folio')
+
+
 def listar_fsc_finalizados_comprador(usuario):
     """FormularioFSCDerivado (bandeja 'AC') cuyo proceso de compra ya se dio
     por finalizado, por CUALQUIERA de dos vías independientes:
@@ -5569,14 +5597,7 @@ def listar_fsc_finalizados_comprador(usuario):
         el frontend muestre el desfase ('Cerrado acá, pendiente en Panel SSO')
         cuando esta vía cerró el proceso pero la del Panel todavía no."""
     nombres = resolver_nombres_comprador(usuario)
-    qs = FormularioFSCDerivado.objects.filter(estado='AC', comprador__in=nombres).filter(
-        Q(estado_compra__icontains='Proceso Finalizado') |
-        Q(vinculos_proceso__proceso__estado_proceso='FINALIZADO')
-    ).distinct()
-    ocultos = _ids_fsc_duplicados_a_ocultar(qs)
-    if ocultos:
-        qs = qs.exclude(id__in=ocultos)
-    return qs.order_by('-fecha_derivado', '-folio')
+    return _qs_fsc_finalizados(FormularioFSCDerivado.objects.filter(estado='AC', comprador__in=nombres))
 
 
 def listar_fsc_pendientes_comprador(usuario, incluir_ya_clasificados=False):
@@ -5593,19 +5614,23 @@ def listar_fsc_pendientes_comprador(usuario, incluir_ya_clasificados=False):
     causados por el bug de upsert del ETL de Formularios (ver
     _ids_fsc_duplicados_a_ocultar)."""
     nombres = resolver_nombres_comprador(usuario)
-    qs = FormularioFSCDerivado.objects.filter(estado='AC', comprador__in=nombres).exclude(
-        Q(estado_compra__icontains='Proceso Finalizado') |
-        Q(vinculos_proceso__proceso__estado_proceso='FINALIZADO')
-    ).distinct()
-    if not incluir_ya_clasificados:
-        qs = qs.exclude(vinculos_proceso__isnull=False)
-    ocultos = _ids_fsc_duplicados_a_ocultar(qs)
-    if ocultos:
-        qs = qs.exclude(id__in=ocultos)
-    return qs.order_by('-fecha_derivado', '-folio')
+    return _qs_fsc_pendientes(
+        FormularioFSCDerivado.objects.filter(estado='AC', comprador__in=nombres),
+        incluir_ya_clasificados=incluir_ya_clasificados,
+    )
 
 
 def calcular_compras_resumen_comprador(usuario):
+    """Panel 'Resumen' de Mis Formularios del comprador `usuario` (ver
+    _calcular_compras_resumen para el detalle de cada bloque)."""
+    return _calcular_compras_resumen(
+        procesos_base=ProcesoCompra.objects.filter(comprador=usuario),
+        fsc_abiertos_qs=listar_fsc_pendientes_comprador(usuario, incluir_ya_clasificados=True),
+        fsc_finalizados_qs=listar_fsc_finalizados_comprador(usuario),
+    )
+
+
+def _calcular_compras_resumen(procesos_base, fsc_abiertos_qs, fsc_finalizados_qs):
     """Panel 'Resumen' de Mis Formularios — da al comprador una vista de
     'reloj' de sus procesos activos sin abrir cada FSC uno por uno:
       - alertas: procesos con Licitación/Compra Ágil enlazada y fecha de
@@ -5620,15 +5645,17 @@ def calcular_compras_resumen_comprador(usuario):
         finalizado/rechazado), solo tipos con al menos un proceso — insumo
         del gráfico y la tabla pivot del panel.
       - kpis: contadores de alto nivel para las tarjetas del panel.
-    Todo acotado a los procesos/FSC del `usuario` (mismo criterio que
-    listar_fsc_pendientes_comprador)."""
+    Todo acotado a `procesos_base`/`fsc_abiertos_qs`/`fsc_finalizados_qs`, que
+    arma quien llama: los del comprador (calcular_compras_resumen_comprador) o los
+    del departamento de un gestor (calcular_compras_resumen_gestor). Si se acota por
+    departamento, `procesos_base` NO debe ir con join + distinct(): el pivote usa
+    values_list y DISTINCT colapsaría procesos distintos con los mismos valores."""
     hoy = timezone.localdate()
 
     procesos_activos = list(
-        ProcesoCompra.objects
-        .filter(comprador=usuario)
+        procesos_base
         .exclude(estado_proceso__in=['FINALIZADO', 'RECHAZADO'])
-        .select_related('licitacion')
+        .select_related('licitacion', 'comprador')
     )
 
     codigos_ca = [p.codigo_compra_agil for p in procesos_activos if p.codigo_compra_agil]
@@ -5668,6 +5695,7 @@ def calcular_compras_resumen_comprador(usuario):
                 urgencia = 'vencido'
         alertas.append({
             'proceso_id': p.id, 'titulo': p.titulo, 'tipo_proceso': p.tipo_proceso,
+            'comprador': p.comprador.get_full_name() or p.comprador.username,
             'fuente': fuente, 'codigo_mp': codigo_mp, 'estado_mp': estado_mp,
             'estado_proceso': p.estado_proceso, 'fecha_cierre': fecha_cierre_date.isoformat(),
             'dias': dias, 'urgencia': urgencia,
@@ -5680,8 +5708,7 @@ def calcular_compras_resumen_comprador(usuario):
     alertas.sort(key=lambda a: (_RANGO_URGENCIA[a['urgencia']], a['dias']))
 
     # Bloque "Proceso de Gestión" — FSC en trámite sin enlace real a Mercado Público
-    fsc_abiertos = listar_fsc_pendientes_comprador(usuario, incluir_ya_clasificados=True) \
-        .prefetch_related('procesos_compra')
+    fsc_abiertos = fsc_abiertos_qs.prefetch_related('procesos_compra')
     gestion_interna = []
     for f in fsc_abiertos:
         procesos_f = list(f.procesos_compra.all())
@@ -5691,6 +5718,7 @@ def calcular_compras_resumen_comprador(usuario):
             'id': f.id,
             'id_formulario': generar_id_formulario(f.folio, f.anho, formulario_texto=f.formulario),
             'unidad_requirente': f.unidad_requirente,
+            'comprador': f.comprador,
             'requerimiento': f.requerimiento,
             'monto_estimado': f.monto_estimado,
             'fecha_derivado': f.fecha_derivado,
@@ -5704,8 +5732,7 @@ def calcular_compras_resumen_comprador(usuario):
     # nuestro seguimiento interno (estado_proceso) todavía no se haya movido
     # a FINALIZADO — el pivote debe reflejar eso, no el trámite interno solo.
     todos_procesos_vals = list(
-        ProcesoCompra.objects.filter(comprador=usuario)
-        .values_list('tipo_proceso', 'estado_proceso', 'codigo_compra_agil')
+        procesos_base.values_list('tipo_proceso', 'estado_proceso', 'codigo_compra_agil')
     )
     codigos_ca_todos = [c for _, _, c in todos_procesos_vals if c]
     ca_estado_todos = {
@@ -5746,10 +5773,44 @@ def calcular_compras_resumen_comprador(usuario):
         'alertas_vencidas': sum(1 for a in alertas if a['urgencia'] == 'vencido'),
         'alertas_proximas': sum(1 for a in alertas if a['urgencia'] in ('alta', 'media')),
         'gestion_interna': len(gestion_interna),
-        'finalizados': listar_fsc_finalizados_comprador(usuario).count(),
+        'finalizados': fsc_finalizados_qs.count(),
     }
 
     return {'kpis': kpis, 'alertas': alertas, 'gestion_interna': gestion_interna, 'pivote': pivote}
+
+
+# ── Gestor de Compras: mismas vistas del comprador, acotadas a un departamento ──────
+
+def listar_fsc_gestor(unidades, finalizados=False):
+    """FSC derivados a comprador (bandeja 'AC') de las `unidades` del gestor — todos
+    los compradores. `finalizados=True` lista los ya cerrados; si no, los abiertos
+    (clasificados o no). Mismo criterio de finalizado y de duplicados que Mis
+    Formularios. [] = sin resultados."""
+    qs_ac = FormularioFSCDerivado.objects.filter(estado='AC', unidad_requirente__in=unidades)
+    if finalizados:
+        return _qs_fsc_finalizados(qs_ac)
+    return _qs_fsc_pendientes(qs_ac, incluir_ya_clasificados=True)
+
+
+def procesos_compra_gestor(unidades):
+    """ProcesoCompra con al menos un FSC de las `unidades` del gestor. Subconsulta
+    (id__in) y no join + distinct(): ver nota en _calcular_compras_resumen."""
+    return ProcesoCompra.objects.filter(
+        id__in=ProcesoCompraFormulario.objects
+        .filter(formulario_derivado__unidad_requirente__in=unidades)
+        .values('proceso_id')
+    )
+
+
+def calcular_compras_resumen_gestor(unidades):
+    """Notificaciones de plazos de Mercado Público, Proceso de Gestión interna y
+    Procesos por tipo y estado — los mismos bloques que ve un comprador en Mis
+    Formularios, pero sobre los procesos/FSC del departamento del gestor."""
+    return _calcular_compras_resumen(
+        procesos_base=procesos_compra_gestor(unidades),
+        fsc_abiertos_qs=listar_fsc_gestor(unidades),
+        fsc_finalizados_qs=listar_fsc_gestor(unidades, finalizados=True),
+    )
 
 
 def crear_proceso_compra(*, tipo_proceso, titulo, comprador, formulario_ids, usuario_creador,
