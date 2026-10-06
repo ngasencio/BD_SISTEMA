@@ -59,7 +59,10 @@ export default function ResumenPlan({ data }) {
             y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 }, precision: 0 } },
         },
     };
+    // maintainAspectRatio:false es imprescindible: sin él un dona es cuadrado y, en una tarjeta ancha,
+    // crece más que su .chart-box de altura fija y se desborda.
     const donutOptions = {
+        responsive: true, maintainAspectRatio: false,
         cutout: '70%',
         plugins: {
             legend: { position: 'bottom', labels: { color: '#64748b', padding: 16, font: { size: 12 } } },

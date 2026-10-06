@@ -114,7 +114,7 @@ export default function TemporalPlan({ data, onVerFicha }) {
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>⏱️ Distribución del cumplimiento</div>
                     <div className="chart-box" style={{ height: 230 }}>
                         {donutData ? (
-                            <Doughnut data={donutData} options={{ cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#64748b', padding: 14, font: { size: 11.5 } } } } }} />
+                            <Doughnut data={donutData} options={{ responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#64748b', padding: 14, font: { size: 11.5 } } } } }} />
                         ) : (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: 12 }}>Sin datos.</div>
                         )}
