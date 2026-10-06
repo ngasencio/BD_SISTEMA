@@ -11,6 +11,8 @@
  *  /abastecimiento/*            → Protegida (rol: admin, abastecimiento, comprador, general)
  *  /compras/mis-formularios     → Protegida (rol: admin, comprador, jefatura, general)
  *  /compras/panel-formularios   → Protegida (rol: admin, jefatura, general — SIN comprador)
+ *  /gestor-compras              → Protegida (rol: admin, gestor_compras, jefatura, general) — solo lectura, por departamento
+ *  /pac-cumplimiento            → Protegida (todos los roles MENOS gestor_compras: ahí están los rankings de todos los departamentos)
  *  /finanzas/*                  → Protegida (rol: admin, finanzas, general)
  *  /anexo1/base-datos           → Protegida (rol: admin, finanzas, general)
  *  /anexo3/reporte-sigfe        → Protegida (rol: admin, finanzas, general) — único reporte Anexo N°3, el viejo AnexoDeudaPage se eliminó
@@ -42,6 +44,7 @@ import { devengoSigfeRoutes } from './features/devengo-sigfe/routes';
 import { anexo1SigfeRoutes } from './features/anexo1-sigfe/routes';
 import { facturasRoutes } from './features/facturas/routes';
 import { comprasRoutes, comprasJefaturaRoutes } from './features/compras/routes';
+import { gestorComprasRoutes } from './features/gestor-compras/routes';
 import { mapaSistemaRoutes } from './features/mapa-sistema/routes';
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
@@ -59,6 +62,15 @@ const RequireRole = ({ allowed = [], children }) => {
   return children || <Outlet />;
 };
 
+/** El gestor de compras ve solo su departamento: su inicio es su panel, no el Home general. */
+const HomeSegunRol = () => {
+  const { role } = useAuth();
+  return role === 'gestor_compras' ? <Navigate to="/gestor-compras" replace /> : <Home />;
+};
+
+// Todos los roles salvo gestor_compras (el backend también lo bloquea en /pac-cumplimiento/*)
+const ROLES_CON_PAC_CUMPLIMIENTO = ['admin', 'abastecimiento', 'finanzas', 'viewer', 'comprador', 'jefatura', 'general'];
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 
 function AppRoutes() {
@@ -73,15 +85,17 @@ function AppRoutes() {
           <Route element={<AppLayout />}>
 
             {/* Rutas generales */}
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<HomeSegunRol />} />
             <Route path="/licitaciones" element={<Dashboard />} />
             <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
             {/* Mapa del sistema (todos los autenticados) */}
             {mapaSistemaRoutes}
             {/* Módulo PAC (todos los autenticados) */}
             {pacRoutes}
-            {/* Módulo PAC — Cumplimiento del Plan Anual de Compras (todos los autenticados) */}
-            {pacCumplimientoRoutes}
+            {/* Módulo PAC — Cumplimiento del Plan Anual de Compras (todos los autenticados salvo gestor_compras) */}
+            <Route element={<RequireRole allowed={ROLES_CON_PAC_CUMPLIMIENTO} />}>
+              {pacCumplimientoRoutes}
+            </Route>
             {/* Módulo Compra Ágil (todos los autenticados) */}
             {compraAgilRoutes}
 
@@ -99,6 +113,11 @@ function AppRoutes() {
             {/* Panel Formularios — supervisión de jefatura, SIN 'comprador' a propósito */}
             <Route element={<RequireRole allowed={['admin', 'jefatura', 'general']} />}>
               {comprasJefaturaRoutes}
+            </Route>
+
+            {/* Gestor de Compras — panel de solo lectura por departamento */}
+            <Route element={<RequireRole allowed={['admin', 'gestor_compras', 'jefatura', 'general']} />}>
+              {gestorComprasRoutes}
             </Route>
 
             {/* Módulo Finanzas (admin + finanzas + general) */}

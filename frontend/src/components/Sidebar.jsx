@@ -10,6 +10,7 @@ export default function Sidebar() {
 
     // Expandir automáticamente el grupo correcto según la ruta
     const [openGroups, setOpenGroups] = useState({
+        gestor: role === 'gestor_compras' || path.startsWith('/gestor-compras'),
         abast: path.startsWith('/licitaciones') || path.startsWith('/abastecimiento') || path.startsWith('/ordenes-compra') || path.startsWith('/pac') || path.startsWith('/compra-agil') || path.startsWith('/fsc-oc-pac') || path.startsWith('/compras'),
         finanzas: path.startsWith('/anexo') || path.startsWith('/finanzas') || path.startsWith('/facturas'),
         admin: path.startsWith('/admin'),
@@ -51,6 +52,26 @@ export default function Sidebar() {
 
 
             <nav className="sidebar-nav">
+                {/* ── GESTOR DE COMPRAS (solo lectura, por departamento) ─── */}
+                {puede('admin', 'gestor_compras', 'jefatura', 'general') && (
+                <div className={`nav-group ${openGroups.gestor ? 'open' : ''}`}>
+                    <div className="nav-group-title" onClick={() => toggleGroup('gestor')}>
+                        <span className="nav-group-title-icon">🏢</span>
+                        <span className="nav-group-title-text">Gestor de Compras</span>
+                        <span className="nav-group-arrow" style={{ transform: openGroups.gestor ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+                    </div>
+                    <div className="nav-group-children" style={{ display: openGroups.gestor ? 'block' : 'none' }}>
+                        <div
+                            className={`nav-item ${isActive('/gestor-compras') ? 'active' : ''}`}
+                            onClick={() => goTo('/gestor-compras', 'gestor', null)}
+                        >
+                            <span>📊</span>
+                            <span className="nav-item-text">{role === 'gestor_compras' ? 'Mi Departamento' : 'Panel por Departamento'}</span>
+                        </div>
+                    </div>
+                </div>
+                )}
+
                 {/* ── ABASTECIMIENTO ────────────────── */}
                 <div className={`nav-group ${openGroups.abast ? 'open' : ''}`}>
                     <div className="nav-group-title" onClick={() => toggleGroup('abast')}>
@@ -167,6 +188,9 @@ export default function Sidebar() {
                                     <span>📊</span>
                                     <span className="nav-item-text">Indicadores Res.188</span>
                                 </div>
+                                {/* Cumplimiento y Enlace FSC-OC-PAC: el gestor no los ve (rankings/datos de todos los departamentos) */}
+                                {role !== 'gestor_compras' && (
+                                <>
                                 <div
                                     className={`nav-item ${isActive('/pac-cumplimiento') && pacCumplimientoTab === 'resumen' ? 'active' : ''}`}
                                     onClick={() => goTo('/pac-cumplimiento?tab=resumen', 'abast', 'pac')}
@@ -181,6 +205,8 @@ export default function Sidebar() {
                                     <span>🔗</span>
                                     <span className="nav-item-text">Enlace FSC-OC-PAC</span>
                                 </div>
+                                </>
+                                )}
                             </div>
                         </div>
 

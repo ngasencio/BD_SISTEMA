@@ -1,0 +1,106 @@
+/* Gestor de Compras — todo prefijado .gc-* (Vite no scopea CSS por componente). */
+
+.gc-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    border-left: 4px solid var(--gob-celeste);
+}
+
+.gc-banner-icon {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.gc-banner-body {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+.gc-banner-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gob-azul);
+}
+
+.gc-banner-meta {
+    font-size: 12px;
+    color: var(--gob-gris4);
+    margin-top: 2px;
+}
+
+.gc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--gob-celeste-lt);
+    color: var(--gob-azul-mid);
+    white-space: nowrap;
+}
+
+.gc-badge-supervision {
+    background: var(--gob-amarillo-lt);
+    color: var(--gob-amarillo);
+}
+
+.gc-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 260px;
+}
+
+.gc-selector label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--gob-gris4);
+}
+
+.gc-selector select {
+    padding: 7px 10px;
+    border: 1px solid var(--gob-gris3);
+    border-radius: 6px;
+    font-size: 13px;
+    background: var(--gob-blanco);
+    color: var(--gob-gris5);
+}
+
+.gc-empty {
+    padding: 36px 20px;
+    text-align: center;
+    color: var(--gob-gris4);
+}
+
+.gc-empty-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+
+.gc-empty-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--gob-gris5);
+    margin-bottom: 4px;
+}
+
+.gc-empty-sub {
+    font-size: 13px;
+    max-width: 460px;
+    margin: 0 auto;
+}
+
+.gc-nota {
+    font-size: 12px;
+    color: var(--gob-gris4);
+    padding: 10px 14px;
+    background: var(--gob-gris1);
+    border: 1px dashed var(--gob-gris3);
+    border-radius: 6px;
+}
