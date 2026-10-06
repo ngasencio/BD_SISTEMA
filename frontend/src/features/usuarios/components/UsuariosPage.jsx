@@ -280,7 +280,20 @@ export default function UsuariosPage() {
                                             <td className="u-td-nombre">
                                                 {[u.first_name, u.last_name].filter(Boolean).join(' ') || <span className="u-nd">—</span>}
                                             </td>
-                                            <td><RoleBadge role={u.perfil?.role || 'viewer'} /></td>
+                                            <td>
+                                                <RoleBadge role={u.perfil?.role || 'viewer'} />
+                                                {Array.isArray(u.departamentos_gestor) && (
+                                                    <div
+                                                        className="u-nd"
+                                                        style={{ marginTop: 4, fontSize: 11, color: u.departamentos_gestor.length ? '#0d9488' : '#dc2626' }}
+                                                        title="Departamento(s) que ve este gestor — se define por su pertenencia en el Panel SSO"
+                                                    >
+                                                        {u.departamentos_gestor.length
+                                                            ? `🏢 ${u.departamentos_gestor.join(', ')}`
+                                                            : '⚠ Sin departamento asignado (no verá datos)'}
+                                                    </div>
+                                                )}
+                                            </td>
                                             <td className="u-td-cargo">
                                                 <span title={u.perfil?.cargo}>
                                                     {u.perfil?.cargo || <span className="u-nd">—</span>}

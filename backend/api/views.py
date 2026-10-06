@@ -142,6 +142,16 @@ class _IsJefaturaAbastecimiento(BasePermission):
         return _tiene_rol(request.user, {'admin', 'jefatura', 'general'})
 
 
+class _IsGestorCompras(BasePermission):
+    """Acceso al módulo Gestor de Compras (/gestor-compras): el gestor de un
+    departamento, más admin/jefatura/general para supervisarlo. Solo lectura: el
+    gestor NO está en _IsComprador, así que no alcanza ningún endpoint de
+    escritura de Gestión de Compras. Qué datos ve lo decide
+    services.resolver_alcance_gestor(), no este permiso."""
+    def has_permission(self, request, view):
+        return _tiene_rol(request.user, {'admin', 'gestor_compras', 'jefatura', 'general'})
+
+
 # =============================================================================
 # Licitaciones
 # =============================================================================
@@ -2410,6 +2420,29 @@ def compras_jefatura_resumen_view(request):
     formularios = listar_fsc_pendientes_comprador(comprador, incluir_ya_clasificados=True) \
         .prefetch_related('procesos_compra__vinculos_oc__orden_compra')
     data['formularios'] = ComprasMisFormularioSerializer(formularios, many=True).data
+    return Response(data)
+
+
+# =============================================================================
+# Gestor de Compras — vista de solo lectura por departamento (2026-10-06)
+# =============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsGestorCompras])
+def gestor_mi_alcance_view(request):
+    """Departamento(s) que el usuario puede ver en /gestor-compras. Un gestor
+    recibe el suyo (de data_pertenencia_usuario); admin/jefatura/general reciben
+    además `departamentos_disponibles` para elegir uno con `?depto_id=`. Sin
+    caché de respuesta: el alcance ya se cachea 60 s por usuario en services."""
+    from .services import resolver_alcance_gestor, listar_departamentos_gestionables
+    alcance = resolver_alcance_gestor(request.user, request.GET.get('depto_id'))
+    data = {
+        'modo': alcance['modo'],
+        'motivo': alcance['motivo'],
+        'departamentos': alcance['departamentos'],
+    }
+    if alcance['modo'] == 'supervision':
+        data['departamentos_disponibles'] = listar_departamentos_gestionables()
     return Response(data)
 
 

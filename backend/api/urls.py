@@ -71,6 +71,7 @@ from .views import (
     compras_importar_licitacion_view, compras_importar_compra_agil_view, compras_importar_oc_view,
     compras_jefatura_actividad_view, compras_jefatura_sin_gestion_view,
     compras_jefatura_avance_view, compras_jefatura_resumen_view,
+    gestor_mi_alcance_view,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -290,6 +291,9 @@ urlpatterns = [
     path('compras/jefatura/sin-gestion/', compras_jefatura_sin_gestion_view, name='compras_jefatura_sin_gestion'),
     path('compras/jefatura/avance/', compras_jefatura_avance_view, name='compras_jefatura_avance'),
     path('compras/jefatura/resumen/', compras_jefatura_resumen_view, name='compras_jefatura_resumen'),
+
+    # Gestor de Compras (solo lectura, filtrado por departamento del usuario)
+    path('gestor-compras/mi-alcance/', gestor_mi_alcance_view, name='gestor_mi_alcance'),
 
     # Router ViewSets
     path('', include(router.urls)),

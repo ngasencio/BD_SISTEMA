@@ -706,6 +706,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
     perfil        = PerfilUsuarioSerializer(required=False)
     password      = serializers.CharField(write_only=True, required=False)
     establecimiento_nombre = serializers.SerializerMethodField()
+    departamentos_gestor   = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -713,9 +714,22 @@ class UserAdminSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name',
             'is_active', 'is_staff', 'is_superuser',
             'date_joined', 'last_login',
-            'password', 'perfil', 'establecimiento_nombre',
+            'password', 'perfil', 'establecimiento_nombre', 'departamentos_gestor',
         ]
         read_only_fields = ['date_joined', 'last_login', 'is_staff', 'is_superuser']
+
+    def get_departamentos_gestor(self, obj):
+        """Solo para role='gestor_compras': departamentos que ve (de solo lectura —
+        se asigna cambiando la pertenencia en el Panel SSO, no desde acá). None para
+        el resto, y lista vacía = gestor SIN alcance (no ve nada)."""
+        try:
+            if obj.perfil.role != 'gestor_compras':
+                return None
+        except Exception:
+            return None
+        from .services import resolver_alcance_gestor
+        alcance = resolver_alcance_gestor(obj)
+        return [d['nombre'] for d in alcance['departamentos']]
 
     def get_establecimiento_nombre(self, obj):
         try:

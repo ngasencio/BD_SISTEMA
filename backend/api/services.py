@@ -6,6 +6,7 @@ from datetime import date, datetime
 from difflib import SequenceMatcher
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Avg, CharField, Count, DecimalField, Max, Q, Sum, Value
 from django.db.models.functions import Cast, Concat, Substr
@@ -17,7 +18,7 @@ from .models import (
     CompraAgilResumen, CompraAgilProveedor, CompraAgilProductoCotizado, CompraAgilProducto,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog,
     SigfeAnexo1, ConceptoJerarquia,
-    PacProyectoMaestro, Departamento, Establecimiento, SsoSubdireccion,
+    PacProyectoMaestro, Departamento, Establecimiento, SsoSubdireccion, PertenenciaUsuario,
     Factura, FacturaSyncLog,
     FscOcLink, CompradorInicial, OcPacOverride,
     ComprasCompradorPerfil, ProcesoCompra, ProcesoCompraFormulario,
@@ -6579,3 +6580,184 @@ def calcular_compras_avance_global():
     kpis['pct_con_oc'] = round(100 * kpis['total_con_oc'] / kpis['total_activos'], 1) if kpis['total_activos'] else 0
 
     return {'kpis': kpis, 'por_comprador': filas}
+
+
+# =============================================================================
+# Gestor de Compras — alcance por departamento (2026-10-06)
+# =============================================================================
+#
+# El rol 'gestor_compras' ve el departamento que tiene asignado en
+# data_pertenencia_usuario (por PerfilUsuario.panel_id) MÁS sus descendientes, y
+# nada más: si pertenece a un departamento raíz ve todo su árbol; si pertenece a
+# un sub-departamento (ej. AYEKAN) ve SOLO ese sub-departamento (decisión del
+# usuario, 2026-10-06 — distinto al rollup a depto raíz de PAC Cumplimiento). El
+# alcance se calcula SIEMPRE en el servidor a partir del usuario autenticado —
+# jamás se acepta un departamento enviado por el cliente, salvo de roles de
+# supervisión.
+#
+# Se resuelve por ID de departamento y no por texto: p.ej. 'SUB. DPTO. DE SALUD
+# MENTAL EN ATENCION PRIMARIA...' contiene "Atención Primaria" pero NO cuelga del
+# Departamento Atención Primaria (id 21).
+
+ROLES_SUPERVISION_GESTOR = {'admin', 'jefatura', 'general'}
+_CACHE_ALCANCE_GESTOR_SEG = 60
+
+
+def _alcance_gestor_vacio(modo, motivo):
+    return {'modo': modo, 'motivo': motivo, 'depto_ids': [], 'departamentos': [], 'unidades': []}
+
+
+def _rol_usuario(user):
+    try:
+        return user.perfil.role
+    except Exception:
+        return None
+
+
+def _cuelga_de(depto_id, ancestro_id, mapa_deptos):
+    """True si `depto_id` es `ancestro_id` o cuelga de él por la cadena parent_id
+    (misma subdirección/establecimiento). Mismo criterio que _resolver_depto_raiz:
+    un nodo con es_depto == 'SI' corta la cadena — es de primer nivel aunque su
+    parent_id apunte a otro lado — así que no cuelga de nada que no sea él mismo."""
+    visitados = set()
+    actual = depto_id
+    while actual is not None and actual not in visitados:
+        if actual == ancestro_id:
+            return True
+        visitados.add(actual)
+        nodo = mapa_deptos.get(actual)
+        if not nodo or nodo['es_depto'] == 'SI':
+            return False
+        padre = mapa_deptos.get(nodo['parent_id'])
+        if (not padre or padre['subdireccion_id'] != nodo['subdireccion_id']
+                or padre['establecimiento_id'] != nodo['establecimiento_id']):
+            return False
+        actual = nodo['parent_id']
+    return False
+
+
+def resolver_alcance_gestor(user, depto_id=None):
+    """Alcance de datos de `user` en el módulo Gestor de Compras.
+
+    Retorna {modo, motivo, depto_ids, departamentos, unidades}:
+      - departamentos: los nodos asignados (cada uno con `sub_departamentos`, sus
+        descendientes).
+      - depto_ids: IDs de TODOS los departamentos en alcance (asignados + descendientes).
+      - unidades: valores de `unidad_requirente` (FormularioFSC) que casan con un
+        departamento en alcance — es lo que se usa para filtrar FSC.
+      - modo: 'gestor' | 'supervision' | 'sin_alcance'. Vacío (listas []) NUNCA
+        significa "todo": un usuario sin alcance no ve nada.
+
+    `depto_id` solo lo respetan los roles de supervisión (admin/jefatura/general)
+    para inspeccionar el panel de un departamento; para un gestor se ignora y se
+    usa su propia pertenencia.
+    """
+    if not user or not user.is_authenticated:
+        return _alcance_gestor_vacio('sin_alcance', 'Usuario no autenticado.')
+
+    rol = _rol_usuario(user)
+    es_supervisor = user.is_superuser or rol in ROLES_SUPERVISION_GESTOR
+    if not es_supervisor and rol != 'gestor_compras':
+        return _alcance_gestor_vacio('sin_alcance', 'El rol no tiene acceso al módulo Gestor de Compras.')
+
+    if es_supervisor:
+        try:
+            depto_id = int(depto_id) if depto_id not in (None, '') else None
+        except (TypeError, ValueError):
+            depto_id = None
+        if depto_id is None:
+            return _alcance_gestor_vacio('supervision', 'Seleccione un departamento para ver su panel.')
+        modo = 'supervision'
+    else:
+        depto_id = None
+        modo = 'gestor'
+
+    cache_key = f'gestor_alcance_{user.id}_{depto_id or 0}'
+    if (cached := cache.get(cache_key)) is not None:
+        return cached
+
+    mapa_deptos = _mapa_departamentos()
+
+    if modo == 'supervision':
+        if depto_id not in mapa_deptos:
+            return _alcance_gestor_vacio(modo, 'Departamento no encontrado.')
+        asignados = {depto_id}
+    else:
+        panel_id = getattr(getattr(user, 'perfil', None), 'panel_id', None)
+        if not panel_id:
+            return _alcance_gestor_vacio(modo, 'Su cuenta no está vinculada al Panel SSO.')
+        asignados = {
+            dep for dep in PertenenciaUsuario.objects.filter(
+                id_usuario=panel_id, tipo_dependencia='DEP',
+            ).values_list('id_dependencia', flat=True)
+            if dep in mapa_deptos
+        }
+        if not asignados:
+            return _alcance_gestor_vacio(modo, 'No tiene un departamento asignado en el Panel SSO.')
+
+    nombres_rama, _ = _mapa_nombres_subdireccion()
+    departamentos = []
+    en_alcance = set()
+    for asignado in sorted(asignados):
+        info = mapa_deptos[asignado]
+        descendientes = {
+            d_id for d_id in mapa_deptos
+            if d_id != asignado and _cuelga_de(d_id, asignado, mapa_deptos)
+        }
+        en_alcance |= {asignado} | descendientes
+        departamentos.append({
+            'id': asignado,
+            'nombre': info['descripcion'],
+            'subdireccion': nombres_rama.get((info['establecimiento_id'], info['subdireccion_id']), 'Sin Clasificar'),
+            'sub_departamentos': sorted(mapa_deptos[d]['descripcion'] for d in descendientes),
+        })
+
+    mapa_por_nombre = _mapa_departamentos_por_nombre()
+    unidades = sorted(
+        unidad for unidad in (
+            FormularioFSC.objects.exclude(unidad_requirente__isnull=True).exclude(unidad_requirente='')
+            .order_by().values_list('unidad_requirente', flat=True).distinct()
+        )
+        if (d := mapa_por_nombre.get(_normalizar_texto_pac(unidad))) and d.id in en_alcance
+    )
+
+    resultado = {
+        'modo': modo, 'motivo': None,
+        'depto_ids': sorted(en_alcance), 'departamentos': departamentos, 'unidades': unidades,
+    }
+    cache.set(cache_key, resultado, timeout=_CACHE_ALCANCE_GESTOR_SEG)
+    return resultado
+
+
+def listar_departamentos_gestionables():
+    """Departamentos (raíz o sub-departamento) con al menos un FSC — opciones del
+    selector de los roles de supervisión (admin/jefatura/general) para inspeccionar
+    el panel de un departamento. Cada fila trae su raíz para agrupar en el selector."""
+    cache_key = 'gestor_departamentos_gestionables'
+    if (cached := cache.get(cache_key)) is not None:
+        return cached
+    mapa_deptos = _mapa_departamentos()
+    nombres_rama, _ = _mapa_nombres_subdireccion()
+    mapa_por_nombre = _mapa_departamentos_por_nombre()
+    unidades = (
+        FormularioFSC.objects.exclude(unidad_requirente__isnull=True).exclude(unidad_requirente='')
+        .order_by().values_list('unidad_requirente', flat=True).distinct()
+    )
+    ids = {d.id for u in unidades if (d := mapa_por_nombre.get(_normalizar_texto_pac(u)))}
+    filas = []
+    for d_id in ids:
+        info = mapa_deptos.get(d_id)
+        if not info:
+            continue
+        raiz = mapa_deptos.get(_resolver_depto_raiz(d_id, mapa_deptos), info)
+        filas.append({
+            'id': d_id,
+            'nombre': info['descripcion'],
+            'es_raiz': raiz['id'] == d_id,
+            'depto_raiz': raiz['descripcion'],
+            'subdireccion': nombres_rama.get(
+                (raiz['establecimiento_id'], raiz['subdireccion_id']), 'Sin Clasificar'),
+        })
+    filas.sort(key=lambda f: (f['subdireccion'], f['depto_raiz'], not f['es_raiz'], f['nombre']))
+    cache.set(cache_key, filas, timeout=300)
+    return filas

@@ -1175,6 +1175,7 @@ class PerfilUsuario(models.Model):
         ('viewer',          'Visualizador'),
         ('comprador',       'Comprador'),
         ('jefatura',        'Jefatura Abastecimiento'),
+        ('gestor_compras',  'Gestor de Compras'),
     ]
 
     user               = models.OneToOneField(

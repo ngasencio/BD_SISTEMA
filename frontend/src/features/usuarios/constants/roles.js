@@ -6,6 +6,8 @@ const MODULOS_GENERALES = ['Licitaciones', 'Órdenes de Compra', 'PAC', 'Compra 
 const MODULOS_ABASTECIMIENTO = ['Formularios FSC', 'Boletas de Garantía', 'Contratos SSO'];
 const MODULOS_FINANZAS = ['Anexo N°1 — Ejec. Presupuestaria', 'Anexo N°3 — Reporte Deuda', 'Dashboard Finanzas'];
 const MODULOS_COMPRAS = ['Procesos de Compra'];
+const MODULOS_GESTOR = ['Gestor de Compras (solo su departamento)'];
+const MODULOS_GESTOR_SUPERVISION = ['Gestor de Compras (supervisión: cualquier departamento)'];
 
 export const ROLES = [
     {
@@ -41,21 +43,28 @@ export const ROLES = [
         label: 'Jefatura Abastecimiento',
         color: '#be185d',
         descripcion: 'Generales + Procesos de Compra con vista global (todos los compradores), dashboard de KPIs y notificaciones.',
-        modulos: [...MODULOS_GENERALES, ...MODULOS_COMPRAS],
+        modulos: [...MODULOS_GENERALES, ...MODULOS_COMPRAS, ...MODULOS_GESTOR_SUPERVISION],
+    },
+    {
+        value: 'gestor_compras',
+        label: 'Gestor de Compras',
+        color: '#0d9488',
+        descripcion: 'Generales + vista de solo lectura de las solicitudes, derivaciones a comprador y Plan de Compra de su propio departamento (según su pertenencia en el Panel SSO).',
+        modulos: [...MODULOS_GENERALES, ...MODULOS_GESTOR],
     },
     {
         value: 'general',
         label: 'General (Todos)',
         color: '#d97706',
         descripcion: 'Ve Abastecimiento, Finanzas y Procesos de Compra completos, sin administrar usuarios.',
-        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS, ...MODULOS_COMPRAS],
+        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS, ...MODULOS_COMPRAS, ...MODULOS_GESTOR_SUPERVISION],
     },
     {
         value: 'admin',
         label: 'Administrador',
         color: '#7c3aed',
         descripcion: 'Todo el sistema, incluyendo Gestión de Usuarios (roles, altas, bajas).',
-        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS, ...MODULOS_COMPRAS, 'Gestión de Usuarios'],
+        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS, ...MODULOS_COMPRAS, ...MODULOS_GESTOR_SUPERVISION, 'Gestión de Usuarios'],
     },
 ];
 
