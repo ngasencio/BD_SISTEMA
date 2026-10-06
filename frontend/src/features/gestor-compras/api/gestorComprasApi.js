@@ -31,6 +31,7 @@ export const getGestorProcesoDetalleMp = (id, params = {}) =>
 // ── Tab Plan de Compra ───────────────────────────────────────────────────────
 export const getGestorPlanResumen = (params = {}) => apiClient.get(`${B}/plan/resumen/`, { params });
 export const getGestorPlanTemporal = (params = {}) => apiClient.get(`${B}/plan/temporal/`, { params });
+export const getGestorPlanMensual = (params = {}) => apiClient.get(`${B}/plan/mensual/`, { params });
 export const getGestorPlanItems = (params = {}) => apiClient.get(`${B}/plan/items/`, { params });
 export const getGestorPlanItem = (idProyecto, params = {}) =>
     apiClient.get(`${B}/plan/items/${encodeURIComponent(idProyecto)}/`, { params });

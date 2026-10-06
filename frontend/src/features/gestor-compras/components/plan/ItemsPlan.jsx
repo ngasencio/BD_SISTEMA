@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getGestorPlanItems } from '../../api/gestorComprasApi';
 import { BarraPaginacion, fmtCLP, fmtN, useListaServidor } from '../solicitudes/shared';
 import { ESTADO_FICHA } from './ModalFichaGestor';
+import GraficoMensualPlan from './GraficoMensualPlan';
 
 const ESTADOS = [
     { key: '', label: 'Todos' },
@@ -17,23 +18,41 @@ const th = { padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: '#4
 // los formularios y órdenes de compra que los respaldan. Solo lectura.
 export default function ItemsPlan({ params, anho, onVerFicha }) {
     const [estado, setEstado] = useState('');
+    const [mes, setMes] = useState(null);   // 'YYYY-MM' elegido en el gráfico; filtra esta tabla
+    const tablaRef = useRef(null);
+
+    // El mes elegido pertenece a un año/departamento concretos: al cambiarlos deja de ser válido.
+    useEffect(() => { setMes(null); }, [params, anho]);
+
+    const elegirMes = useCallback((nuevo) => {
+        setMes(nuevo);
+        // Al elegir un mes llevamos la vista a la tabla para ver de inmediato los proyectos de ese mes.
+        if (nuevo) setTimeout(() => tablaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+    }, []);
+
     const filtros = useMemo(() => ({
         ...params,
         ...(anho ? { anho } : {}),
         ...(estado ? { estado } : {}),
-    }), [params, anho, estado]);
+        ...(mes ? { mes } : {}),
+    }), [params, anho, estado, mes]);
 
     // El endpoint pagina con page/page_size y no ordena (orden por fecha de compra más próxima).
     const { search, setSearch, page, setPage, data, cargando } =
         useListaServidor(getGestorPlanItems, undefined, filtros);
 
     return (
-        <div className="card">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <GraficoMensualPlan params={params} anho={anho} mes={mes} onSelectMes={elegirMes} />
+        <div className="card" ref={tablaRef}>
             <div style={{ padding: '16px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>📋 Ítems del Plan Anual de Compras</div>
                     <div style={{ fontSize: 12, color: '#64748b' }}>
-                        Proyectos de su departamento: ficha, formulario de compra vinculado y OC enlazada — {fmtN(data.count)} ficha(s)
+                        {mes
+                            ? <>Filtrado por <strong>{mes.slice(5)}/{mes.slice(0, 4)}</strong> (fecha de compra) — </>
+                            : 'Proyectos de su departamento: ficha, formulario de compra vinculado y OC enlazada — '}
+                        {fmtN(data.count)} ficha(s)
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -109,6 +128,7 @@ export default function ItemsPlan({ params, anho, onVerFicha }) {
             <div style={{ padding: '0 18px 12px' }}>
                 <BarraPaginacion page={page} setPage={setPage} count={data.count} />
             </div>
+        </div>
         </div>
     );
 }
