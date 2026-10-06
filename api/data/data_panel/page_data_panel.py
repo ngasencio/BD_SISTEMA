@@ -308,6 +308,11 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
 
     hoy = date.today()
 
+    # Insumo de las notificaciones al Gestor de Compras (ver notificar_gestores_cambios_fsc
+    # en services.py): solo transiciones REALES de bandeja y derivados recién creados.
+    cambios_estado = []
+    derivados_nuevos = []
+
     def _registrar_cambio_estado(fsc):
         """Agrega una entrada al historial de bandejas SOLO si el estado cambió desde
         la última vez que se vio este FSC (o si nunca se había registrado).
@@ -322,6 +327,12 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
         ultimo = fsc.historial_estados.order_by('-fecha_registro').first()
         if ultimo is None or ultimo.estado != fsc.estado:
             FormularioFSCEstadoLog.objects.create(formulario=fsc, estado=fsc.estado, fecha_registro=hoy)
+            if ultimo is not None:  # la primera vez que se ve un FSC no es un "cambio"
+                cambios_estado.append({
+                    "folio": fsc.folio, "anho": fsc.anho, "formulario": fsc.formulario,
+                    "unidad": fsc.unidad_requirente, "anterior": ultimo.estado, "nuevo": fsc.estado,
+                    "destino_actual": fsc.destino_actual,
+                })
 
     _COLS_ADJ = ["adj_espec_tecnicas", "adj_cotizacion", "adj_validacion", "adj_form_justificacion"]
     _COLS_NEW_FSC = ["destino_actual", "item_presupuestario", "folio_requerimiento"]
@@ -445,8 +456,14 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                     item_presupuestario=_to_str(row["item_presupuestario"]),
                     folio_requerimiento=_to_str(row["folio_requerimiento"]),
                 )
-                _, creado = _upsert(FormularioFSCDerivado, lookup, campos)
+                derivado, creado = _upsert(FormularioFSCDerivado, lookup, campos)
                 resumen["derivados"]["nuevos" if creado else "actualizados"] += 1
+                if creado:
+                    derivados_nuevos.append({
+                        "folio": derivado.folio, "anho": derivado.anho, "formulario": derivado.formulario,
+                        "unidad": derivado.unidad_requirente, "comprador": derivado.comprador,
+                        "fecha_derivado": derivado.fecha_derivado,
+                    })
                 if (i + 1) % 300 == 0:
                     _avisar(log=f"Derivados: {i + 1}/{len(tabla)} procesados...")
             resumen["derivados"]["eliminados"] = _sincronizar_borrado(
@@ -499,6 +516,17 @@ def cargar_formularios_a_django(archivos=None, progress_callback=None):
                 FormularioFSCProducto, _CAMPOS_CLAVE_PRODUCTO, anhos_vigentes, claves_vigentes, _avisar, "Carro"
             )
         _avisar(log=f"Carro → {resumen['carro']['nuevos']} nuevos, {resumen['carro']['actualizados']} actualizados, {resumen['carro']['eliminados']} eliminados.")
+
+    # Notificaciones in-app al Gestor de Compras (campanita). Fuera de las transacciones del
+    # sync y en try/except: un fallo acá nunca debe tumbar el ETL, solo se loguea.
+    try:
+        from api.services import notificar_gestores_cambios_fsc
+        avisos = notificar_gestores_cambios_fsc(cambios_estado, derivados_nuevos)
+        if avisos["cambios"] or avisos["derivados"]:
+            _avisar(log=f"🔔 Gestores de Compras notificados: {avisos['cambios']} cambio(s) de bandeja, "
+                        f"{avisos['derivados']} derivación(es) a comprador.")
+    except Exception as e:
+        _avisar(log=f"⚠️ No se pudieron generar las notificaciones a gestores: {e}")
 
     total_nuevos = sum(r["nuevos"] for r in resumen.values())
     total_actualizados = sum(r["actualizados"] for r in resumen.values())

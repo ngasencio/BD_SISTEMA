@@ -2,7 +2,7 @@ import calendar
 import logging
 import re
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 
 from django.contrib.auth.models import User
@@ -6555,6 +6555,149 @@ def _notificar_jefaturas(tipo, proceso, mensaje):
             'Error creando notificaciones de jefatura (proceso_id=%s, tipo=%s)',
             proceso.id if proceso else None, tipo,
         )
+    # Mismo evento, también a los gestores de los departamentos cuyos FSC están en el proceso.
+    # Sin deduplicar: cada cambio de estado/comentario es un hecho distinto aunque el texto
+    # coincida. Nunca propaga una excepción (_notificar_gestores la absorbe).
+    if proceso is not None:
+        unidades = ProcesoCompraFormulario.objects.filter(proceso=proceso).values_list(
+            'formulario_derivado__unidad_requirente', flat=True)
+        _notificar_gestores(tipo, mensaje, [u for u in unidades if u], proceso=proceso, deduplicar=False)
+
+
+# ── Gestor de Compras: notificaciones in-app ─────────────────────────────────────────
+#
+# Eventos que recibe el gestor (decisión 2026-10-06, solo campanita, sin correo):
+#   - un FSC de su departamento cambia de bandeja de visación  → FSC_BANDEJA   (ETL de FSC)
+#   - un FSC suyo queda derivado a un comprador                → FSC_DERIVADO  (ETL de FSC)
+#   - su proceso de compra cambia de estado / se comenta / etc → CAMBIO_ESTADO, NUEVO_PROCESO,
+#                                                                EMISION_OC (_notificar_jefaturas)
+#   - la Licitación/Compra Ágil de su proceso está por cerrar  → CIERRE_PROXIMO (comando
+#                                                                notificar_plazos_gestores, a programar)
+
+_DIAS_DEDUPE_NOTIFICACION = 7
+
+
+def _gestores_por_unidad():
+    """{unidad_requirente: [User gestor, ...]} según el alcance de cada gestor activo."""
+    mapa = defaultdict(list)
+    gestores = User.objects.filter(is_active=True, perfil__role='gestor_compras').select_related('perfil')
+    for gestor in gestores:
+        for unidad in resolver_alcance_gestor(gestor)['unidades']:
+            mapa[unidad].append(gestor)
+    return mapa
+
+
+def _notificar_destinatarios(destinatarios, tipo, mensaje, proceso=None, deduplicar=False,
+                             dias_dedupe=_DIAS_DEDUPE_NOTIFICACION):
+    """Crea una ComprasNotificacion por destinatario. Con `deduplicar`, omite a quien ya
+    recibió la MISMA notificación (tipo + mensaje) en los últimos `dias_dedupe` días — necesario
+    en los eventos que vienen de un ETL, que pueden repetirse (el ETL de FSC documenta un bug
+    de upsert que duplica filas). Devuelve cuántas creó. Nunca propaga una excepción."""
+    try:
+        destinatarios = {d.id: d for d in destinatarios}
+        if not destinatarios:
+            return 0
+        mensaje = mensaje[:500]
+        if deduplicar:
+            desde = timezone.now() - timedelta(days=dias_dedupe)
+            ya_notificados = set(ComprasNotificacion.objects.filter(
+                destinatario_id__in=list(destinatarios), tipo=tipo, mensaje=mensaje, creado_en__gte=desde,
+            ).values_list('destinatario_id', flat=True))
+            destinatarios = {i: d for i, d in destinatarios.items() if i not in ya_notificados}
+        ComprasNotificacion.objects.bulk_create([
+            ComprasNotificacion(destinatario=d, proceso=proceso, tipo=tipo, mensaje=mensaje)
+            for d in destinatarios.values()
+        ])
+        return len(destinatarios)
+    except Exception:
+        logger.exception('Error creando notificaciones (tipo=%s)', tipo)
+        return 0
+
+
+def _notificar_gestores(tipo, mensaje, unidades, proceso=None, deduplicar=False, gestores_por_unidad=None):
+    """Notifica a los gestores cuyo alcance incluye alguna de las `unidades`."""
+    try:
+        mapa = gestores_por_unidad if gestores_por_unidad is not None else _gestores_por_unidad()
+        destinatarios = {g.id: g for unidad in set(unidades) for g in mapa.get(unidad, [])}
+        return _notificar_destinatarios(destinatarios.values(), tipo, mensaje, proceso=proceso, deduplicar=deduplicar)
+    except Exception:
+        logger.exception('Error notificando a gestores (tipo=%s)', tipo)
+        return 0
+
+
+# Un lote de derivados nuevos más grande que esto es una carga masiva (primer sync, tabla
+# recreada), no actividad real — se omite en vez de inundar la campanita.
+_MAX_DERIVADOS_NUEVOS_NOTIFICABLES = 100
+_DIAS_DERIVADO_RECIENTE = 30
+
+
+def notificar_gestores_cambios_fsc(cambios_estado=(), derivados_nuevos=()):
+    """Notifica a los gestores los cambios que trajo un sync del ETL de FSC.
+
+    `cambios_estado`: dicts {folio, anho, formulario, unidad, anterior, nuevo, destino_actual}
+    — SOLO transiciones reales (con estado previo registrado), nunca la primera vez que se ve
+    un FSC. `derivados_nuevos`: dicts {folio, anho, formulario, unidad, comprador, fecha_derivado}.
+    Deduplicado por (tipo, mensaje) en 7 días. Devuelve {'cambios': n, 'derivados': n}."""
+    resultado = {'cambios': 0, 'derivados': 0}
+    mapa = _gestores_por_unidad()
+    if not mapa:
+        return resultado
+
+    nombres = dict(PIPELINE_ESTADOS_FSC)
+    nombres['R'] = 'Rechazado'
+    for c in cambios_estado:
+        if c['unidad'] not in mapa:
+            continue
+        id_formulario = generar_id_formulario(c['folio'], c['anho'], formulario_texto=c.get('formulario'))
+        msg = (f"{id_formulario} pasó de «{nombres.get(c['anterior'], c['anterior'])}» "
+               f"a «{nombres.get(c['nuevo'], c['nuevo'])}».")
+        if c.get('destino_actual'):
+            msg += f" Ahora en bandeja de {c['destino_actual']}."
+        resultado['cambios'] += _notificar_gestores(
+            ComprasNotificacion.FSC_BANDEJA, msg, [c['unidad']], deduplicar=True, gestores_por_unidad=mapa)
+
+    derivados_nuevos = list(derivados_nuevos)
+    if len(derivados_nuevos) > _MAX_DERIVADOS_NUEVOS_NOTIFICABLES:
+        logger.warning('notificar_gestores_cambios_fsc: %s derivados nuevos en un sync — se asume carga '
+                       'masiva y no se notifica.', len(derivados_nuevos))
+        return resultado
+    hoy = date.today()
+    for d in derivados_nuevos:
+        if d['unidad'] not in mapa:
+            continue
+        fecha = _parse_fecha_fsc(d.get('fecha_derivado'))
+        if not fecha or (hoy - fecha).days > _DIAS_DERIVADO_RECIENTE:
+            continue
+        id_formulario = generar_id_formulario(d['folio'], d['anho'], formulario_texto=d.get('formulario'))
+        comprador = d.get('comprador') or 'un comprador (aún sin asignar)'
+        msg = f'{id_formulario} fue derivado a comprador: {comprador}.'
+        resultado['derivados'] += _notificar_gestores(
+            ComprasNotificacion.FSC_DERIVADO, msg, [d['unidad']], deduplicar=True, gestores_por_unidad=mapa)
+    return resultado
+
+
+def generar_notificaciones_plazos_gestores():
+    """Avisa a cada gestor de los plazos de Mercado Público por vencer o vencidos de los
+    procesos de su departamento (los mismos que ve en el tab Derivación a Comprador:
+    urgencia 'vencido' o 'alta' = ≤3 días). El texto es estable para un mismo plazo, así
+    que se deduplica por 14 días — no se repite cada vez que corre. Pensada para correr a
+    diario (comando notificar_plazos_gestores). Devuelve cuántas notificaciones creó."""
+    creadas = 0
+    gestores = User.objects.filter(is_active=True, perfil__role='gestor_compras').select_related('perfil')
+    for gestor in gestores:
+        unidades = resolver_alcance_gestor(gestor)['unidades']
+        if not unidades:
+            continue
+        for alerta in calcular_compras_resumen_gestor(unidades)['alertas']:
+            if alerta['urgencia'] not in ('vencido', 'alta'):
+                continue
+            verbo = 'cerró' if alerta['dias'] < 0 else 'cierra'
+            msg = (f"Plazo Mercado Público: {alerta['fuente']} {alerta['codigo_mp']} "
+                   f"de «{alerta['titulo']}» {verbo} el {alerta['fecha_cierre']}.")
+            proceso = ProcesoCompra.objects.filter(pk=alerta['proceso_id']).first()
+            creadas += _notificar_destinatarios(
+                [gestor], ComprasNotificacion.CIERRE_PROXIMO, msg, proceso=proceso, deduplicar=True, dias_dedupe=14)
+    return creadas
 
 
 def _parse_fecha_fsc(fecha_str):

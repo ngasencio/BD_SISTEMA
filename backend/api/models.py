@@ -1655,11 +1655,15 @@ class ComprasNotificacion(models.Model):
     CIERRE_PROXIMO  = 'CIERRE_PROXIMO'
     NUEVO_PROCESO   = 'NUEVO_PROCESO'
     EMISION_OC      = 'EMISION_OC'
+    FSC_BANDEJA     = 'FSC_BANDEJA'
+    FSC_DERIVADO    = 'FSC_DERIVADO'
     TIPO_CHOICES = [
         (CAMBIO_ESTADO,  'Cambio de Estado'),
         (CIERRE_PROXIMO, 'Alerta de Cierre Próximo'),
         (NUEVO_PROCESO,  'Nuevo Proceso Creado'),
         (EMISION_OC,     'Orden de Compra Vinculada'),
+        (FSC_BANDEJA,    'FSC Cambió de Bandeja'),            # Gestor de Compras: ETL de FSC
+        (FSC_DERIVADO,   'FSC Derivado a Comprador'),         # Gestor de Compras: ETL de FSC
     ]
     destinatario = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='compras_notificaciones')
     proceso = models.ForeignKey('ProcesoCompra', on_delete=models.CASCADE, null=True, blank=True,
