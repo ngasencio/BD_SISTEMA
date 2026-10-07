@@ -1681,3 +1681,140 @@ class ComprasNotificacion(models.Model):
 
     def __str__(self):
         return f"{self.tipo} → {self.destinatario_id} ({'leída' if self.leida else 'pendiente'})"
+
+
+# =============================================================================
+# Notificación del Plan de Compras (Gestor de Compras > pestaña "Notificación")
+# Ver api/services_notificacion_plan.py
+# =============================================================================
+
+class PacResponsableCorreo(models.Model):
+    """Equivalencia confirmada a mano: nombre de responsable del PAC → correo.
+
+    `PlanerPAC.nombre_responsable` es solo un nombre (con tildes rotas, apellidos de más,
+    etc.) y no trae correo. El cruce automático con `UsuarioPanel` cubre la mayoría; los
+    casos dudosos los confirma una persona UNA vez y quedan acá, de modo que no se vuelve
+    a preguntar. `nombre_normalizado` (minúsculas, sin tildes ni signos) es la llave."""
+    nombre_normalizado = models.CharField(max_length=200, unique=True)
+    nombre_original = models.CharField(max_length=200, blank=True, default='')
+    correo = models.EmailField(max_length=150)
+    confirmado_por = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'data_pac_responsable_correo'
+
+    def __str__(self):
+        return f"{self.nombre_original} → {self.correo}"
+
+
+class NotificacionPlanLote(models.Model):
+    """Un 'Enviar' del módulo: agrupa los correos (uno por responsable) de esa acción."""
+    ESTADO_ENVIANDO = 'ENVIANDO'
+    ESTADO_ENVIADO = 'ENVIADO'      # todos los correos salieron
+    ESTADO_PARCIAL = 'PARCIAL'      # salieron algunos y otros fallaron
+    ESTADO_ERROR = 'ERROR'          # no salió ninguno
+    ESTADO_CHOICES = [
+        (ESTADO_ENVIANDO, 'Enviando'), (ESTADO_ENVIADO, 'Enviado'),
+        (ESTADO_PARCIAL, 'Parcial'), (ESTADO_ERROR, 'Con error'),
+    ]
+    creado_por = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, related_name='+')
+    creado_en = models.DateTimeField(auto_now_add=True, db_index=True)
+    anho = models.IntegerField(null=True, blank=True)
+    # True = el lote se envió en MODO PRUEBA: todo fue al destino de prueba, no a los
+    # responsables reales. Estos lotes NO cuentan como "ya notificado" de un plan.
+    modo_prueba = models.BooleanField(default=True, db_index=True)
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default=ESTADO_ENVIANDO)
+    filtros = models.TextField(blank=True, default='')       # JSON con los filtros usados (auditoría)
+    total_responsables = models.IntegerField(default=0)
+    total_planes = models.IntegerField(default=0)
+    enviados = models.IntegerField(default=0)
+    fallidos = models.IntegerField(default=0)
+    resumen_enviado = models.BooleanField(default=False)     # correo de cierre con PDF
+
+    class Meta:
+        db_table = 'data_notif_plan_lote'
+        ordering = ['-creado_en']
+
+    def __str__(self):
+        return f"Lote {self.pk} {self.creado_en:%Y-%m-%d %H:%M} — {self.estado}"
+
+
+class NotificacionPlanEnvio(models.Model):
+    """Un correo (a un responsable) dentro de un lote. Guarda lo que REALMENTE se usó:
+    `destinatario_real` es el correo del responsable; `enviado_a` es adónde salió (en
+    modo prueba difieren)."""
+    ESTADO_PENDIENTE = 'PENDIENTE'
+    ESTADO_ENVIADO = 'ENVIADO'
+    ESTADO_ERROR = 'ERROR'
+    ESTADO_CHOICES = [
+        (ESTADO_PENDIENTE, 'Pendiente'), (ESTADO_ENVIADO, 'Enviado'), (ESTADO_ERROR, 'Error'),
+    ]
+    lote = models.ForeignKey(NotificacionPlanLote, on_delete=models.CASCADE, related_name='envios')
+    nombre_responsable = models.CharField(max_length=200)
+    cargo_responsable = models.CharField(max_length=250, blank=True, default='')
+    departamento = models.CharField(max_length=250, blank=True, default='')
+    destinatario_real = models.CharField(max_length=150, blank=True, default='')
+    enviado_a = models.CharField(max_length=500, blank=True, default='')
+    cc = models.TextField(blank=True, default='')            # correos en copia, separados por coma
+    jefaturas = models.TextField(blank=True, default='')     # JSON [{nombre, cargo, correo}]
+    asunto = models.CharField(max_length=300, blank=True, default='')
+    n_planes = models.IntegerField(default=0)
+    monto_total = models.DecimalField(max_digits=18, decimal_places=0, default=0)
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default=ESTADO_PENDIENTE, db_index=True)
+    error = models.TextField(blank=True, default='')
+    enviado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'data_notif_plan_envio'
+        ordering = ['nombre_responsable']
+
+    def __str__(self):
+        return f"{self.nombre_responsable} — {self.estado}"
+
+
+class NotificacionPlanItem(models.Model):
+    """Plan (ficha PAC, `id_proyecto`) incluido en un correo. Tabla propia, y no un JSON
+    dentro del envío, para poder preguntar 'qué planes ya se notificaron' con un índice."""
+    envio = models.ForeignKey(NotificacionPlanEnvio, on_delete=models.CASCADE, related_name='items')
+    id_proyecto = models.CharField(max_length=100, db_index=True)
+    anho = models.IntegerField(null=True, blank=True)
+    nombre_proyecto = models.TextField(blank=True, default='')
+
+    class Meta:
+        db_table = 'data_notif_plan_item'
+        indexes = [models.Index(fields=['id_proyecto', 'anho'], name='idx_notif_item_proy_anho')]
+
+    def __str__(self):
+        return f"{self.id_proyecto} (envío {self.envio_id})"
+
+
+class NotificacionPlanCopia(models.Model):
+    """Regla PERMANENTE de copia (CC) de la Notificación del Plan de Compras, por departamento.
+
+    Las jefaturas que van en copia salen automáticamente del cargo (ver
+    services_notificacion_plan.jefaturas_por_departamento); esta tabla guarda las correcciones
+    que una persona hizo a esa lista y que deben recordarse en todos los envíos futuros:
+      · EXCLUIR → esa persona NO va en copia de los correos de este departamento.
+      · AGREGAR → este correo SIEMPRE va en copia de los correos de este departamento.
+    Un mismo (departamento, correo) tiene como máximo una regla (agregar y excluir se anulan).
+    `departamento_id` apunta a Departamento (managed=False, id int(11)): sin FK a propósito."""
+    ACCION_EXCLUIR = 'EXCLUIR'
+    ACCION_AGREGAR = 'AGREGAR'
+    ACCION_CHOICES = [(ACCION_EXCLUIR, 'Excluir de las copias'), (ACCION_AGREGAR, 'Agregar a las copias')]
+
+    departamento_id = models.IntegerField(db_index=True)
+    correo = models.EmailField(max_length=150)
+    nombre = models.CharField(max_length=200, blank=True, default='')
+    accion = models.CharField(max_length=10, choices=ACCION_CHOICES)
+    creado_por = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'data_notif_plan_copia'
+        constraints = [models.UniqueConstraint(fields=['departamento_id', 'correo'], name='uq_notif_copia_depto_correo')]
+
+    def __str__(self):
+        return f"{self.accion} {self.correo} (depto {self.departamento_id})"

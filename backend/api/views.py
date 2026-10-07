@@ -153,6 +153,17 @@ class _IsGestorCompras(BasePermission):
         return _tiene_rol(request.user, {'admin', 'gestor_compras', 'jefatura', 'general'})
 
 
+class _IsNotificadorPlan(BasePermission):
+    """Pestaña 'Notificación' (correos masivos a funcionarios con el PAC): SOLO las
+    cuentas cuyo correo está en settings.NOTIF_PLAN_USUARIOS — no basta ser admin.
+    Se valida acá y no solo ocultando la pestaña: un POST directo al endpoint recibe 403."""
+    message = 'No tiene autorización para enviar notificaciones del Plan de Compras.'
+
+    def has_permission(self, request, view):
+        from .services_notificacion_plan import usuario_puede_notificar_plan
+        return usuario_puede_notificar_plan(request.user)
+
+
 class _NoGestorCompras(BasePermission):
     """Excluye SOLO al rol 'gestor_compras' (el resto de roles pasa igual que con
     IsAuthenticated a secas). Se aplica a /pac-cumplimiento/*: ahí viven los Rankings,
@@ -2462,6 +2473,9 @@ def gestor_mi_alcance_view(request):
         'motivo': alcance['motivo'],
         'todos': alcance.get('todos', False),
         'departamentos': alcance['departamentos'],
+        # Solo para que la UI muestre la pestaña "Notificación"; la autorización real la
+        # impone _IsNotificadorPlan en cada endpoint notificacion-plan/*.
+        'puede_notificar': _IsNotificadorPlan().has_permission(request, None),
     }
     if alcance['modo'] == 'supervision':
         data['departamentos_disponibles'] = listar_departamentos_gestionables()
@@ -4919,6 +4933,218 @@ def gestor_plan_item_detalle_view(request, id_proyecto):
     if data is None:
         return Response({'detail': 'Ficha PAC no encontrada.'}, status=404)
     return Response(data)
+
+
+# ── Notificación del Plan de Compras (solo cuentas de NOTIF_PLAN_USUARIOS) ─────
+# Lógica en services_notificacion_plan.py; acá solo se validan parámetros y permisos.
+
+def _notif_body(request):
+    """Cuerpo JSON como dict (un arreglo o texto suelto no debe provocar un 500)."""
+    return request.data if isinstance(request.data, dict) else {}
+
+
+def _notif_filtros(request):
+    """Filtros comunes de las vistas de notificación, ya validados."""
+    estados = [e for e in request.GET.get('estado', '').split(',') if e.strip()]
+    mes = request.GET.get('mes', '').strip() or None
+    return {
+        'estados': estados or None,
+        'mes': mes,
+        'search': request.GET.get('search', '').strip() or None,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsNotificadorPlan])
+def notif_plan_planes_view(request):
+    from .services_notificacion_plan import listar_planes_notificables
+    alcance = _gestor_alcance(request)
+    page, page_size = _gestor_pagina(request)
+    correo = request.GET.get('correo', '').strip()
+    notificado = request.GET.get('notificado', '').strip()
+    return Response(listar_planes_notificables(
+        anho=_gestor_anho(request), depto_ids=_gestor_depto_ids(alcance),
+        responsable=request.GET.get('responsable', '').strip() or None,
+        correo=correo if correo in ('con', 'sin') else None,
+        notificado=notificado if notificado in ('si', 'no') else None,
+        page=page, page_size=page_size, **_notif_filtros(request),
+    ))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsNotificadorPlan])
+def notif_plan_responsables_pendientes_view(request):
+    from .services_notificacion_plan import listar_responsables_por_confirmar
+    alcance = _gestor_alcance(request)
+    return Response({'results': listar_responsables_por_confirmar(
+        anho=_gestor_anho(request), depto_ids=_gestor_depto_ids(alcance), **_notif_filtros(request))})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, _IsNotificadorPlan])
+def notif_plan_confirmar_correo_view(request):
+    """Guarda la equivalencia nombre del PAC → correo (una sola vez por responsable)."""
+    from .services_notificacion_plan import confirmar_correo_responsable
+    try:
+        obj = confirmar_correo_responsable(
+            _notif_body(request).get('nombre_responsable'), _notif_body(request).get('correo'), request.user)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    return Response({'nombre_responsable': obj.nombre_original, 'correo': obj.correo})
+
+
+def _notif_seleccion(data):
+    """Valida y normaliza la selección que llega del frontend (nunca se confía en el cuerpo tal cual):
+    {'anho', 'ids': [...]} o {'anho', 'filtros': {...}, 'excluir': [...]}. Lanza ValueError si es inválida."""
+    if not isinstance(data, dict):
+        raise ValueError('Selección inválida.')
+    anho = data.get('anho')
+    try:
+        anho = int(anho) if anho not in (None, '') else None
+    except (TypeError, ValueError):
+        raise ValueError('Año inválido.')
+
+    def _lista_ids(valor):
+        if not isinstance(valor, list) or len(valor) > 20000:
+            raise ValueError('Lista de planes inválida.')
+        return [str(v)[:100] for v in valor]
+
+    if data.get('ids') is not None:
+        return {'anho': anho, 'ids': _lista_ids(data['ids'])}
+    filtros = data.get('filtros')
+    if not isinstance(filtros, dict):
+        raise ValueError('Debe indicar los planes (ids) o los filtros.')
+    estados = filtros.get('estados')
+    limpios = {
+        'estados': [str(e) for e in estados][:10] if isinstance(estados, list) else None,
+        'mes': str(filtros.get('mes') or '')[:7] or None,
+        'search': str(filtros.get('search') or '')[:200] or None,
+        'responsable': str(filtros.get('responsable') or '')[:200] or None,
+        'correo': filtros.get('correo') if filtros.get('correo') in ('con', 'sin') else None,
+        'notificado': filtros.get('notificado') if filtros.get('notificado') in ('si', 'no') else None,
+    }
+    return {'anho': anho, 'filtros': limpios, 'excluir': _lista_ids(data.get('excluir') or [])}
+
+
+def _notif_ajustes(data):
+    """Ajustes de copia SOLO de este envío: {nombre_responsable: {quitar: [correos], agregar: [correos]}}.
+    Se normaliza a listas de texto acotadas; cualquier otra forma es un error 400."""
+    if data in (None, ''):
+        return {}
+    if not isinstance(data, dict) or len(data) > 2000:
+        raise ValueError('Ajustes de copia inválidos.')
+    limpio = {}
+    for nombre, ajuste in data.items():
+        if not isinstance(ajuste, dict):
+            raise ValueError('Ajustes de copia inválidos.')
+        limpio[str(nombre)[:200]] = {
+            clave: [str(c)[:150] for c in ajuste.get(clave, [])][:50]
+            if isinstance(ajuste.get(clave, []), list) else []
+            for clave in ('quitar', 'agregar')
+        }
+    return limpio
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, _IsNotificadorPlan])
+def notif_plan_previsualizar_view(request):
+    """Qué se enviaría (TO/CC por responsable, omitidos, reenvíos) y el HTML de un correo de ejemplo."""
+    from .services_notificacion_plan import previsualizar_lote
+    try:
+        seleccion = _notif_seleccion(_notif_body(request).get('seleccion'))
+        ajustes = _notif_ajustes(_notif_body(request).get('ajustes_cc'))
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    alcance = _gestor_alcance(request)
+    return Response(previsualizar_lote(
+        seleccion, _gestor_depto_ids(alcance), ejemplo=_notif_body(request).get('ejemplo'), ajustes=ajustes,
+        usuario=request.user))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, _IsNotificadorPlan])
+def notif_plan_enviar_prueba_view(request):
+    """Manda UN correo de muestra solo a la cuenta de prueba (nunca al responsable real), aunque el
+    sistema esté en modo oficial. No crea lote ni marca planes como notificados."""
+    from .services_notificacion_plan import enviar_prueba
+    try:
+        seleccion = _notif_seleccion(_notif_body(request).get('seleccion'))
+        ajustes = _notif_ajustes(_notif_body(request).get('ajustes_cc'))
+        resultado = enviar_prueba(seleccion, _gestor_depto_ids(_gestor_alcance(request)),
+                                  ejemplo=_notif_body(request).get('ejemplo'), ajustes=ajustes)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    except Exception as exc:   # noqa: BLE001 — SMTP caído, credenciales, etc.: mensaje claro, sin detalles internos
+        from .services_notificacion_plan import _mensaje_error
+        logger.error('Falló el envío de prueba de notificaciones: %s', _mensaje_error(exc))
+        return Response({'detail': 'No se pudo enviar el correo de prueba. Revise la conexión de correo.'}, status=502)
+    return Response(resultado)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, _IsNotificadorPlan])
+def notif_plan_copias_view(request):
+    """Regla PERMANENTE de copia por departamento: {accion: excluir|agregar|olvidar,
+    departamento_id, correo, nombre?}. Aplica a todos los envíos futuros de ese departamento."""
+    from .services_notificacion_plan import guardar_regla_copia
+    b = _notif_body(request)
+    try:
+        guardar_regla_copia(b.get('accion'), b.get('departamento_id'), b.get('correo'), b.get('nombre'), request.user)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    return Response({'ok': True})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, _IsNotificadorPlan])
+def notif_plan_enviar_view(request):
+    """Crea el lote y lo envía en segundo plano. 202 + lote_id; el avance se consulta en
+    notificacion/lotes/<id>/. 409 si hay planes ya notificados sin confirmar el reenvío, o si
+    ya hay un envío en curso."""
+    from .services_notificacion_plan import (
+        ConfirmacionRealPendiente, EnvioEnCurso, ReenvioPendiente, iniciar_envio,
+    )
+    try:
+        seleccion = _notif_seleccion(_notif_body(request).get('seleccion'))
+        lote = iniciar_envio(
+            seleccion, _gestor_depto_ids(_gestor_alcance(request)), request.user,
+            confirmar_reenvio=_notif_body(request).get('confirmar_reenvio') is True,
+            ajustes=_notif_ajustes(_notif_body(request).get('ajustes_cc')),
+            confirmar_real=_notif_body(request).get('confirmar_envio_real') is True)
+    except ConfirmacionRealPendiente as exc:
+        return Response({'code': 'confirmar_real', 'detail': str(exc)}, status=409)
+    except ReenvioPendiente as exc:
+        return Response({'code': 'reenvio', 'detail': str(exc), 'planes': exc.planes}, status=409)
+    except EnvioEnCurso as exc:
+        return Response({'code': 'en_curso', 'detail': str(exc)}, status=409)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    return Response({'lote_id': lote.pk, 'estado': lote.estado}, status=202)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsNotificadorPlan])
+def notif_plan_lote_view(request, lote_id):
+    from .services_notificacion_plan import estado_lote
+    data = estado_lote(lote_id)
+    if data is None:
+        return Response({'detail': 'Lote no encontrado.'}, status=404)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsNotificadorPlan])
+def notif_plan_lote_pdf_view(request, lote_id):
+    """Descarga el PDF de cierre del lote (a quiénes se notificó y con qué resultado)."""
+    from .models import NotificacionPlanLote
+    from .services_notificacion_plan_pdf import generar_pdf_lote
+    try:
+        pdf = generar_pdf_lote(lote_id)
+    except NotificacionPlanLote.DoesNotExist:
+        return Response({'detail': 'Lote no encontrado.'}, status=404)
+    resp = HttpResponse(pdf, content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="notificaciones_plan_compras_lote_{lote_id}.pdf"'
+    return resp
 
 
 class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):

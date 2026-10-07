@@ -19,7 +19,10 @@ const etiquetaLarga = (m) => `${m.nombre_mes} ${m.anio}`;
 // estado de ejecución. Clic en una barra (o elegir el mes en el selector) filtra la tabla de abajo a
 // ese mes; clic de nuevo, o "Quitar filtro", lo deshace. Cada ficha cuenta una sola vez, en el mes de
 // su fecha de compra más próxima — la misma con la que filtra la tabla, así que ambas calzan.
-export default function GraficoMensualPlan({ params, anho, mes, onSelectMes }) {
+// `soloPorAvisar` (pestaña Notificación): oculta lo ya ejecutado y cuenta solo pendientes + atrasados,
+// que es lo único que se puede avisar; así un mes sin nada por avisar no se puede elegir y la tabla
+// nunca queda vacía por culpa del gráfico.
+export default function GraficoMensualPlan({ params, anho, mes, onSelectMes, soloPorAvisar = false }) {
     const [datos, setDatos] = useState(null);
     const [cargando, setCargando] = useState(true);
     const [metrica, setMetrica] = useState('cantidad');
@@ -34,13 +37,22 @@ export default function GraficoMensualPlan({ params, anho, mes, onSelectMes }) {
         return () => { activo = false; };
     }, [params, anho]);
 
-    const meses = useMemo(() => datos?.meses ?? [], [datos]);
+    const meses = useMemo(() => {
+        const base = datos?.meses ?? [];
+        if (!soloPorAvisar) return base;
+        return base.map((m) => ({
+            ...m, ejecutado: 0, monto_ejecutado: 0,
+            total: m.pendiente + m.atrasado, monto_total: m.monto_pendiente + m.monto_atrasado,
+        }));
+    }, [datos, soloPorAvisar]);
+    const series = useMemo(
+        () => (soloPorAvisar ? SERIES.filter((s) => s.clave !== 'ejecutado') : SERIES), [soloPorAvisar]);
     const seleccionado = meses.find((m) => m.mes === mes) || null;
     const esMonto = metrica === 'monto';
 
     const chartData = useMemo(() => ({
         labels: meses.map(etiqueta),
-        datasets: SERIES.map((s) => ({
+        datasets: series.map((s) => ({
             label: s.label,
             data: meses.map((m) => (esMonto ? m[`monto_${s.clave}`] : m[s.clave])),
             // Con un mes elegido, el resto se atenúa para que se vea cuál está filtrando la tabla.
@@ -48,7 +60,7 @@ export default function GraficoMensualPlan({ params, anho, mes, onSelectMes }) {
             borderRadius: 4,
             stack: 'estado',
         })),
-    }), [meses, mes, esMonto]);
+    }), [meses, mes, esMonto, series]);
 
     const opciones = useMemo(() => ({
         responsive: true,
@@ -72,7 +84,9 @@ export default function GraficoMensualPlan({ params, anho, mes, onSelectMes }) {
                     label: (ctx) => ` ${ctx.dataset.label}: ${esMonto ? fmtCompacto(ctx.raw) : `${fmtN(ctx.raw)} ficha(s)`}`,
                     afterBody: (items) => {
                         const m = meses[items[0].dataIndex];
-                        return m ? [`Total: ${esMonto ? fmtCompacto(m.monto_total) : `${fmtN(m.total)} ficha(s)`} · ${m.pct_ejecutado}% ejecutado`] : [];
+                        if (!m) return [];
+                        const total = esMonto ? fmtCompacto(m.monto_total) : `${fmtN(m.total)} ficha(s)`;
+                        return [soloPorAvisar ? `Por avisar: ${total}` : `Total: ${total} · ${m.pct_ejecutado}% ejecutado`];
                     },
                 },
             },
@@ -84,7 +98,7 @@ export default function GraficoMensualPlan({ params, anho, mes, onSelectMes }) {
                 ticks: { font: { size: 11 }, precision: 0, callback: (v) => (esMonto ? fmtCompacto(v) : v) },
             },
         },
-    }), [meses, mes, esMonto, onSelectMes]);
+    }), [meses, mes, esMonto, onSelectMes, soloPorAvisar]);
 
     return (
         <div className="card" style={{ padding: '16px 18px' }}>
@@ -92,7 +106,9 @@ export default function GraficoMensualPlan({ params, anho, mes, onSelectMes }) {
                 <div>
                     <div className="gc-mensual-title">📊 Rendimiento mensual del plan</div>
                     <div className="gc-mensual-sub">
-                        Proyectos por mes de su fecha de compra, según su estado de ejecución. Haga clic en un mes para filtrar la tabla.
+                        {soloPorAvisar
+                            ? 'Planes pendientes y atrasados por mes de su fecha de compra (lo que aún se puede avisar). Haga clic en un mes para filtrar la tabla.'
+                            : 'Proyectos por mes de su fecha de compra, según su estado de ejecución. Haga clic en un mes para filtrar la tabla.'}
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -132,10 +148,14 @@ export default function GraficoMensualPlan({ params, anho, mes, onSelectMes }) {
                 <div className="gc-mes-sel">
                     <span className="gc-mes-sel-title">📅 {etiquetaLarga(seleccionado)}</span>
                     <span className="gc-mes-sel-kpi"><b>{fmtN(seleccionado.total)}</b> proyecto(s)</span>
-                    <span className="gc-mes-sel-kpi" style={{ color: '#15803d' }}><b>{seleccionado.ejecutado}</b> ejecutado(s)</span>
+                    {!soloPorAvisar && (
+                        <span className="gc-mes-sel-kpi" style={{ color: '#15803d' }}><b>{seleccionado.ejecutado}</b> ejecutado(s)</span>
+                    )}
                     <span className="gc-mes-sel-kpi" style={{ color: '#b45309' }}><b>{seleccionado.pendiente}</b> pendiente(s)</span>
                     <span className="gc-mes-sel-kpi" style={{ color: '#b91c1c' }}><b>{seleccionado.atrasado}</b> atrasado(s)</span>
-                    <span className="gc-mes-sel-kpi"><b>{seleccionado.pct_ejecutado}%</b> de ejecución · {fmtCompacto(seleccionado.monto_total)}</span>
+                    <span className="gc-mes-sel-kpi">
+                        {!soloPorAvisar && <><b>{seleccionado.pct_ejecutado}%</b> de ejecución · </>}{fmtCompacto(seleccionado.monto_total)}
+                    </span>
                     <button className="gc-link-btn" onClick={() => onSelectMes(null)}>✕ Quitar filtro</button>
                 </div>
             )}

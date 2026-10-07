@@ -1,0 +1,30 @@
+{% autoescape off %}{% if modo_prueba %}*** MODO PRUEBA — este correo NO fue enviado a sus destinatarios reales ***
+Habría salido a: {{ reales_para }}{% if reales_cc %} | Con copia a: {{ reales_cc }}{% endif %}
+
+{% endif %}SERVICIO DE SALUD OSORNO — Abastecimiento
+Plan Anual de Compras {{ anho }}
+
+Estimado/a {{ nombre }}{% if cargo %} ({{ cargo }}){% endif %}:
+
+Según el Plan Anual de Compras (PAC) {{ anho }}, usted figura como responsable de {{ n_planes }} plan{{ n_planes|pluralize:",es" }} de compra por un total de {{ monto_total }} que aún no registra{{ n_planes|pluralize:",n" }} un Formulario de Solicitud de Compra en el Panel Documental.
+
+Le solicitamos generar {{ n_planes|pluralize:"el formulario,los formularios" }} a la brevedad, indicando en cada uno el ID del plan:
+
+Panel Documental: {{ url_panel }}
+
+Resumen: {{ n_atrasados }} atrasado(s), {{ n_pendientes }} pendiente(s), {{ n_sin_fecha }} sin fecha.
+
+PLANES A FORMALIZAR
+{% for p in planes %}
+[{{ p.id_proyecto }}] {{ p.nombre_proyecto }}
+  Estado: {{ p.estado_label }} | Fecha de compra: {{ p.fecha }} | Monto: {{ p.monto }}
+  Departamento: {{ p.depto }} | Subdirección: {{ p.sub }} | Unidad: {{ p.unidad }}
+  Unidad de compra: {{ p.unidad_compra }} | Tipo: {{ p.tipo_proyecto }} | Cód. presupuestario: {{ p.codigo_presupuestario }}
+  Responsable: {{ p.responsable }}
+{% for it in p.items %}  - {{ it.nombre }}: {{ it.cantidad }} x {{ it.unitario }} = {{ it.total }} (compra: {{ it.fecha }})
+{% endfor %}{% endfor %}
+{% if cc_jefaturas %}Se envía copia de este aviso a: {{ cc_jefaturas }}.
+{% endif %}Si ya generó {{ n_planes|pluralize:"este formulario,estos formularios" }} o considera que algún plan no corresponde, responda a este correo indicándolo.
+
+Servicio de Salud Osorno — Departamento de Abastecimiento — Gobierno de Chile
+{% endautoescape %}

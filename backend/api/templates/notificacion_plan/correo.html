@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ asunto }}</title>
+</head>
+<body style="margin:0;padding:0;background:#eef1f5;font-family:Segoe UI,Arial,Helvetica,sans-serif;color:#1f2937;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f5;">
+<tr><td align="center" style="padding:24px 12px;">
+
+<table role="presentation" width="720" cellpadding="0" cellspacing="0" style="max-width:720px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #dbe1ea;">
+
+{% if modo_prueba %}
+<tr><td style="background:#fff4d6;border-bottom:2px solid #f0b429;padding:12px 24px;font-size:13px;line-height:1.5;color:#7a5200;">
+  <strong>MODO PRUEBA</strong> — este correo NO fue enviado a sus destinatarios reales.<br>
+  Habría salido a: <strong>{{ reales_para }}</strong>{% if reales_cc %} &nbsp;|&nbsp; Con copia a: <strong>{{ reales_cc }}</strong>{% else %} &nbsp;|&nbsp; Sin copias{% endif %}
+</td></tr>
+{% endif %}
+
+<tr><td style="padding:22px 24px 14px 24px;border-bottom:4px solid #1b5fa6;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="100" valign="middle"><img src="cid:logo" alt="Servicio de Salud Osorno" width="92" height="83" style="display:block;border:0;outline:none;text-decoration:none;"></td>
+    <td valign="middle" style="padding-left:16px;">
+      <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6b7686;">Servicio de Salud Osorno &middot; Abastecimiento</div>
+      <div style="font-size:21px;font-weight:700;color:#1b5fa6;line-height:1.25;margin-top:3px;">Plan Anual de Compras {{ anho }}</div>
+      <div style="font-size:14px;color:#374151;margin-top:2px;">Aviso: genere su Formulario de Solicitud de Compra</div>
+    </td>
+  </tr></table>
+</td></tr>
+
+<tr><td style="padding:22px 24px 6px 24px;font-size:15px;line-height:1.6;">
+  <p style="margin:0 0 12px 0;">Estimado/a <strong>{{ nombre }}</strong>{% if cargo %} <span style="color:#6b7686;">({{ cargo }})</span>{% endif %}:</p>
+  <p style="margin:0 0 12px 0;">
+    Según el Plan Anual de Compras (PAC) {{ anho }}, usted figura como responsable de
+    <strong>{{ n_planes }} plan{{ n_planes|pluralize:",es" }} de compra</strong> por un total de
+    <strong>{{ monto_total }}</strong> que <strong>aún no registra{{ n_planes|pluralize:",n" }} un Formulario de Solicitud de Compra</strong>
+    en el Panel Documental.
+  </p>
+  <p style="margin:0 0 4px 0;">
+    Le solicitamos generar {{ n_planes|pluralize:"el formulario,los formularios" }} a la brevedad, indicando en cada uno el
+    <strong>ID del plan</strong> que se detalla más abajo, para mantener al día la ejecución del PAC.
+  </p>
+</td></tr>
+
+<tr><td align="center" style="padding:14px 24px 8px 24px;">
+  <a href="{{ url_panel }}" style="display:inline-block;background:#1b5fa6;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 30px;border-radius:7px;">Ir al Panel Documental &rarr;</a>
+  <div style="font-size:12px;color:#6b7686;margin-top:8px;">{{ url_panel }}</div>
+</td></tr>
+
+<tr><td style="padding:14px 24px 4px 24px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="33%" style="padding:0 4px 0 0;"><div style="background:#fde8ea;border-radius:7px;padding:10px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#b4232f;">{{ n_atrasados }}</div><div style="font-size:12px;color:#b4232f;">Atrasado{{ n_atrasados|pluralize }}</div></div></td>
+    <td width="34%" style="padding:0 4px;"><div style="background:#e7f0fb;border-radius:7px;padding:10px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#1b5fa6;">{{ n_pendientes }}</div><div style="font-size:12px;color:#1b5fa6;">Pendiente{{ n_pendientes|pluralize }}</div></div></td>
+    <td width="33%" style="padding:0 0 0 4px;"><div style="background:#eef0f3;border-radius:7px;padding:10px;text-align:center;"><div style="font-size:22px;font-weight:700;color:#5a6472;">{{ n_sin_fecha }}</div><div style="font-size:12px;color:#5a6472;">Sin fecha</div></div></td>
+  </tr></table>
+</td></tr>
+
+<tr><td style="padding:18px 24px 6px 24px;">
+  <div style="font-size:16px;font-weight:700;color:#1b5fa6;margin-bottom:8px;">Planes de compra a formalizar</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
+    <tr style="background:#1b5fa6;color:#ffffff;">
+      <th align="left" style="padding:8px 8px;font-weight:600;">ID del plan</th>
+      <th align="left" style="padding:8px 8px;font-weight:600;">Proyecto</th>
+      <th align="left" style="padding:8px 8px;font-weight:600;">Fecha de compra</th>
+      <th align="right" style="padding:8px 8px;font-weight:600;">Monto</th>
+      <th align="center" style="padding:8px 8px;font-weight:600;">Estado</th>
+    </tr>
+    {% for p in planes %}
+    <tr style="background:{% cycle '#ffffff' '#f6f8fb' %};">
+      <td style="padding:8px;border-bottom:1px solid #e5e9f0;font-family:Consolas,monospace;font-weight:700;white-space:nowrap;">{{ p.id_proyecto }}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e9f0;">{{ p.nombre_proyecto }}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e9f0;white-space:nowrap;">{{ p.fecha }}</td>
+      <td align="right" style="padding:8px;border-bottom:1px solid #e5e9f0;white-space:nowrap;">{{ p.monto }}</td>
+      <td align="center" style="padding:8px;border-bottom:1px solid #e5e9f0;"><span style="display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;background:{{ p.estado_bg }};color:{{ p.estado_fg }};">{{ p.estado_label }}</span></td>
+    </tr>
+    {% endfor %}
+  </table>
+</td></tr>
+
+<tr><td style="padding:16px 24px 6px 24px;">
+  <div style="font-size:16px;font-weight:700;color:#1b5fa6;margin-bottom:2px;">Detalle del PAC de cada plan</div>
+  <div style="font-size:12px;color:#6b7686;margin-bottom:8px;">Información tal como figura en el Plan Anual de Compras.</div>
+  {% for p in planes %}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dbe1ea;border-radius:7px;border-collapse:separate;margin-bottom:12px;font-size:13px;">
+    <tr><td colspan="4" style="background:#f1f5fa;padding:9px 12px;border-bottom:1px solid #dbe1ea;border-radius:7px 7px 0 0;">
+      <span style="font-family:Consolas,monospace;font-weight:700;color:#1b5fa6;">{{ p.id_proyecto }}</span>
+      &nbsp;<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;background:{{ p.estado_bg }};color:{{ p.estado_fg }};">{{ p.estado_label }}</span><br>
+      <strong>{{ p.nombre_proyecto }}</strong>
+    </td></tr>
+    <tr>
+      <td style="padding:6px 12px;color:#6b7686;width:18%;">Departamento</td><td style="padding:6px 8px;width:32%;">{{ p.depto }}</td>
+      <td style="padding:6px 12px;color:#6b7686;width:18%;">Subdirección</td><td style="padding:6px 8px;width:32%;">{{ p.sub }}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 12px;color:#6b7686;">Unidad</td><td style="padding:6px 8px;">{{ p.unidad }}</td>
+      <td style="padding:6px 12px;color:#6b7686;">Unidad de compra</td><td style="padding:6px 8px;">{{ p.unidad_compra }}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 12px;color:#6b7686;">Tipo de proyecto</td><td style="padding:6px 8px;">{{ p.tipo_proyecto }}</td>
+      <td style="padding:6px 12px;color:#6b7686;">Código presupuestario</td><td style="padding:6px 8px;">{{ p.codigo_presupuestario }}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 12px;color:#6b7686;">Responsable</td><td style="padding:6px 8px;">{{ p.responsable }}</td>
+      <td style="padding:6px 12px;color:#6b7686;">Monto total del plan</td><td style="padding:6px 8px;font-weight:700;">{{ p.monto }}</td>
+    </tr>
+    <tr><td colspan="4" style="padding:4px 12px 10px 12px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;table-layout:fixed;">
+        <tr style="color:#6b7686;">
+          <th align="left" style="padding:5px 6px;border-bottom:1px solid #dbe1ea;">Ítem</th>
+          <th align="right" width="48" style="padding:5px 6px;border-bottom:1px solid #dbe1ea;">Cant.</th>
+          <th align="right" width="96" style="padding:5px 6px;border-bottom:1px solid #dbe1ea;">Valor unitario</th>
+          <th align="right" width="96" style="padding:5px 6px;border-bottom:1px solid #dbe1ea;">Total</th>
+          <th align="left" width="96" style="padding:5px 6px;border-bottom:1px solid #dbe1ea;">Fecha de compra</th>
+        </tr>
+        {% for it in p.items %}
+        <tr>
+          <td style="padding:5px 6px;border-bottom:1px solid #eef1f5;">{{ it.nombre }}</td>
+          <td align="right" style="padding:5px 6px;border-bottom:1px solid #eef1f5;">{{ it.cantidad }}</td>
+          <td align="right" style="padding:5px 6px;border-bottom:1px solid #eef1f5;white-space:nowrap;">{{ it.unitario }}</td>
+          <td align="right" style="padding:5px 6px;border-bottom:1px solid #eef1f5;white-space:nowrap;">{{ it.total }}</td>
+          <td style="padding:5px 6px;border-bottom:1px solid #eef1f5;white-space:nowrap;">{{ it.fecha }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </td></tr>
+  </table>
+  {% endfor %}
+</td></tr>
+
+<tr><td style="padding:6px 24px 20px 24px;font-size:13px;line-height:1.6;color:#374151;">
+  {% if cc_jefaturas %}<p style="margin:0 0 8px 0;color:#6b7686;">Se envía copia de este aviso a: {{ cc_jefaturas }}.</p>{% endif %}
+  <p style="margin:0;">Si ya generó {{ n_planes|pluralize:"este formulario,estos formularios" }} o considera que algún plan no corresponde, responda a este correo indicándolo.</p>
+</td></tr>
+
+<tr><td style="background:#f1f5fa;padding:14px 24px;font-size:11px;line-height:1.5;color:#6b7686;border-top:1px solid #dbe1ea;">
+  Servicio de Salud Osorno &middot; Departamento de Abastecimiento &middot; Gobierno de Chile.<br>
+  Mensaje generado desde el sistema de gestión de compras. Por favor no lo reenvíe a terceros.
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

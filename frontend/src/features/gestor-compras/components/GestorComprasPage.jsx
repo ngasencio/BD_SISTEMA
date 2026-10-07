@@ -4,6 +4,7 @@ import { useAlcanceGestor } from '../hooks/useAlcanceGestor';
 import TabSolicitudes from './TabSolicitudes';
 import TabDerivacion from './TabDerivacion';
 import TabPlanCompra from './TabPlanCompra';
+import TabNotificacion from './TabNotificacion';
 import '../styles/gestor.css';
 
 // Panel de solo lectura de un departamento: sus solicitudes (FSC), lo derivado a
@@ -15,6 +16,9 @@ const TABS = [
     { id: 'derivacion', label: '🛒 Derivación a Comprador' },
     { id: 'plan', label: '📅 Plan de Compra' },
 ];
+
+// Solo para cuentas autorizadas en el servidor (alcance.puede_notificar): envía correos masivos a funcionarios.
+const TAB_NOTIFICACION = { id: 'notificacion', label: '📧 Notificación' };
 
 function EstadoVacio({ icono, titulo, texto }) {
     return (
@@ -90,7 +94,9 @@ function BannerDepartamento({ alcance, deptoId, setDeptoId }) {
 export default function GestorComprasPage() {
     const { alcance, cargando, error, deptoId, setDeptoId, params } = useAlcanceGestor();
     const [searchParams, setSearchParams] = useSearchParams();
-    const tab = TABS.some((t) => t.id === searchParams.get('tab')) ? searchParams.get('tab') : 'solicitudes';
+    const tabs = alcance?.puede_notificar ? [...TABS, TAB_NOTIFICACION] : TABS;
+    // Un ?tab=notificacion de quien no está autorizado cae en la pestaña por defecto (y el servidor igual respondería 403).
+    const tab = tabs.some((t) => t.id === searchParams.get('tab')) ? searchParams.get('tab') : 'solicitudes';
 
     const cambiarTab = (id) => setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
@@ -137,7 +143,7 @@ export default function GestorComprasPage() {
                     ) : (
                         <>
                             <div className="tabs-bar" style={{ marginBottom: 12 }}>
-                                {TABS.map((t) => (
+                                {tabs.map((t) => (
                                     <button
                                         key={t.id}
                                         className={`tab-btn ${tab === t.id ? 'active' : ''}`}
@@ -151,6 +157,7 @@ export default function GestorComprasPage() {
                             {tab === 'solicitudes' && <TabSolicitudes params={params} />}
                             {tab === 'derivacion' && <TabDerivacion params={params} />}
                             {tab === 'plan' && <TabPlanCompra params={params} />}
+                            {tab === 'notificacion' && <TabNotificacion params={params} />}
                         </>
                     )}
                 </>

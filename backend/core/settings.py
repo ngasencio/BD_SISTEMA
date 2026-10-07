@@ -155,6 +155,39 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=7),
 }
 
+# ─── Correo — módulo Gestor de Compras > Notificación ─────────────────────────
+# Credenciales SOLO en .env (nunca en código). Sin EMAIL_HOST_PASSWORD el envío falla
+# con un error claro en vez de intentar conectarse.
+
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.office365.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_TIMEOUT = 30
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
+
+# Quién puede abrir/usar la pestaña "Notificación" (correos masivos a funcionarios).
+# Se valida en el servidor por correo del usuario, no por rol: un admin cualquiera NO pasa.
+NOTIF_PLAN_USUARIOS = [e.lower() for e in config(
+    'NOTIF_PLAN_USUARIOS', default='nicolas.asencio@redsalud.gob.cl', cast=Csv())]
+# MODO PRUEBA (por defecto ACTIVO): todo correo va SOLO a NOTIF_PLAN_DESTINO_PRUEBA, sin CC.
+# Desactivarlo es una decisión explícita (NOTIF_PLAN_MODO_PRUEBA=False en .env).
+NOTIF_PLAN_MODO_PRUEBA = config('NOTIF_PLAN_MODO_PRUEBA', default=True, cast=bool)
+NOTIF_PLAN_DESTINO_PRUEBA = config('NOTIF_PLAN_DESTINO_PRUEBA', default='nicolas.asencio@redsalud.gob.cl')
+# Copia a las jefaturas del departamento de cada responsable (apagado hasta el visto bueno).
+NOTIF_PLAN_CC_JEFATURAS = config('NOTIF_PLAN_CC_JEFATURAS', default=False, cast=bool)
+# Copia fija a las jefaturas de Abastecimiento y destinatarias del PDF de cierre (apagado idem).
+NOTIF_PLAN_RESUMEN_CC = config('NOTIF_PLAN_RESUMEN_CC', default='', cast=Csv())
+# Destinatarios (Para) del correo resumen con el PDF, además de quien envía (sin duplicar).
+NOTIF_PLAN_RESUMEN_PARA = config('NOTIF_PLAN_RESUMEN_PARA', default='', cast=Csv())
+# Tope de responsables por lote (anti-spam / error de selección masiva).
+NOTIF_PLAN_MAX_LOTE = config('NOTIF_PLAN_MAX_LOTE', default=50, cast=int)
+# Pausa entre correos de un lote (Office 365 limita ~30 mensajes por minuto por buzón).
+NOTIF_PLAN_PAUSA_SEG = config('NOTIF_PLAN_PAUSA_SEG', default=2, cast=int)
+NOTIF_PLAN_URL_PANEL = 'https://panel.ssosorno.cl/panel_documental/login.php'
+
 # ─── Cache ────────────────────────────────────────────────────────────────────
 # LocMemCache: volátil (se pierde al reiniciar). No compartido entre workers.
 # Migrar a Redis cuando el tiempo de recalculo supere 10s en producción.

@@ -76,6 +76,9 @@ from .views import (
     GestorDerivacionesViewSet, GestorProcesosViewSet, gestor_resumen_view,
     gestor_plan_resumen_view, gestor_plan_temporal_view, gestor_plan_items_view,
     gestor_plan_item_detalle_view, gestor_plan_mensual_view,
+    notif_plan_planes_view, notif_plan_responsables_pendientes_view, notif_plan_confirmar_correo_view,
+    notif_plan_previsualizar_view, notif_plan_enviar_view, notif_plan_lote_view, notif_plan_lote_pdf_view,
+    notif_plan_enviar_prueba_view, notif_plan_copias_view,
 )
 
 class MyTokenObtainPairView(TokenObtainPairView):
@@ -310,6 +313,15 @@ urlpatterns = [
     path('gestor-compras/plan/mensual/', gestor_plan_mensual_view, name='gestor_plan_mensual'),
     path('gestor-compras/plan/items/', gestor_plan_items_view, name='gestor_plan_items'),
     path('gestor-compras/plan/items/<str:id_proyecto>/', gestor_plan_item_detalle_view, name='gestor_plan_item_detalle'),
+    path('gestor-compras/notificacion/planes/', notif_plan_planes_view, name='notif_plan_planes'),
+    path('gestor-compras/notificacion/responsables-pendientes/', notif_plan_responsables_pendientes_view, name='notif_plan_resp_pendientes'),
+    path('gestor-compras/notificacion/confirmar-correo/', notif_plan_confirmar_correo_view, name='notif_plan_confirmar_correo'),
+    path('gestor-compras/notificacion/previsualizar/', notif_plan_previsualizar_view, name='notif_plan_previsualizar'),
+    path('gestor-compras/notificacion/enviar/', notif_plan_enviar_view, name='notif_plan_enviar'),
+    path('gestor-compras/notificacion/enviar-prueba/', notif_plan_enviar_prueba_view, name='notif_plan_enviar_prueba'),
+    path('gestor-compras/notificacion/copias/', notif_plan_copias_view, name='notif_plan_copias'),
+    path('gestor-compras/notificacion/lotes/<int:lote_id>/', notif_plan_lote_view, name='notif_plan_lote'),
+    path('gestor-compras/notificacion/lotes/<int:lote_id>/pdf/', notif_plan_lote_pdf_view, name='notif_plan_lote_pdf'),
 
     # Router ViewSets
     path('', include(router.urls)),
