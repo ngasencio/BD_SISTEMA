@@ -124,8 +124,180 @@ def _agrupar_por_subdireccion(items, campo='subdireccion_nombre'):
     ]
 
 
-def _total_items_grupos(grupos):
-    return sum(len(g['items']) for g in grupos)
+# Secciones de "Alertas y Seguimiento": reparten las fichas SIN formulario ni OC según su estado, de modo que
+# cada ficha aparece en UNA sola lista (antes eran tres listas solapadas: todas las sin ejecutar, las del mes
+# en curso y el próximo, y las atrasadas). (clave de estado de la ficha, título, mensaje si no hay ninguna)
+_SECCIONES_ALERTAS = [
+    ('ATRASADO', 'Fichas atrasadas', 'No hay fichas atrasadas: todas las que ya vencieron cuentan con formulario u orden de compra.'),
+    ('PENDIENTE', 'Fichas pendientes de ejecución', 'No hay fichas pendientes de ejecución.'),
+    ('SIN_FECHA', 'Fichas sin fecha de compra', None),  # solo se muestra si existe alguna
+]
+
+
+def _normalizar_nombre_persona(nombre):
+    """MAYÚSCULAS, sin tildes, espacios colapsados — para comparar el mismo nombre escrito
+    distinto en el PAC ('ALEJANDRO NUÑEZ' / 'Alejandro Nuñez')."""
+    tabla = str.maketrans('ÁÉÍÓÚÜÑ', 'AEIOUUN')
+    return ' '.join(str(nombre or '').upper().translate(tabla).split())
+
+
+def _deduplicar_responsables(nombres):
+    """Une las variantes de un mismo responsable: distinta capitalización/tildes ('ALVARO
+    MONTECINOS' / 'Alvaro Montecinos') o forma corta vs. completa ('CATALINA VERA' /
+    'Catalina Vera Castro', cuyas palabras contienen a las de la forma corta). Conserva la
+    variante más completa. El informe listaba 17 'responsables' para unas 8 personas."""
+    candidatos = sorted(
+        {(_normalizar_nombre_persona(n), n.strip()) for n in nombres if n and str(n).strip()},
+        key=lambda par: (-len(par[0].split()), -len(par[0]), par[0], par[1]),  # orden estable entre ejecuciones
+    )
+    conservados = []  # (palabras, nombre_original) — de más a menos completo
+    for norm, original in candidatos:
+        palabras = set(norm.split())
+        if any(palabras <= otras for otras, _ in conservados):
+            continue
+        conservados.append((palabras, original.title() if original.isupper() else original))
+    return sorted(nombre for _, nombre in conservados)
+
+
+def _alertas_fichas(fichas):
+    """Secciones de 'Alertas y Seguimiento': las fichas del plan que aún NO tienen formulario ni orden
+    de compra, repartidas por estado y agrupadas por subdirección — [{'clave', 'titulo', 'mensaje_vacio',
+    'grupos', 'n'}]. Cada ficha cae en UNA sola sección, así que atrasadas + pendientes (+ sin fecha) suman
+    exactamente las fichas sin ejecutar del KPI de Ejecución. Salen de las FICHAS (misma fuente y misma
+    fecha de corte que ese KPI): antes la lista 'sin iniciar' venía del cálculo temporal con el cierre del
+    período como corte, y el mismo proyecto aparecía Pendiente en una lista y Atrasado en otra. Las
+    fichas llegan ordenadas por fecha de compra, así que en cada sección las más próximas van primero."""
+    secciones = []
+    for clave, titulo, mensaje_vacio in _SECCIONES_ALERTAS:
+        items = [f for f in fichas if f['estado_ejecucion'] == clave]
+        if not items and mensaje_vacio is None:
+            continue
+        secciones.append({
+            'clave': clave, 'titulo': titulo, 'mensaje_vacio': mensaje_vacio,
+            'grupos': _agrupar_por_subdireccion(items), 'n': len(items),
+        })
+    return secciones
+
+
+def _serie_mensual_fichas(fichas, anho):
+    """Fichas del Plan de Compras por MES de su fecha de compra más próxima, apiladas
+    Ejecutado/Pendiente/Atrasado — cada ficha cuenta UNA vez. Reemplaza en los informes a
+    `calcular_pac_temporal_mensual_planer`, que cuenta ÍTEMS del PAC (905 en 2026 contra 561
+    fichas) y el gráfico los rotulaba 'N° fichas'. Mismo criterio que el gráfico mensual del
+    Gestor de Compras. Las fichas cuya fecha más próxima cae en otro año (arrastre) o no tienen
+    fecha no se grafican: se informan aparte para que el total cuadre con las fichas del plan."""
+    from .services import _MESES_ES
+    por_mes = {m: {'ejecutados': 0, 'pendientes': 0, 'atrasados': 0} for m in range(1, 13)}
+    otros_anios = sin_fecha = 0
+    for f in fichas:
+        fecha = f['fecha_mas_proxima']
+        if not fecha:
+            sin_fecha += 1
+            continue
+        if int(fecha[:4]) != int(anho):
+            otros_anios += 1
+            continue
+        b = por_mes[int(fecha[5:7])]
+        if f['estado_ejecucion'] == 'EJECUTADO':
+            b['ejecutados'] += 1
+        elif f['estado_ejecucion'] == 'PENDIENTE':
+            b['pendientes'] += 1
+        else:
+            b['atrasados'] += 1
+    meses = []
+    for m in range(1, 13):
+        b = por_mes[m]
+        total = b['ejecutados'] + b['pendientes'] + b['atrasados']
+        meses.append({
+            'mes': m, 'nombre_mes': _MESES_ES[m], 'total': total, **b,
+            'pct_ejecutado': round(b['ejecutados'] / total * 100, 1) if total else 0,
+        })
+    return {'anho': int(anho), 'meses': meses, 'fichas_otros_anios': otros_anios, 'fichas_sin_fecha': sin_fecha}
+
+
+def _texto_intro_alertas(d, hoy):
+    """Introducción común de 'Alertas y Seguimiento' (Word/PDF/PPT): las listas reparten las fichas sin
+    formulario ni OC (sin solaparse) y usan el mismo estado y la misma fecha de corte que la Ejecución."""
+    r = d['resumen_fichas']
+    sin_ejecutar = r['pendientes'] + r['atrasadas'] + r['sin_fecha']
+    texto = (
+        f'Las {_n(sin_ejecutar)} fichas del Plan de Compras que aún no tienen formulario ni orden de compra se reparten '
+        f'en las listas siguientes, sin repetirse: {_n(r["atrasadas"])} atrasadas (su fecha de compra ya venció) y '
+        f'{_n(r["pendientes"])} pendientes (su plazo aún no vence). En cada lista las fichas más próximas en el '
+        f'calendario van primero y se agrupan por subdirección. El estado se evalúa al {hoy.strftime("%d-%m-%Y")} '
+        f'(fecha de generación del informe), igual que la ejecución del Plan de Compras.'
+    )
+    if r['sin_fecha']:
+        texto += f' Otras {_n(r["sin_fecha"])} fichas no tienen fecha de compra cargada y se listan al final.'
+    return texto
+
+
+_TEXTO_LECTURA_EJECUCION_MENSUAL = (
+    'Cada barra muestra las fichas cuya fecha de compra cae en ese mes y cuántas de ellas YA cuentan con formulario u '
+    'orden de compra a la fecha del informe; no mide el avance mensual en el tiempo (los meses recientes tienen '
+    'menos plazo transcurrido para ejecutarse).'
+)
+
+
+def _texto_serie_fichas(serie):
+    """Frase de calce de la serie mensual: cada ficha cuenta una vez y las que no caen en el año
+    graficado se informan, para que el gráfico cuadre con el total de fichas del plan."""
+    n_graficadas = sum(m['total'] for m in serie['meses'])
+    partes = [f'Se grafican {_n(n_graficadas)} fichas (cada una cuenta una sola vez, en el mes de su fecha de compra más próxima).']
+    if serie['fichas_otros_anios']:
+        partes.append(f'{_n(serie["fichas_otros_anios"])} ficha(s) de arrastre tienen su fecha más próxima en otro año y no se grafican.')
+    if serie['fichas_sin_fecha']:
+        partes.append(f'{_n(serie["fichas_sin_fecha"])} ficha(s) no tienen fecha de compra.')
+    return ' '.join(partes)
+
+
+def _fecha_iso_a_es(iso):
+    """'2026-10-08' -> '08-10-2026'."""
+    return f'{iso[8:10]}-{iso[5:7]}-{iso[:4]}' if iso and len(iso) >= 10 else (iso or '—')
+
+
+def _nota_empates_ranking(ranking, mejores=True):
+    """Aviso bajo un ranking de formularios cuando muchos comparten el mismo puntaje (solo existen
+    0, 50 y 100): la tabla es entonces una muestra de los empatados, ordenada por monto. None si no
+    hay empates que aclarar."""
+    lista = ranking['mejores' if mejores else 'peores']
+    empatados = ranking.get('empatados_en_maximo' if mejores else 'empatados_en_minimo', 0)
+    if not lista or empatados <= len(lista):
+        return None
+    return (
+        f'{_n(empatados)} formularios comparten el puntaje {lista[0]["score"]:.0f}; '
+        f'se muestran los {len(lista)} de mayor monto entre ellos.'
+    )
+
+
+def _nota_docx(doc, texto):
+    if not texto:
+        return
+    p = doc.add_paragraph()
+    run = p.add_run(texto)
+    run.italic = True
+    run.font.size = Pt(9)
+    run.font.color.rgb = RGBColor(0x64, 0x74, 0x8b)
+
+
+def _nota_pdf(story, texto):
+    if texto:
+        story.append(Paragraph(texto, _PDF_ESTILOS['Leyenda']))
+
+
+def _nota_ppt(slide, texto, top):
+    if texto:
+        _ppt_parrafo(slide, texto, top=top, tamano=11, height=PptxInches(0.5))
+
+
+def _texto_resumen_subdireccion(resumen, anho, anho_ant):
+    """Párrafo que introduce la tabla Dentro/Fuera por subdirección, con los cortes REALES que se comparan."""
+    return (
+        'La siguiente tabla desglosa, por subdirección, el número de formularios Dentro y Fuera del PAC '
+        f'del año {anho} (1 de enero al {_fecha_iso_a_es(resumen.get("corte_actual"))}) comparado contra el mismo corte de '
+        f'{anho_ant} (1 de enero al {_fecha_iso_a_es(resumen.get("corte_anterior"))}), para dimensionar la evolución del '
+        'apego institucional al Plan Anual de Compras.'
+    )
 
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -243,7 +415,8 @@ def grafico_barras_comparativa_anual(comparativa_anual, titulo='Comparativa hist
     """Barras apiladas por año — comparativa_anual: [{anho, dentro, fuera, ...}]."""
     if not comparativa_anual:
         return None
-    anhos = [str(r['anho']) for r in comparativa_anual]
+    # El año en curso está incompleto: se rotula para que no se lea como un año completo menor.
+    anhos = [f"{r['anho']} (a la fecha)" if r['anho'] == date.today().year else str(r['anho']) for r in comparativa_anual]
     dentro = [r['dentro'] for r in comparativa_anual]
     fuera = [r['fuera'] for r in comparativa_anual]
 
@@ -257,30 +430,36 @@ def grafico_barras_comparativa_anual(comparativa_anual, titulo='Comparativa hist
     return _fig_a_bytes(fig)
 
 
-def grafico_donut_cumplimiento_temporal(kpis_temporal, titulo='Cumplimiento Temporal'):
-    """Dona 4 segmentos — En fecha / Atrasado / Pendiente / Sin planificación con fecha."""
+def grafico_donut_cumplimiento_temporal(kpis_temporal, titulo='Cumplimiento temporal — formularios Dentro PAC'):
+    """Dona de FORMULARIOS Dentro PAC derivados en el período: En fecha / Atrasado / Sin
+    planificación con fecha. Antes mezclaba formularios con proyectos sin formulario (278 de
+    442 'eventos') y no mostraba ningún valor; los proyectos pendientes de ejecución se
+    informan en la sección de Ejecución del Plan de Compras y en Alertas."""
     valores = [
         kpis_temporal.get('en_fecha', 0),
-        kpis_temporal.get('atrasado', 0),
-        kpis_temporal.get('pendiente', 0),
+        kpis_temporal.get('formularios_atrasados', 0),
         kpis_temporal.get('sin_planificacion_con_fecha', 0),
     ]
     if not sum(valores):
         return None
-    etiquetas = ['En fecha', 'Atrasado', 'Pendiente', 'Sin planificación']
-    colores = [COLOR_DENTRO, COLOR_FUERA, COLOR_PENDIENTE, COLOR_SIN_DATO]
+    etiquetas = ['En fecha', 'Atrasado', 'Sin planificación']
+    colores = [COLOR_DENTRO, COLOR_FUERA, COLOR_SIN_DATO]
     datos = [(e, v, c) for e, v, c in zip(etiquetas, valores, colores) if v > 0]
+    total = sum(d[1] for d in datos)
 
     fig, ax = plt.subplots(figsize=(4.2, 3.8))
     ax.pie(
         [d[1] for d in datos], colors=[d[2] for d in datos], startangle=90,
         wedgeprops={'width': 0.35, 'edgecolor': 'white', 'linewidth': 2},
+        autopct=lambda p: f'{p:.0f}%' if p > 5 else '', pctdistance=0.82,
+        textprops={'color': 'white', 'fontweight': 'bold', 'fontsize': 10},
     )
-    ax.set_title(titulo, fontsize=11, pad=10)
+    ax.set_title(titulo, fontsize=10, pad=10)
     fig.legend(
-        [d[0] for d in datos], loc='lower center', ncol=2, frameon=False,
+        [f'{d[0]} ({d[1]})' for d in datos], loc='lower center', ncol=3, frameon=False,
         bbox_to_anchor=(0.5, -0.05), fontsize=8,
     )
+    ax.text(0, 0, f'{total}\nformularios', ha='center', va='center', fontsize=9, color='#334155')
     return _fig_a_bytes(fig)
 
 
@@ -405,7 +584,7 @@ def _datos_informe_completo(periodo):
         calcular_pac_dentro_fuera_stats, calcular_pac_comparativa_periodos,
         calcular_pac_cumplimiento_temporal, calcular_pac_jerarquia, calcular_pac_rankings,
         calcular_pac_resumen_subdireccion, calcular_pac_temporalidad_mensual,
-        calcular_pac_jerarquia_planer, calcular_pac_temporal_mensual_planer,
+        calcular_pac_jerarquia_planer,
         calcular_pac_detalle_fsc_por_subdireccion,
         _calcular_fichas_pac_completo, _rango_fechas_periodo,
     )
@@ -434,7 +613,7 @@ def _datos_informe_completo(periodo):
 
     fichas = _calcular_fichas_pac_completo(anho=anho)
     jerarquia_planer = calcular_pac_jerarquia_planer(anho)
-    temporal_mensual_planer = calcular_pac_temporal_mensual_planer(anho)
+    serie_fichas_mensual = _serie_mensual_fichas(fichas, anho)
     # Detalle FSC individual por subdirección (folio, unidad, monto, fecha) — complementa
     # `jerarquia_fsc` (que solo agrega por departamento) para poder listar, dentro del
     # capítulo de cada subdirección, CON QUÉ formularios concretos se compone su cifra.
@@ -442,30 +621,23 @@ def _datos_informe_completo(periodo):
         anho=anho, fecha_desde=desde_iso, fecha_hasta=hasta_iso,
     )
 
+    # Todo el estado de las fichas (ejecutada/pendiente/atrasada) se evalúa a HOY, no al cierre del
+    # período — depende de formularios y OC que pueden haberse registrado después. Las listas de
+    # Alertas y los KPI de Ejecución salen de ESTAS mismas fichas, así que un proyecto tiene un único
+    # estado en todo el informe.
     hoy = date.today()
-    anho_prox, mes_prox = (hoy.year, hoy.month + 1) if hoy.month < 12 else (hoy.year + 1, 1)
-    prefijo_prox = f'{anho_prox}-{mes_prox:02d}'
-    proximo_mes = [
-        f for f in fichas
-        if f['estado_ejecucion'] != 'EJECUTADO' and (f['fecha_mas_proxima'] or '').startswith(prefijo_prox)
-    ]
-    atrasadas = [f for f in fichas if f['estado_ejecucion'] == 'ATRASADO']
     total_fichas = len(fichas)
     ejecutados_fichas = sum(1 for f in fichas if f['estado_ejecucion'] == 'EJECUTADO')
     monto_total_fichas = sum(f['monto_total'] or 0 for f in fichas)
-
-    # `proyectos_sin_iniciar` (calcular_pac_cumplimiento_temporal) solo trae id_proyecto/fecha —
-    # se enriquece acá con nombre y subdirección (ya calculados en `fichas`) para que Alertas y
-    # Seguimiento pueda mostrar el nombre del proyecto y agruparlo por subdirección, sin tocar
-    # el contrato de esa función (también la consume el dashboard interactivo).
-    fichas_por_id_proyecto = {f['id_proyecto']: f for f in fichas}
-    for p in temporal['proyectos_sin_iniciar']:
-        ficha_ref = fichas_por_id_proyecto.get(p['id_proyecto'])
-        p['nombre_proyecto'] = ficha_ref['nombre_proyecto'] if ficha_ref else None
-        p['subdireccion_nombre'] = ficha_ref['subdireccion_nombre'] if ficha_ref else None
+    resumen_fichas = {
+        'total': total_fichas, 'ejecutadas': ejecutados_fichas,
+        'pendientes': sum(1 for f in fichas if f['estado_ejecucion'] == 'PENDIENTE'),
+        'atrasadas': sum(1 for f in fichas if f['estado_ejecucion'] == 'ATRASADO'),
+        'sin_fecha': sum(1 for f in fichas if f['estado_ejecucion'] == 'SIN_FECHA'),
+    }
 
     subdirecciones = _combinar_subdirecciones(jerarquia_fsc, jerarquia_planer, fichas, detalle_fsc_subdireccion)
-    avance_trimestral = _avance_trimestral(periodo, temporalidad_mensual, temporal_mensual_planer)
+    avance_trimestral = _avance_trimestral(periodo, temporalidad_mensual, serie_fichas_mensual)
 
     return {
         'periodo': periodo, 'label': label, 'anho': anho, 'anho_anterior': anho - 1, 'hoy': hoy,
@@ -474,10 +646,9 @@ def _datos_informe_completo(periodo):
         'rankings_depto': rankings_depto, 'rankings_formulario': rankings_formulario,
         'resumen_subdireccion': resumen_subdireccion, 'temporalidad_mensual': temporalidad_mensual,
         'fichas': fichas, 'jerarquia_planer': jerarquia_planer,
-        'temporal_mensual_planer': temporal_mensual_planer,
-        'proximo_mes': _agrupar_por_subdireccion(proximo_mes),
-        'atrasadas': _agrupar_por_subdireccion(atrasadas),
-        'proyectos_sin_iniciar': _agrupar_por_subdireccion(temporal['proyectos_sin_iniciar']),
+        'serie_fichas_mensual': serie_fichas_mensual,
+        'resumen_fichas': resumen_fichas,
+        'alertas': _alertas_fichas(fichas),
         'total_fichas': total_fichas, 'ejecutados_fichas': ejecutados_fichas,
         'pct_ejecutado_fichas': round(ejecutados_fichas / total_fichas * 100, 1) if total_fichas else 0,
         'monto_total_fichas': monto_total_fichas,
@@ -486,13 +657,13 @@ def _datos_informe_completo(periodo):
     }
 
 
-def _avance_trimestral(periodo, temporalidad_mensual, temporal_mensual_planer):
+def _avance_trimestral(periodo, temporalidad_mensual, serie_fichas_mensual):
     """Si `periodo` es un trimestre ('YYYY-QN'), arma el avance MES A MES de los 3
     meses que lo componen (Dentro/Fuera PAC + Ejecución del Plan de Compras) — pedido
     explícito del usuario 2026-07-22 ("cuando seleccione trimestral, mostrar avance
     trimestral, para ver su mejora y cómo vamos cumpliendo"). Reutiliza las series de
-    12 meses que YA calcula `_datos_informe_completo` (`calcular_pac_temporalidad_mensual`/
-    `calcular_pac_temporal_mensual_planer`), solo filtrando a los 3 meses del trimestre
+    12 meses que YA calcula `_datos_informe_completo` (`calcular_pac_temporalidad_mensual`
+    y `_serie_mensual_fichas`), solo filtrando a los 3 meses del trimestre
     — no agrega ninguna consulta nueva a la BD. Se aplica a cualquier trimestre (Q1-Q4),
     no solo a Q2/Q3 (los ejemplos que dio el usuario) — no hay razón para mostrar la
     evolución interna solo en algunos trimestres y no en otros. Retorna `None` si
@@ -506,7 +677,7 @@ def _avance_trimestral(periodo, temporalidad_mensual, temporal_mensual_planer):
     meses_trimestre = {mes_ini, mes_ini + 1, mes_ini + 2}
 
     meses_fsc = [m for m in temporalidad_mensual['meses'] if m['mes'] in meses_trimestre]
-    meses_planer = [m for m in temporal_mensual_planer['meses'] if m['mes'] in meses_trimestre]
+    meses_planer = [m for m in serie_fichas_mensual['meses'] if m['mes'] in meses_trimestre]
 
     pct_dentro_validos = [m['pct_dentro'] for m in meses_fsc if m['pct_dentro'] is not None and m['total']]
     variacion_pct_dentro = round(pct_dentro_validos[-1] - pct_dentro_validos[0], 1) if len(pct_dentro_validos) >= 2 else None
@@ -549,7 +720,7 @@ def _combinar_subdirecciones(jerarquia_fsc, jerarquia_planer, fichas, detalle_fs
         'nombre': nombre,
         'fsc': fsc_por_nombre.get(nombre),
         'planer': planer_por_nombre.get(nombre),
-        'responsables': sorted(responsables_por_sub.get(nombre, [])),
+        'responsables': _deduplicar_responsables(responsables_por_sub.get(nombre, [])),
         'institucional': nombre in NOMBRES_SUBDIRECCIONES_INSTITUCIONALES,
         'formularios_detalle': detalle_fsc_subdireccion.get(nombre, []),
         'fichas_detalle': fichas_por_sub.get(nombre, []),
@@ -803,25 +974,6 @@ def _tabla_fichas_pac_docx(doc, filas, limite=40):
         run.font.color.rgb = RGBColor(0x94, 0xa3, 0xb8)
 
 
-def _tabla_proyectos_sin_iniciar_docx(doc, proyectos, limite=30):
-    tabla = doc.add_table(rows=1, cols=4)
-    tabla.style = 'Light Grid Accent 1'
-    for i, h in enumerate(['ID Proyecto', 'Proyecto', 'Fecha Planificada', 'Estado']):
-        tabla.rows[0].cells[i].text = h
-    for p in proyectos[:limite]:
-        fila = tabla.add_row().cells
-        fila[0].text = p['id_proyecto']
-        fila[1].text = _truncar(p.get('nombre_proyecto') or '—', 50)
-        fila[2].text = p['fecha_inicio_compra']
-        fila[3].text = 'Pendiente' if p['estado'] == 'PENDIENTE' else 'Atrasado'
-    if len(proyectos) > limite:
-        p_nota = doc.add_paragraph()
-        run = p_nota.add_run(f'… y {len(proyectos) - limite} proyecto(s) adicional(es).')
-        run.italic = True
-        run.font.size = Pt(9)
-        run.font.color.rgb = RGBColor(0x94, 0xa3, 0xb8)
-
-
 def _tabla_formularios_detalle_docx(doc, formularios, limite=30):
     """Detalle a nivel de CADA FSC individual (folio, unidad, monto) dentro del
     capítulo de una subdirección — complementa la tabla agregada por departamento
@@ -896,13 +1048,17 @@ _PARRAFOS_METODOLOGIA = [
     'verificando si el proyecto que declara (ID de Plan) existe en el maestro '
     'histórico del Plan Anual de Compras. El cumplimiento temporal compara la '
     'fecha en que el formulario fue derivado contra la fecha de compra '
-    'planificada para ese proyecto, con una tolerancia de un mes calendario.',
+    'planificada para ese proyecto, con una tolerancia de un mes calendario. El % de '
+    'cumplimiento temporal se calcula únicamente sobre los formularios Dentro PAC derivados '
+    'en el período que tienen una fecha de compra planificada comparable.',
     '(2) Ejecución del Plan de Compras (Ficha PAC): se determina a nivel de cada '
     'ficha/proyecto del Plan Anual de Compras. Una ficha se considera "Ejecutada" '
     'cuando cuenta con al menos un formulario de compra u orden de compra '
     'enlazada; "Pendiente" cuando su fecha de compra planificada aún no vence; y '
     '"Atrasada" cuando la fecha ya venció sin formulario ni orden de compra '
-    'asociada.',
+    'asociada. El estado de cada ficha se evalúa a la fecha de generación del informe '
+    '(no al cierre del período), porque depende de los formularios y órdenes de compra '
+    'registrados hasta ese momento.',
     'Por tratarse de universos y momentos de corte distintos, las cifras de '
     'ambas fuentes no son directamente sumables entre sí — se presentan en '
     'secciones separadas dentro de cada capítulo de subdirección para mantener '
@@ -957,11 +1113,12 @@ def generar_informe_word(periodo):
     # --- Resumen Ejecutivo Institucional -------------------------------------
     _titulo_capitulo_docx(doc, 'Resumen Ejecutivo Institucional')
     doc.add_paragraph(parrafo_resumen_ejecutivo(label, d['dentro_fuera']['kpis'], d['comparativa_periodos']))
-    doc.add_paragraph(parrafo_cumplimiento_temporal(label, d['temporal']['kpis']))
+    doc.add_paragraph(parrafo_cumplimiento_temporal(label, d['temporal']['kpis'], d['resumen_fichas'], anho))
     doc.add_paragraph(
         f'En paralelo, el Plan Anual de Compras {anho} registra {_n(d["total_fichas"])} fichas/proyectos, '
         f'de las cuales {_n(d["ejecutados_fichas"])} ({d["pct_ejecutado_fichas"]}%) cuentan con formulario '
-        f'de compra u orden de compra enlazada, por un monto total planificado de {_money(d["monto_total_fichas"])}.'
+        f'de compra u orden de compra enlazada, por un monto total planificado de {_money(d["monto_total_fichas"])} '
+        f'(estado de ejecución al {hoy.strftime("%d-%m-%Y")}).'
     )
 
     img = grafico_donut_dentro_fuera(d['dentro_fuera']['kpis']['pct_dentro'])
@@ -997,29 +1154,36 @@ def generar_informe_word(periodo):
         img = grafico_barras_ejecucion_mensual_planer(av['meses_planer'], titulo=f'Ejecución Plan de Compras — {label}')
         if img:
             texto_var = (
-                f'variación de {av["variacion_pct_ejecutado"]:+.1f} p.p. entre el primer y el último mes'
-                if av['variacion_pct_ejecutado'] is not None else 'sin datos suficientes para calcular variación interna'
+                f'diferencia de {av["variacion_pct_ejecutado"]:+.1f} p.p. entre el primer y el último mes'
+                if av['variacion_pct_ejecutado'] is not None else 'sin datos suficientes para calcular la diferencia'
             )
-            _agregar_grafico_docx(doc, img, Inches(5.6), f'Gráfico 3c — % Ejecutado del Plan de Compras mes a mes dentro del {label} ({texto_var}).')
+            _agregar_grafico_docx(
+                doc, img, Inches(5.6),
+                f'Gráfico 3c — Fichas del Plan de Compras según el mes de su fecha de compra, dentro del {label} '
+                f'({texto_var}). {_TEXTO_LECTURA_EJECUCION_MENSUAL}',
+            )
         _tabla_avance_trimestral_docx(doc, av)
 
     doc.add_page_break()
 
     _titulo_seccion_docx(doc, 'Cumplimiento Dentro/Fuera del PAC por Subdirección')
-    doc.add_paragraph(
-        'La siguiente tabla desglosa, por subdirección, el número de formularios Dentro y Fuera del PAC '
-        f'del año {anho} comparado contra el mismo corte de {anho_ant}, para dimensionar la evolución del '
-        'apego institucional al Plan Anual de Compras.'
-    )
+    doc.add_paragraph(_texto_resumen_subdireccion(d['resumen_subdireccion'], anho, anho_ant))
     if d['resumen_subdireccion']['subdirecciones']:
         _tabla_resumen_subdireccion(doc, d['resumen_subdireccion']['subdirecciones'], anho, anho_ant)
     img = grafico_donut_cumplimiento_temporal(d['temporal']['kpis'])
     if img:
-        _agregar_grafico_docx(doc, img, Inches(3.4), 'Gráfico 4 — Cumplimiento temporal: formularios Dentro del PAC evaluados contra su fecha planificada.')
+        _agregar_grafico_docx(
+            doc, img, Inches(3.4),
+            f'Gráfico 4 — Cumplimiento temporal: formularios Dentro del PAC derivados en {label}, evaluados contra su fecha planificada.',
+        )
 
-    img = grafico_barras_ejecucion_mensual_planer(d['temporal_mensual_planer']['meses'])
+    img = grafico_barras_ejecucion_mensual_planer(d['serie_fichas_mensual']['meses'])
     if img:
-        _agregar_grafico_docx(doc, img, Inches(5.8), f'Gráfico 5 — Ejecución mensual del Plan de Compras {anho} (fichas Ejecutadas/Pendientes/Atrasadas).')
+        _agregar_grafico_docx(
+            doc, img, Inches(5.8),
+            f'Gráfico 5 — Ejecución del Plan de Compras {anho}: fichas Ejecutadas/Pendientes/Atrasadas según el mes de su '
+            f'fecha de compra. {_texto_serie_fichas(d["serie_fichas_mensual"])}',
+        )
     doc.add_page_break()
 
     # --- Metodología ----------------------------------------------------------
@@ -1120,38 +1284,23 @@ def generar_informe_word(periodo):
     _titulo_seccion_docx(doc, 'Mejores formularios')
     if d['rankings_formulario']['mejores']:
         _tabla_ranking_formulario(doc, d['rankings_formulario']['mejores'])
+        _nota_docx(doc, _nota_empates_ranking(d['rankings_formulario'], mejores=True))
     else:
         doc.add_paragraph('Sin datos suficientes para generar el ranking en este período.')
     _titulo_seccion_docx(doc, 'Formularios con mayor oportunidad de mejora')
     if d['rankings_formulario']['peores']:
         _tabla_ranking_formulario(doc, d['rankings_formulario']['peores'])
+        _nota_docx(doc, _nota_empates_ranking(d['rankings_formulario'], mejores=False))
     else:
         doc.add_paragraph('Sin datos suficientes para generar el ranking en este período.')
     doc.add_page_break()
 
     # --- Alertas y Seguimiento ----------------------------------------------
     _titulo_capitulo_docx(doc, 'Alertas y Seguimiento')
-    doc.add_paragraph(
-        'Las secciones siguientes se agrupan por subdirección institucional para facilitar el '
-        'seguimiento y la coordinación con cada responsable.'
-    )
-    _titulo_seccion_docx(doc, 'Proyectos planificados sin ningún formulario Dentro PAC derivado todavía')
-    _render_grupos_subdireccion_docx(
-        doc, d['proyectos_sin_iniciar'], _tabla_proyectos_sin_iniciar_docx,
-        'No hay proyectos planificados sin iniciar en el período.',
-    )
-
-    _titulo_seccion_docx(doc, f'Fichas a ejecutar el próximo mes (Año PAC {anho})')
-    _render_grupos_subdireccion_docx(
-        doc, d['proximo_mes'], _tabla_fichas_pac_docx,
-        'No hay fichas planificadas para el próximo mes.',
-    )
-
-    _titulo_seccion_docx(doc, f'Fichas atrasadas (Año PAC {anho})')
-    _render_grupos_subdireccion_docx(
-        doc, d['atrasadas'], _tabla_fichas_pac_docx,
-        'No hay fichas atrasadas en el período.',
-    )
+    doc.add_paragraph(_texto_intro_alertas(d, hoy))
+    for alerta in d['alertas']:
+        _titulo_seccion_docx(doc, f'{alerta["titulo"]} (Año PAC {anho}) — {_n(alerta["n"])}')
+        _render_grupos_subdireccion_docx(doc, alerta['grupos'], _tabla_fichas_pac_docx, alerta['mensaje_vacio'])
     doc.add_page_break()
 
     # --- Conclusiones y Recomendaciones ---------------------------------------
@@ -1215,10 +1364,12 @@ _PDF_ESTILOS.add(ParagraphStyle(
 _PDF_ESTILOS.add(ParagraphStyle(
     name='TituloCapitulo', fontSize=16, leading=20, spaceBefore=6, spaceAfter=10,
     textColor=colors.HexColor(COLOR_INSTITUCIONAL), fontName='Helvetica-Bold',
+    keepWithNext=1,  # un título nunca queda solo al pie de una página, separado de su gráfico/tabla
 ))
 _PDF_ESTILOS.add(ParagraphStyle(
     name='TituloSeccion', fontSize=12.5, leading=16, spaceBefore=8, spaceAfter=8,
     textColor=colors.HexColor('#386fc9'), fontName='Helvetica-Bold',
+    keepWithNext=1,
 ))
 _PDF_ESTILOS.add(ParagraphStyle(
     name='SubGrupo', fontSize=10, leading=13, spaceBefore=6, spaceAfter=3,
@@ -1343,7 +1494,7 @@ def _pdf_tabla_resumen_subdireccion(filas, anho, anho_anterior, limite=15):
 def _pdf_nota_adicionales(total, limite, texto_unidad):
     """Paragraph '… y N adicional(es)' cuando una tabla PDF trunca una lista más larga
     que `limite` — paridad con el aviso equivalente que ya llevan las tablas Word
-    truncadas (`_tabla_fichas_pac_docx`, `_tabla_proyectos_sin_iniciar_docx`, etc.);
+    truncadas (`_tabla_fichas_pac_docx`, etc.);
     el PDF no lo tenía en ninguna de sus tablas (bug real, revisión de código
     2026-07-27), dejando al lector sin forma de saber que hubo recorte. Devuelve
     `None` (nada que agregar al story) cuando no hubo truncamiento."""
@@ -1357,7 +1508,7 @@ def _pdf_nota_adicionales(total, limite, texto_unidad):
 
 def _pdf_tabla_fichas_pac(filas, limite=40):
     """`limite=40` — antes 25, mientras el Word equivalente (`_tabla_fichas_pac_docx`)
-    usa 40 para la MISMA fuente de datos (`d['proximo_mes']`/`d['atrasadas']`); el PDF
+    usa 40 para la MISMA fuente de datos (`d['alertas']`); el PDF
     podía omitir hasta 15 fichas que el Word sí mostraba (bug real, revisión de código
     2026-07-27). Ahora retorna `[tabla, nota_o_none]` — ver `_pdf_nota_adicionales`."""
     encabezado = ['ID Proyecto', 'Proyecto', 'Departamento', 'Responsable', 'Fecha Compra', 'Estado']
@@ -1430,20 +1581,6 @@ def _pdf_tabla_avance_trimestral(avance):
     tabla = Table(tabla_filas, colWidths=[1 * inch, 1.1 * inch, 1.1 * inch, 1.3 * inch, 1.1 * inch], repeatRows=1)
     tabla.setStyle(_PDF_TABLA_ESTILO)
     return tabla
-
-
-def _pdf_tabla_proyectos_sin_iniciar(proyectos, limite=30):
-    """Retorna `[tabla, nota_o_none]` — ver `_pdf_nota_adicionales`."""
-    tabla_filas = [_fila_encabezado(['ID Proyecto', 'Proyecto', 'Fecha Planificada', 'Estado'])]
-    for p in proyectos[:limite]:
-        tabla_filas.append([
-            p['id_proyecto'], _celda(p.get('nombre_proyecto') or '—'),
-            p['fecha_inicio_compra'], 'Pendiente' if p['estado'] == 'PENDIENTE' else 'Atrasado',
-        ])
-    tabla = Table(tabla_filas, colWidths=[1 * inch, 2.7 * inch, 1.3 * inch, 0.9 * inch], repeatRows=1)
-    tabla.setStyle(_PDF_TABLA_ESTILO)
-    nota = _pdf_nota_adicionales(len(proyectos), limite, 'proyecto(s)')
-    return [tabla, nota] if nota else [tabla]
 
 
 def _render_grupos_subdireccion_pdf(story, grupos, tabla_fn, est, mensaje_vacio):
@@ -1544,11 +1681,12 @@ def generar_reporte_pdf(periodo):
     # --- Resumen Ejecutivo Institucional -------------------------------------
     story.append(Paragraph('Resumen Ejecutivo Institucional', est['TituloCapitulo']))
     story.append(Paragraph(parrafo_resumen_ejecutivo(label, d['dentro_fuera']['kpis'], d['comparativa_periodos']), est['Cuerpo']))
-    story.append(Paragraph(parrafo_cumplimiento_temporal(label, d['temporal']['kpis']), est['Cuerpo']))
+    story.append(Paragraph(parrafo_cumplimiento_temporal(label, d['temporal']['kpis'], d['resumen_fichas'], anho), est['Cuerpo']))
     story.append(Paragraph(
         f'En paralelo, el Plan Anual de Compras {anho} registra {_n(d["total_fichas"])} fichas/proyectos, de las '
         f'cuales {_n(d["ejecutados_fichas"])} ({d["pct_ejecutado_fichas"]}%) cuentan con formulario de compra u '
-        f'orden de compra enlazada, por un monto total planificado de {_money(d["monto_total_fichas"])}.',
+        f'orden de compra enlazada, por un monto total planificado de {_money(d["monto_total_fichas"])} '
+        f'(estado de ejecución al {hoy.strftime("%d-%m-%Y")}).',
         est['Cuerpo'],
     ))
 
@@ -1587,30 +1725,36 @@ def generar_reporte_pdf(periodo):
         if img:
             story.append(img)
             texto_var = (
-                f'variación de {av["variacion_pct_ejecutado"]:+.1f} p.p. entre el primer y el último mes'
-                if av['variacion_pct_ejecutado'] is not None else 'sin datos suficientes para calcular variación interna'
+                f'diferencia de {av["variacion_pct_ejecutado"]:+.1f} p.p. entre el primer y el último mes'
+                if av['variacion_pct_ejecutado'] is not None else 'sin datos suficientes para calcular la diferencia'
             )
-            story.append(Paragraph(f'Gráfico 3c — % Ejecutado del Plan de Compras mes a mes dentro del {label} ({texto_var}).', est['Leyenda']))
+            story.append(Paragraph(
+                f'Gráfico 3c — Fichas del Plan de Compras según el mes de su fecha de compra, dentro del {label} '
+                f'({texto_var}). {_TEXTO_LECTURA_EJECUCION_MENSUAL}', est['Leyenda'],
+            ))
         story.append(_pdf_tabla_avance_trimestral(av))
 
     story.append(PageBreak())
 
     story.append(Paragraph('Cumplimiento Dentro/Fuera del PAC por Subdirección', est['TituloSeccion']))
-    story.append(Paragraph(
-        'Desglose por subdirección del número de formularios Dentro y Fuera del PAC del año en curso comparado '
-        'contra el mismo corte del año anterior.', est['Cuerpo'],
-    ))
+    story.append(Paragraph(_texto_resumen_subdireccion(d['resumen_subdireccion'], anho, anho_ant), est['Cuerpo']))
     if d['resumen_subdireccion']['subdirecciones']:
         story.append(_pdf_tabla_resumen_subdireccion(d['resumen_subdireccion']['subdirecciones'], anho, anho_ant))
     img = _pdf_imagen(grafico_donut_cumplimiento_temporal(d['temporal']['kpis']), 3.0, 2.7)
     if img:
         story.append(Spacer(1, 0.15 * inch))
         story.append(img)
-        story.append(Paragraph('Gráfico 4 — Cumplimiento temporal: formularios Dentro del PAC evaluados contra su fecha planificada.', est['Leyenda']))
-    img = _pdf_imagen(grafico_barras_ejecucion_mensual_planer(d['temporal_mensual_planer']['meses']), 5.6, 2.4)
+        story.append(Paragraph(
+            f'Gráfico 4 — Cumplimiento temporal: formularios Dentro del PAC derivados en {label}, evaluados contra su fecha planificada.',
+            est['Leyenda'],
+        ))
+    img = _pdf_imagen(grafico_barras_ejecucion_mensual_planer(d['serie_fichas_mensual']['meses']), 5.6, 2.4)
     if img:
         story.append(img)
-        story.append(Paragraph(f'Gráfico 5 — Ejecución mensual del Plan de Compras {anho} (fichas Ejecutadas/Pendientes/Atrasadas).', est['Leyenda']))
+        story.append(Paragraph(
+            f'Gráfico 5 — Ejecución del Plan de Compras {anho}: fichas Ejecutadas/Pendientes/Atrasadas según el mes de su '
+            f'fecha de compra. {_texto_serie_fichas(d["serie_fichas_mensual"])}', est['Leyenda'],
+        ))
     story.append(PageBreak())
 
     # --- Metodología -----------------------------------------------------------
@@ -1711,39 +1855,24 @@ def generar_reporte_pdf(periodo):
     story.append(Paragraph('Mejores formularios', est['TituloSeccion']))
     if d['rankings_formulario']['mejores']:
         story.append(_pdf_tabla_ranking_formulario(d['rankings_formulario']['mejores']))
+        _nota_pdf(story, _nota_empates_ranking(d['rankings_formulario'], mejores=True))
     else:
         story.append(Paragraph('Sin datos suficientes para generar el ranking en este período.', est['Cuerpo']))
     story.append(Spacer(1, 0.15 * inch))
     story.append(Paragraph('Formularios con mayor oportunidad de mejora', est['TituloSeccion']))
     if d['rankings_formulario']['peores']:
         story.append(_pdf_tabla_ranking_formulario(d['rankings_formulario']['peores']))
+        _nota_pdf(story, _nota_empates_ranking(d['rankings_formulario'], mejores=False))
     else:
         story.append(Paragraph('Sin datos suficientes para generar el ranking en este período.', est['Cuerpo']))
     story.append(PageBreak())
 
     # --- Alertas y Seguimiento ------------------------------------------------
     story.append(Paragraph('Alertas y Seguimiento', est['TituloCapitulo']))
-    story.append(Paragraph(
-        'Las secciones siguientes se agrupan por subdirección institucional para facilitar el seguimiento y '
-        'la coordinación con cada responsable.', est['Cuerpo'],
-    ))
-    story.append(Paragraph('Proyectos planificados sin ningún formulario Dentro PAC derivado todavía', est['TituloSeccion']))
-    _render_grupos_subdireccion_pdf(
-        story, d['proyectos_sin_iniciar'], _pdf_tabla_proyectos_sin_iniciar, est,
-        'No hay proyectos planificados sin iniciar en el período.',
-    )
-
-    story.append(Paragraph(f'Fichas a ejecutar el próximo mes (Año PAC {anho})', est['TituloSeccion']))
-    _render_grupos_subdireccion_pdf(
-        story, d['proximo_mes'], _pdf_tabla_fichas_pac, est,
-        'No hay fichas planificadas para el próximo mes.',
-    )
-
-    story.append(Paragraph(f'Fichas atrasadas (Año PAC {anho})', est['TituloSeccion']))
-    _render_grupos_subdireccion_pdf(
-        story, d['atrasadas'], _pdf_tabla_fichas_pac, est,
-        'No hay fichas atrasadas en el período.',
-    )
+    story.append(Paragraph(_texto_intro_alertas(d, hoy), est['Cuerpo']))
+    for alerta in d['alertas']:
+        story.append(Paragraph(f'{alerta["titulo"]} (Año PAC {anho}) — {_n(alerta["n"])}', est['TituloSeccion']))
+        _render_grupos_subdireccion_pdf(story, alerta['grupos'], _pdf_tabla_fichas_pac, est, alerta['mensaje_vacio'])
     story.append(PageBreak())
 
     # --- Conclusiones y Recomendaciones ---------------------------------------
@@ -2394,26 +2523,6 @@ def _ppt_tabla_fichas_pac(slide, fichas, top, limite=10):
         )
 
 
-def _ppt_tabla_proyectos_sin_iniciar(slide, proyectos, top, limite=10):
-    filas_datos = proyectos[:limite]
-    n_filas = len(filas_datos) + 1
-    tabla_shape = slide.shapes.add_table(n_filas, 3, PptxInches(PPT_MARGEN), top, PptxInches(PPT_ANCHO_CONTENIDO), PptxInches(0.4 * n_filas))
-    tabla = tabla_shape.table
-    _ppt_fijar_anchos_columnas(tabla, [6.69, 2.94, 2.67])
-    for i, h in enumerate(['Proyecto', 'Fecha Planificada', 'Estado']):
-        tabla.cell(0, i).text = h
-    for r, p in enumerate(filas_datos, start=1):
-        tabla.cell(r, 0).text = _truncar(p.get('nombre_proyecto') or p['id_proyecto'], 55)
-        tabla.cell(r, 1).text = p['fecha_inicio_compra']
-        tabla.cell(r, 2).text = 'Pendiente' if p['estado'] == 'PENDIENTE' else 'Atrasado'
-    _ppt_estilizar_tabla(tabla, tamano_fuente=11)
-    if len(proyectos) > limite:
-        _ppt_parrafo(
-            slide, f'… y {len(proyectos) - limite} proyecto(s) adicional(es) — ver detalle en el informe Word/PDF.',
-            top=top + PptxInches(0.4 * n_filas) + PptxInches(0.1), tamano=10, height=PptxInches(0.4),
-        )
-
-
 def _ppt_capitulo_subdireccion(prs, nombre_display, fsc, planer, responsables, anho, formularios_detalle=None, fichas_detalle=None):
     """Mini-capítulo de la subdirección `nombre_display` en el PPT — decisión del
     usuario 2026-07-21 (2ª ronda): expandir el PPT de 'ejecutivo resumido' a una
@@ -2599,11 +2708,17 @@ def generar_presentacion_ppt(periodo):
         flecha='↑' if var_ant >= 0 else '↓',
     )
     top_fila += PptxInches(0.76)
-    pct_en_fecha = d['temporal']['kpis']['pct_en_fecha']
+    kpis_t = d['temporal']['kpis']
+    pct_en_fecha = kpis_t.get('pct_en_fecha_formularios')
     _ppt_fila_indicador(
-        slide, top_fila, 'Cumplimiento Temporal', f"{pct_en_fecha}%",
-        COLOR_PPT_VERDE if pct_en_fecha >= 70 else COLOR_PPT_AMBAR,
-        explicacion='% de fichas del Plan de Compras ejecutadas dentro del plazo planificado.', flecha='→',
+        slide, top_fila, 'Cumplimiento Temporal', f'{pct_en_fecha}%' if pct_en_fecha is not None else '—',
+        COLOR_PPT_VERDE if (pct_en_fecha or 0) >= 70 else COLOR_PPT_AMBAR,
+        comparacion=(
+            f"Total: {_n(kpis_t['formularios_evaluados'])}  ·  En fecha: {_n(kpis_t['en_fecha'])}  ·  "
+            f"Atrasados: {_n(kpis_t['formularios_atrasados'])}"
+        ),
+        explicacion='% de los formularios Dentro PAC derivados en el período que se derivó en la fecha planificada o antes.',
+        flecha='→',
     )
     top_fila += PptxInches(0.76)
     _ppt_fila_indicador(
@@ -2641,14 +2756,15 @@ def generar_presentacion_ppt(periodo):
         )
         _ppt_parrafo(
             slide,
-            f'Variación % Dentro PAC dentro del trimestre: {texto_var_dentro}   ·   '
-            f'Variación % Ejecutado del Plan de Compras: {texto_var_ejec}',
+            f'Variación % Dentro PAC entre el primer y el último mes del trimestre: {texto_var_dentro}   ·   '
+            f'Diferencia % de fichas ejecutadas (primer vs último mes): {texto_var_ejec}',
             top=PptxInches(1.05), tamano=13, height=PptxInches(0.6),
         )
         img_av_fsc = grafico_evolucion_mensual_dentro_fuera(av['meses_fsc'], anho, anho_ant, titulo=f'% Dentro PAC — {label}')
         _ppt_imagen(slide, img_av_fsc, PptxInches(0.5), PptxInches(1.8), PptxInches(6.0))
-        img_av_planer = grafico_barras_ejecucion_mensual_planer(av['meses_planer'], titulo=f'Ejecución — {label}')
+        img_av_planer = grafico_barras_ejecucion_mensual_planer(av['meses_planer'], titulo=f'Fichas del plan por mes — {label}')
         _ppt_imagen(slide, img_av_planer, PptxInches(6.8), PptxInches(1.8), PptxInches(6.0))
+        _ppt_parrafo(slide, _TEXTO_LECTURA_EJECUCION_MENSUAL, top=PptxInches(5.3), tamano=11, height=PptxInches(0.9))
 
     # --- Ejecución del Plan de Compras ---------------------------------------
     slide = _ppt_slide_en_blanco(prs)
@@ -2656,13 +2772,17 @@ def generar_presentacion_ppt(periodo):
     _ppt_parrafo(
         slide,
         f'Año PAC {anho}: {_n(d["total_fichas"])} fichas — {d["pct_ejecutado_fichas"]}% ejecutadas '
-        f'({_n(d["ejecutados_fichas"])} con formulario u OC enlazada). '
+        f'({_n(d["ejecutados_fichas"])} con formulario u OC enlazada, al {hoy.strftime("%d-%m-%Y")}). '
         f'Monto total planificado: {_money(d["monto_total_fichas"])}.',
         top=PptxInches(1.05), tamano=14, height=PptxInches(1.0),
     )
-    img_ejec = grafico_barras_ejecucion_mensual_planer(d['temporal_mensual_planer']['meses'])
+    img_ejec = grafico_barras_ejecucion_mensual_planer(d['serie_fichas_mensual']['meses'])
     if img_ejec:
-        _ppt_imagen(slide, img_ejec, PptxInches(1.5), PptxInches(2.1), PptxInches(10.3))
+        _ppt_imagen(slide, img_ejec, PptxInches(1.5), PptxInches(1.9), PptxInches(10.3))
+        _ppt_parrafo(
+            slide, 'Fichas según el mes de su fecha de compra. ' + _texto_serie_fichas(d['serie_fichas_mensual']),
+            top=PptxInches(6.2), tamano=11, height=PptxInches(0.7),
+        )
 
     # --- Resumen general por subdirección (1 tabla combinada, panorama antes
     # del detalle) ------------------------------------------------------------
@@ -2671,10 +2791,11 @@ def generar_presentacion_ppt(periodo):
     _ppt_parrafo(
         slide,
         'Formularios Dentro/Fuera del PAC y ejecución del Plan de Compras, por subdirección institucional — '
-        'el detalle completo de cada una (KPIs, gráficos y departamentos) se desarrolla a continuación.',
-        top=PptxInches(1.0), tamano=12, height=PptxInches(0.7),
+        'el detalle completo de cada una (KPIs, gráficos y departamentos) se desarrolla a continuación. '
+        f'Formularios: {label}. Fichas del Plan de Compras: año PAC {anho} completo, estado al {hoy.strftime("%d-%m-%Y")}.',
+        top=PptxInches(1.0), tamano=12, height=PptxInches(0.9),
     )
-    _ppt_tabla_resumen_combinado(slide, d['subdirecciones'], top=PptxInches(1.75))
+    _ppt_tabla_resumen_combinado(slide, d['subdirecciones'], top=PptxInches(2.0))
 
     # --- Separador — Detalle por Subdirección + capítulos --------------------
     _ppt_divisor_seccion(prs, '02', ['DETALLE POR', 'SUBDIRECCIÓN'], 'KPIs, gráficos y departamentos de cada subdirección institucional')
@@ -2708,6 +2829,7 @@ def generar_presentacion_ppt(periodo):
     _ppt_titulo(slide, 'Ranking de Formularios — Mejor Desempeño')
     if d['rankings_formulario']['mejores']:
         _ppt_tabla_ranking_formulario(slide, d['rankings_formulario']['mejores'], top=PptxInches(1.2), limite=5)
+        _nota_ppt(slide, _nota_empates_ranking(d['rankings_formulario'], mejores=True), top=PptxInches(4.1))
     else:
         _ppt_parrafo(slide, 'Sin datos suficientes para generar el ranking en este período.', top=PptxInches(1.2))
 
@@ -2715,47 +2837,39 @@ def generar_presentacion_ppt(periodo):
     _ppt_titulo(slide, 'Ranking de Formularios — Mayor Oportunidad de Mejora')
     if d['rankings_formulario']['peores']:
         _ppt_tabla_ranking_formulario(slide, d['rankings_formulario']['peores'], top=PptxInches(1.2), limite=5)
+        _nota_ppt(slide, _nota_empates_ranking(d['rankings_formulario'], mejores=False), top=PptxInches(4.1))
     else:
         _ppt_parrafo(slide, 'Sin datos suficientes para generar el ranking en este período.', top=PptxInches(1.2))
 
     # --- Separador — Alertas y Seguimiento ------------------------------------
-    _ppt_divisor_seccion(prs, '04', ['ALERTAS Y', 'SEGUIMIENTO'], 'Proyectos sin iniciar, fichas próximas y atrasadas')
+    _ppt_divisor_seccion(prs, '04', ['ALERTAS Y', 'SEGUIMIENTO'], 'Fichas atrasadas y pendientes de ejecución')
 
-    # --- Alertas y Seguimiento: resumen institucional + detalle por subdirección
-    # (2026-07-23, para mayor claridad) --------------------------------------
-    n_sin_iniciar = _total_items_grupos(d['proyectos_sin_iniciar'])
-    n_proximo_mes = _total_items_grupos(d['proximo_mes'])
-    n_atrasadas = _total_items_grupos(d['atrasadas'])
+    # --- Alertas y Seguimiento: resumen institucional + detalle por subdirección.
+    # Las listas reparten las fichas sin formulario ni OC sin solaparse (`_alertas_fichas`). ------
+    estilo_alerta = {  # clave de estado -> (icono, color de la tarjeta)
+        'ATRASADO': ('⏰', COLOR_PPT_ROJO), 'PENDIENTE': ('📅', COLOR_PPT_AZUL_PROFUNDO), 'SIN_FECHA': ('❓', COLOR_PPT_AMBAR),
+    }
     slide = _ppt_slide_en_blanco(prs)
     _ppt_titulo(slide, 'Alertas y Seguimiento')
-    _ppt_tarjeta_numerada(
-        slide, PptxInches(1.2), '⚠', f'Proyectos planificados sin formulario Dentro PAC derivado: {_n(n_sin_iniciar)}',
-        color=COLOR_PPT_ROJO, height=0.75,
+    top_tarjeta = 1.2
+    for alerta in d['alertas']:
+        icono, color = estilo_alerta[alerta['clave']]
+        _ppt_tarjeta_numerada(
+            slide, PptxInches(top_tarjeta), icono, f'{alerta["titulo"]} (Año PAC {anho}): {_n(alerta["n"])}',
+            color=color, height=0.75,
+        )
+        top_tarjeta += 0.95
+    _ppt_parrafo(slide, _texto_intro_alertas(d, hoy), top=PptxInches(top_tarjeta + 0.15), tamano=12, height=PptxInches(1.7))
+    _ppt_parrafo(
+        slide, 'Detalle por subdirección en las diapositivas siguientes.',
+        top=PptxInches(top_tarjeta + 1.9), tamano=12, height=PptxInches(0.4),
     )
-    _ppt_tarjeta_numerada(
-        slide, PptxInches(2.15), '📅', f'Fichas a ejecutar el próximo mes (Año PAC {anho}): {_n(n_proximo_mes)}',
-        color=COLOR_PPT_AZUL_PROFUNDO, height=0.75,
-    )
-    _ppt_tarjeta_numerada(
-        slide, PptxInches(3.1), '⏰', f'Fichas atrasadas (Año PAC {anho}): {_n(n_atrasadas)}',
-        color=COLOR_PPT_AMBAR, height=0.75,
-    )
-    _ppt_parrafo(slide, 'Detalle por subdirección en las diapositivas siguientes.', top=PptxInches(4.1), tamano=12, height=PptxInches(0.4))
 
-    for grupo in d['proyectos_sin_iniciar']:
-        slide = _ppt_slide_en_blanco(prs)
-        _ppt_titulo(slide, f'Proyectos sin iniciar — {grupo["nombre_display"]}')
-        _ppt_tabla_proyectos_sin_iniciar(slide, grupo['items'], top=PptxInches(1.1))
-
-    for grupo in d['proximo_mes']:
-        slide = _ppt_slide_en_blanco(prs)
-        _ppt_titulo(slide, f'Fichas a ejecutar próximo mes — {grupo["nombre_display"]}')
-        _ppt_tabla_fichas_pac(slide, grupo['items'], top=PptxInches(1.1))
-
-    for grupo in d['atrasadas']:
-        slide = _ppt_slide_en_blanco(prs)
-        _ppt_titulo(slide, f'Fichas atrasadas — {grupo["nombre_display"]}')
-        _ppt_tabla_fichas_pac(slide, grupo['items'], top=PptxInches(1.1))
+    for alerta in d['alertas']:
+        for grupo in alerta['grupos']:
+            slide = _ppt_slide_en_blanco(prs)
+            _ppt_titulo(slide, f'{alerta["titulo"]} — {grupo["nombre_display"]}')
+            _ppt_tabla_fichas_pac(slide, grupo['items'], top=PptxInches(1.1))
 
     # --- Separador — Conclusiones ---------------------------------------------
     _ppt_divisor_seccion(prs, '05', ['CONCLUSIONES Y', 'RECOMENDACIONES'], 'Cierre y próximos pasos del Plan Anual de Compras')

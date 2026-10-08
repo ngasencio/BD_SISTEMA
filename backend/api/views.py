@@ -5378,7 +5378,7 @@ def pac_cumplimiento_resumen_subdireccion_view(request):
     from .services import calcular_pac_resumen_subdireccion
     anho = request.GET.get('anho', '').strip()
     anho_int = int(anho) if anho.isdigit() else date.today().year
-    cache_key = f'pac_resumen_subdireccion_v1_{anho_int}'
+    cache_key = f'pac_resumen_subdireccion_v2_{anho_int}'  # v2: el año anterior se compara al MISMO corte
     if data := cache.get(cache_key):
         return Response(data)
     data = calcular_pac_resumen_subdireccion(anho_int)

@@ -6,7 +6,7 @@ const ANIOS = [2026, 2025, 2024, 2023, 2022, 2021, 2020];
 const FORMATOS = [
     {
         id: 'word', icono: '📄', label: 'Word', ext: '.docx',
-        descripcion: 'Informe institucional con portada, resumen ejecutivo del Score Res.188, tabla completa de los 6 indicadores y detalle de Órdenes de Compra.',
+        descripcion: 'Informe institucional del Indicador 1 (% Compras dentro del PAC): portada, resumen ejecutivo, evolución mensual, trimestral y anual por monto y por N° de OC, OC fuera del PAC, OC corregidas y conclusiones.',
         colorAcento: 'var(--gob-azul)',
     },
     {
@@ -16,7 +16,7 @@ const FORMATOS = [
     },
     {
         id: 'ppt', icono: '📊', label: 'PowerPoint', ext: '.pptx',
-        descripcion: 'Presentación con una diapositiva por indicador Res.188, resumen de Órdenes de Compra y conclusiones — lista para exponer.',
+        descripcion: 'Presentación ejecutiva del Indicador 1: una diapositiva por sección (resumen, evolución, comparativo anual, OC fuera del PAC, corregidas y conclusiones) — lista para exponer.',
         colorAcento: 'var(--gob-celeste)',
     },
 ];
@@ -24,12 +24,12 @@ const FORMATOS = [
 const CONTENIDO_INFORME = [
     'Portada institucional con logo e imagen del edificio principal',
     'Índice con numeración de página automática',
-    'Resumen ejecutivo: % de enlace al PAC y variación vs año anterior',
-    'Evolución mensual, comparativo trimestral y comparativo anual histórico',
-    '% Enlace Mensual comparado entre los últimos años',
-    'Detalle de Órdenes de Compra fuera del PAC por tipo',
-    'Registro de OC corregidas manualmente',
-    'Conclusiones y recomendaciones',
+    'Resumen ejecutivo: % del monto de OC enlazado a proyectos del PAC vigente (Indicador 1)',
+    'Observación: % considerando cualquier proyecto PAC (incluye PAC de años anteriores)',
+    'Evolución mensual y comparativo trimestral, por monto y por N° de OC',
+    'Comparativo anual del % de enlace por monto y por cantidad de OC (gráfico, tabla de avance y texto) y % Enlace Mensual entre años, también por monto y por cantidad de OC',
+    'Detalle de Órdenes de Compra fuera del PAC por tipo y matriz cruzada',
+    'Registro de OC corregidas manualmente y conclusiones',
 ];
 
 const EXTENSIONES = { word: 'docx', ppt: 'pptx', pdf: 'pdf' };
@@ -89,8 +89,9 @@ export default function ReportesTab() {
                         marginTop: 12, padding: '8px 10px', borderRadius: 8,
                         background: 'var(--gob-celeste-lt)', fontSize: 11.5, color: 'var(--gob-azul-dark)',
                     }}>
-                        El comparativo anual y el % de enlace mensual siempre incluyen todos los años con datos —
-                        el selector solo define el año de enfoque del resto del informe.
+                        El comparativo anual y el % de enlace mensual siempre incluyen todos los años con enlace PAC
+                        posible — el selector solo define el año de enfoque del resto del informe. El Indicador 1 se
+                        calcula por monto sobre los proyectos del PAC vigente.
                     </div>
                 </div>
 

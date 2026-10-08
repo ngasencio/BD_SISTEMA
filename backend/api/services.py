@@ -155,18 +155,28 @@ def calcular_indicadores_res188(anio=2026):
     total = float(total_agg['total'] or 0)
 
     # ── Indicador 1: % Compras dentro del PAC ──
+    # Definición ORIGINAL (restituida 2026-10-08 a pedido del usuario): monto de las OC enlazadas
+    # (`EnlacePAC='Enlazada'`) cuyo proyecto EXISTE en `PlanerPAC` (el plan cargado, que incluye
+    # el arrastre PC24/PC25 del PAC 2026) sobre el monto total de OC del año. Ese 2026 = 77,6%.
+    # Se probó "cualquier proyecto PAC" (83,1%) y se revirtió.
     pac_ids = set(
         PlanerPAC.objects.exclude(id_proyecto__isnull=True)
         .exclude(id_proyecto='')
         .values_list('id_proyecto', flat=True)
     )
-    monto_enlazado = float(
-        oc_qs.filter(
-            EnlacePAC='Enlazada',
-            ID_Proyecto__in=pac_ids
-        ).aggregate(t=Sum('TotalNeto'))['t'] or 0
-    )
+    enlazadas_qs = oc_qs.filter(EnlacePAC='Enlazada')
+    enlazadas_plan_qs = enlazadas_qs.filter(ID_Proyecto__in=pac_ids)
+    monto_enlazado = float(enlazadas_plan_qs.aggregate(t=Sum('TotalNeto'))['t'] or 0)
     i1 = (monto_enlazado / total * 100) if total > 0 else None
+
+    # Dato adicional (NO es el indicador ni entra al Score): el mismo cálculo con OC enlazadas a
+    # CUALQUIER proyecto PAC del maestro histórico, incluidos los de años anteriores que ya no
+    # están en el plan. Es la base de las series mensual/trimestral/anual de los informes.
+    monto_enlazado_cualquier_pac = float(enlazadas_qs.aggregate(t=Sum('TotalNeto'))['t'] or 0)
+    i1_cualquier_pac = (monto_enlazado_cualquier_pac / total * 100) if total > 0 else None
+    # ¿Está cargado el plan de ESE año? `pac_ids` trae los años cargados (hoy solo 2026): para otro año
+    # el Ind.1 se mide contra un plan que no le corresponde y no es comparable.
+    plan_del_anio_cargado = PlanerPAC.objects.filter(pac=str(anio)).exists()
 
     # ── Indicador 2: % Procesos Competitivos ──
     monto_comp = float(
@@ -234,8 +244,14 @@ def calcular_indicadores_res188(anio=2026):
 
     return {
         'anio': anio,
-        'total_oc': total,
+        'total_oc': total,  # MONTO neto total del año (no una cantidad) — ver `cantidad_oc`
+        'cantidad_oc': oc_qs.count(),
+        'cantidad_enlazadas': enlazadas_plan_qs.count(),
         'i1': round(i1, 2) if i1 is not None else None,
+        'i1_cualquier_pac': round(i1_cualquier_pac, 2) if i1_cualquier_pac is not None else None,
+        'monto_enlazado_cualquier_pac': monto_enlazado_cualquier_pac,
+        'cantidad_enlazadas_cualquier_pac': enlazadas_qs.count(),
+        'plan_del_anio_cargado': plan_del_anio_cargado,
         'i2': round(i2, 2) if i2 is not None else None,
         'i4_nota': i4_nota,
         'i4_score': i4_score,
@@ -249,6 +265,14 @@ def calcular_indicadores_res188(anio=2026):
         'ahorro_ca': round(ahorrado, 2),
         'adjudicado_ca': round(adjudicado, 2),
     }
+
+
+def _pct_monto_enlazado(monto_enlazado, monto_no_enlazado):
+    """% del monto de OC enlazado a CUALQUIER proyecto PAC (`EnlacePAC='Enlazada'`) — base de las series
+    históricas mensual/anual de los informes; NO es el Indicador 1 (ese exige el proyecto en PlanerPAC).
+    0.0 si no hay monto."""
+    total = (monto_enlazado or 0) + (monto_no_enlazado or 0)
+    return round(monto_enlazado / total * 100, 1) if total else 0.0
 
 
 def calcular_oc_stats(anio=2026):
@@ -657,11 +681,15 @@ def calcular_oc_stats(anio=2026):
         else:
             hist_enlace_anual_map[y]['monto_no_enlazado'] += m
 
+    # `pct_enlace` = por CANTIDAD de OC (lo usa el dashboard del tab OC); `pct_enlace_monto` =
+    # por MONTO (enlace a cualquier proyecto PAC), la que usan las series de los informes Word/PPT/PDF.
     historico_enlace_anual = [
         {
             'anio': r['anio'], 'total_oc': r['total_oc'], 'monto_total': r['monto_total'],
             'enlazadas': hist_enlace_anual_map[r['anio']]['enlazadas'],
             'pct_enlace': round(hist_enlace_anual_map[r['anio']]['enlazadas'] / r['total_oc'] * 100, 1) if r['total_oc'] else 0.0,
+            'pct_enlace_monto': _pct_monto_enlazado(
+                hist_enlace_anual_map[r['anio']]['monto_enlazado'], hist_enlace_anual_map[r['anio']]['monto_no_enlazado']),
             'monto_enlazado': hist_enlace_anual_map[r['anio']]['monto_enlazado'],
             'monto_no_enlazado': hist_enlace_anual_map[r['anio']]['monto_no_enlazado'],
         }
@@ -694,6 +722,7 @@ def calcular_oc_stats(anio=2026):
             'anio': y, 'mes': mes,
             'total': v['total'], 'enlazadas': v['enlazadas'],
             'pct_enlace': round(v['enlazadas'] / v['total'] * 100, 1) if v['total'] else 0.0,
+            'pct_enlace_monto': _pct_monto_enlazado(v['monto_enlazado'], v['monto_no_enlazado']),
             'monto_enlazado': v['monto_enlazado'], 'monto_no_enlazado': v['monto_no_enlazado'],
         }
         for (y, mes), v in sorted(hist_enlace_mensual_map.items())
@@ -3173,6 +3202,13 @@ def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=
         })
 
     total = conteo[EN_FECHA] + conteo[ATRASADO] + n_pendientes + n_atrasados_sin_iniciar
+    # `total_evaluado`/`pct_en_fecha` MEZCLAN dos unidades: formularios derivados (en fecha o
+    # atrasados) y PROYECTOS planificados sin formulario (atrasados o pendientes) — es lo que
+    # muestran los dashboards con sus tarjetas En fecha/Atrasado/Pendiente. Los informes
+    # Word/PPT/PDF NO deben llamar "formularios" a ese total (decían "de los 442 formularios"
+    # cuando el período tenía 164): usan los campos `formularios_*`/`pct_en_fecha_formularios`,
+    # que miden solo formularios — la misma base que el % En fecha por departamento.
+    formularios_evaluados = conteo[EN_FECHA] + conteo[ATRASADO]
     return {
         'kpis': {
             'en_fecha': conteo[EN_FECHA],
@@ -3181,6 +3217,13 @@ def calcular_pac_cumplimiento_temporal(anho=None, fecha_desde=None, fecha_hasta=
             'sin_planificacion_con_fecha': conteo[SIN_PLANIFICACION],
             'total_evaluado': total,
             'pct_en_fecha': round(conteo[EN_FECHA] / total * 100, 1) if total else 0,
+            'formularios_evaluados': formularios_evaluados,
+            'formularios_atrasados': conteo[ATRASADO],
+            'pct_en_fecha_formularios': (
+                round(conteo[EN_FECHA] / formularios_evaluados * 100, 1) if formularios_evaluados else None
+            ),
+            'proyectos_sin_iniciar_atrasados': n_atrasados_sin_iniciar,
+            'proyectos_sin_iniciar_pendientes': n_pendientes,
         },
         'detalle_formularios': detalle,
         'proyectos_sin_iniciar': proyectos_sin_iniciar,
@@ -3507,16 +3550,31 @@ def calcular_pac_rankings(anho=None, fecha_desde=None, fecha_hasta=None, tipo='d
                 'score': _score_compuesto(pct_dentro, pct_en_fecha, None),
             })
 
-    filas.sort(key=lambda f: -f['score'])
+    # Desempate: el score de un formulario individual solo puede valer 0, 50 o 100 (Dentro/Fuera ×
+    # en fecha/atrasado), así que hay cientos de empates y "los 15 mejores/peores" eran una muestra
+    # arbitraria. Entre iguales se prioriza el de MAYOR monto (formularios) o con más formularios
+    # (departamentos): es el que más importa mirar tanto en los mejores como en los peores.
+    peso = (lambda f: f['monto_estimado']) if tipo != 'depto' else (lambda f: f['total'])
+    filas.sort(key=lambda f: (-f['score'], -peso(f)))
     # Si hay pocos elementos elegibles, top-N y bottom-N pueden solaparse (ej. 26
     # elegibles con límite 15+15). Se acota el límite efectivo para que "mejores"
     # y "peores" nunca compartan un mismo departamento/formulario.
     limite_efectivo = min(limite, len(filas) // 2)
     total_elegibles = len(filas)
     score_promedio = round(sum(f['score'] for f in filas) / total_elegibles, 1) if total_elegibles else 0
+    mejores = filas[:limite_efectivo]
+    # Los peores salen del RESTO (no de la cola de la lista completa) para no repetir ninguno de los
+    # mejores cuando hay empates, y ordenados del puntaje más bajo al más alto, con mayor peso primero.
+    peores = sorted(filas[limite_efectivo:], key=lambda f: (f['score'], -peso(f)))[:limite_efectivo]
+    puntaje_max = filas[0]['score'] if filas else None
+    puntaje_min = min((f['score'] for f in filas), default=None)
     return {
-        'mejores': filas[:limite_efectivo], 'peores': list(reversed(filas))[:limite_efectivo],
+        'mejores': mejores, 'peores': peores,
         'total_elegibles': total_elegibles, 'score_promedio': score_promedio,
+        # Cuántos elegibles comparten el puntaje máximo / mínimo: si son muchos, las listas de
+        # arriba son una muestra de empatados y los informes deben decirlo.
+        'empatados_en_maximo': sum(1 for f in filas if f['score'] == puntaje_max),
+        'empatados_en_minimo': sum(1 for f in filas if f['score'] == puntaje_min),
     }
 
 
@@ -3748,12 +3806,27 @@ def calcular_pac_temporalidad_mensual(anho):
 def calcular_pac_resumen_subdireccion(anho):
     """Recuento Dentro/Fuera PAC por Subdirección (ya acotado a Establecimiento SSO 197
     porque reutiliza `calcular_pac_jerarquia`, que parte de `_qs_fsc_derivado_pac_cumplimiento`),
-    comparado contra el mismo período del año anterior. No duplica la lógica de
+    comparado contra el MISMO CORTE del año anterior: si `anho` es el año en curso, el año
+    anterior se acota al mismo día y mes (1-ene a hoy); si es un año ya cerrado, se comparan
+    años completos. Antes se comparaba contra el año anterior COMPLETO aunque el informe
+    decía "mismo corte" (2026 a octubre contra los 12 meses de 2025: 612 vs 783 formularios, y
+    la mejora institucional salía +12,4 pp en vez de +10,2). No duplica la lógica de
     resolución de nombres/rollup de departamentos — solo reagrega lo que ya calcula
     `calcular_pac_jerarquia` para dos años y los cruza por nombre de subdirección.
     """
+    hoy = date.today()
+    if anho == hoy.year:
+        corte_actual = hoy
+        try:
+            corte_anterior = date(anho - 1, hoy.month, hoy.day)
+        except ValueError:  # 29-feb en un año anterior no bisiesto
+            corte_anterior = date(anho - 1, hoy.month, hoy.day - 1)
+    else:
+        corte_actual, corte_anterior = date(anho, 12, 31), date(anho - 1, 12, 31)
     actual = calcular_pac_jerarquia(anho=anho)['subdirecciones']
-    anterior = calcular_pac_jerarquia(anho=anho - 1)['subdirecciones']
+    anterior = calcular_pac_jerarquia(
+        anho=anho - 1, fecha_desde=f'{anho - 1}-01-01', fecha_hasta=corte_anterior.isoformat(),
+    )['subdirecciones']
     anterior_por_nombre = {s['nombre']: s for s in anterior}
 
     filas = []
@@ -3783,7 +3856,10 @@ def calcular_pac_resumen_subdireccion(anho):
             'pct_dentro_anho_anterior': s['pct_dentro'], 'variacion_pp': None,
         })
     filas.sort(key=lambda f: (f['nombre'] == 'Sin Clasificar', -f['total']))
-    return {'anho': anho, 'anho_anterior': anho - 1, 'subdirecciones': filas}
+    return {
+        'anho': anho, 'anho_anterior': anho - 1, 'subdirecciones': filas,
+        'corte_actual': corte_actual.isoformat(), 'corte_anterior': corte_anterior.isoformat(),
+    }
 
 
 def calcular_pac_serie_mensual_historica():
@@ -3873,6 +3949,86 @@ def _mapa_subdirecciones_por_nombre():
     (dependencia directa de la Dirección), distinto nombre. Se resuelve por prefijo en
     `_resolver_subdireccion_ficha_pac`, no acá."""
     return {_normalizar_texto_pac(s.nombre): s for s in SsoSubdireccion.objects.all()}
+
+
+def reclasificar_dentro_fuera_pac(_avisar=lambda **kw: None, dry_run=False):
+    """Recalcula, para TODOS los FormularioFSCDerivado, `dentro_fuera_pac` y
+    `sso_departamento`. Única implementación de la regla — el ETL de formularios
+    (`page_data_panel._clasificar_dentro_fuera_pac`) y la carga del PAC
+    (`cargar_pac_servidor.py`) delegan aquí.
+
+    (a) dentro_fuera_pac: `id_plan` existe en PacProyectoMaestro (histórico multi-año,
+        CSV de actualización manual) O en PlanerPAC (plan vigente) → DENTRO; si tiene
+        `id_plan` pero no aparece en NINGUNA de las dos, o no tiene `id_plan` (p.ej.
+        Compra Ágil sin proyecto PAC asociado) → FUERA (decisión 2026-07-22: un FSC sin
+        id_plan nunca referenció un proyecto PAC, así que por definición queda Fuera).
+        PlanerPAC se agregó como segunda fuente el 2026-07-23 porque el CSV maestro
+        queda atrasado respecto al plan del año vigente.
+    (b) sso_departamento: match normalizado de `unidad_requirente` contra
+        descripcion/nombre_corto de Departamento. Sin match → None ("Sin Clasificar" en
+        el análisis, nunca se descarta).
+
+    Por qué existe fuera del ETL: cargar o modificar el PAC (`cargar_pac_servidor.py`)
+    cambia qué `id_plan` son válidos SIN que haya un sync de formularios, así que sin
+    reclasificar a continuación los formularios quedaban con la clasificación anterior
+    (2026-10-08: 43 FSC desfasados tras cargar la 2ª modificación del PAC 2026, el
+    % Dentro del 3er trimestre salía 69,8% en vez de 84,7%).
+
+    `dry_run=True` calcula lo que cambiaría SIN guardar. Retorna un resumen con
+    `a_dentro`/`a_fuera` (formularios que cambian de clasificación)."""
+    ids_pac = set(PacProyectoMaestro.objects.values_list('id_proyecto', flat=True).distinct())
+    ids_pac |= set(
+        PlanerPAC.objects.exclude(id_proyecto__isnull=True).exclude(id_proyecto='')
+        .values_list('id_proyecto', flat=True).distinct()
+    )
+
+    mapa_deptos = {}
+    for depto in Departamento.objects.all():
+        mapa_deptos.setdefault(_normalizar_texto_pac(depto.descripcion), depto)
+        if depto.nombre_corto:
+            mapa_deptos.setdefault(_normalizar_texto_pac(depto.nombre_corto), depto)
+
+    resumen = {
+        'total': 0, 'dentro': 0, 'sin_plan': 0, 'sin_clasificar': 0,
+        'actualizados': 0, 'a_dentro': 0, 'a_fuera': 0, 'dry_run': dry_run,
+    }
+    qs = FormularioFSCDerivado.objects.all()
+    resumen['total'] = qs.count()
+    if resumen['total'] == 0:
+        _avisar(log='Clasificación PAC: no hay formularios derivados, nada que clasificar.')
+        return resumen
+
+    for fsc in qs.iterator(chunk_size=200):
+        if fsc.id_plan:
+            nuevo_estado = FormularioFSCDerivado.DENTRO if fsc.id_plan in ids_pac else FormularioFSCDerivado.FUERA
+        else:
+            nuevo_estado = FormularioFSCDerivado.FUERA
+            resumen['sin_plan'] += 1
+        depto = mapa_deptos.get(_normalizar_texto_pac(fsc.unidad_requirente))
+        if depto is None:
+            resumen['sin_clasificar'] += 1
+        if nuevo_estado == FormularioFSCDerivado.DENTRO:
+            resumen['dentro'] += 1
+
+        cambia_estado = fsc.dentro_fuera_pac != nuevo_estado
+        if cambia_estado or fsc.sso_departamento_id != (depto.id if depto else None):
+            resumen['actualizados'] += 1
+            if cambia_estado and fsc.dentro_fuera_pac is not None:
+                resumen['a_dentro' if nuevo_estado == FormularioFSCDerivado.DENTRO else 'a_fuera'] += 1
+            if not dry_run:
+                fsc.dentro_fuera_pac = nuevo_estado
+                fsc.sso_departamento = depto
+                fsc.save(update_fields=['dentro_fuera_pac', 'sso_departamento'])
+
+    _avisar(log=(
+        f"Clasificación PAC{' (simulación)' if dry_run else ''}: {resumen['total']} formularios evaluados, "
+        f"{resumen['dentro']} Dentro / {resumen['total'] - resumen['dentro']} Fuera "
+        f"({resumen['sin_plan']} sin id_plan, clasificados Fuera por definición), "
+        f"{resumen['sin_clasificar']} sin depto reconocido ('Sin Clasificar'), "
+        f"{resumen['actualizados']} filas {'a actualizar' if dry_run else 'actualizadas'} "
+        f"({resumen['a_dentro']} pasan a Dentro, {resumen['a_fuera']} a Fuera)."
+    ))
+    return resumen
 
 
 # =============================================================================

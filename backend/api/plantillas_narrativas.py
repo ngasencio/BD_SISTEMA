@@ -43,14 +43,24 @@ def _nivel(pct, alto=70, medio=40):
     return 'un nivel crítico que requiere atención'
 
 
-def _frase_variacion(variacion_pp, contra='el período anterior'):
+def _con_articulo(periodo_label):
+    """'3er trimestre de 2026' -> 'el 3er trimestre de 2026'; 'octubre de 2026' queda igual
+    (los meses no llevan artículo: 'Durante octubre de 2026'). Antes salía 'Durante 3er
+    trimestre de 2026'."""
+    return f'el {periodo_label}' if 'trimestre' in periodo_label else periodo_label
+
+
+def _frase_variacion(variacion_pp, contra, conector=', con'):
+    """Frase de variación en puntos porcentuales. `contra` ya lleva su preposición ('al período
+    anterior', 'al mismo período del año anterior') — antes salía 'respecto a el período
+    anterior' y 'lo que representa' repetido tras 'Este resultado representa'."""
     if variacion_pp is None:
         return ''
     if variacion_pp > 1:
-        return f', lo que representa un alza de {abs(variacion_pp):.1f} puntos porcentuales respecto a {contra}'
+        return f'{conector} un alza de {abs(variacion_pp):.1f} puntos porcentuales respecto {contra}'
     if variacion_pp < -1:
-        return f', lo que representa una baja de {abs(variacion_pp):.1f} puntos porcentuales respecto a {contra}'
-    return f', manteniéndose relativamente estable respecto a {contra}'
+        return f'{conector} una baja de {abs(variacion_pp):.1f} puntos porcentuales respecto {contra}'
+    return f'{conector} una variación menor a 1 punto porcentual (relativamente estable) respecto {contra}'
 
 
 def parrafo_resumen_ejecutivo(periodo_label, kpis, comparativa_periodos):
@@ -58,30 +68,52 @@ def parrafo_resumen_ejecutivo(periodo_label, kpis, comparativa_periodos):
     pct = kpis['pct_dentro']
     var_ant = comparativa_periodos['periodo_anterior']['variacion_pp']
     var_anho = comparativa_periodos['mismo_periodo_anho_anterior']['variacion_pp']
+    frase_ant = _frase_variacion(var_ant, 'al período anterior')
+    frase_anho = _frase_variacion(var_anho, 'al mismo período del año anterior', conector=' y' if frase_ant else ', con')
 
     return (
-        f'Durante {periodo_label}, el Servicio de Salud Osorno gestionó {_n(kpis["total"])} formularios de '
+        f'Durante {_con_articulo(periodo_label)}, el Servicio de Salud Osorno gestionó {_n(kpis["total"])} formularios de '
         f'solicitud de compra derivados a comprador, de los cuales {_n(kpis["dentro"])} '
         f'({pct:.1f}%) se encuentran verificados dentro del Plan Anual de Compras (PAC) y '
         f'{_n(kpis["fuera"])} ({100 - pct:.1f}%) fuera de él. Este resultado representa {_nivel(pct)} '
-        f'de apego institucional al PAC{_frase_variacion(var_ant)}'
-        f'{_frase_variacion(var_anho, "el mismo período del año anterior")}. '
+        f'de apego institucional al PAC{frase_ant}{frase_anho}. '
         f'El monto asociado a compras dentro del PAC alcanzó {_money(kpis["monto_dentro"])}, '
         f'mientras que {_money(kpis["monto_fuera"])} correspondieron a compras fuera de la planificación vigente.'
     )
 
 
-def parrafo_cumplimiento_temporal(periodo_label, kpis_temporal):
-    """Párrafo sobre cumplimiento de fechas planificadas, para el Resumen Ejecutivo."""
-    pct = kpis_temporal['pct_en_fecha']
-    return (
-        f'En cuanto al cumplimiento de los plazos planificados, de los {_n(kpis_temporal["total_evaluado"])} '
-        f'formularios Dentro PAC con fecha de compra comparable, {_n(kpis_temporal["en_fecha"])} '
-        f'({pct:.1f}%) se derivaron en fecha o con anticipación, {_n(kpis_temporal["atrasado"])} '
-        f'presentaron atraso respecto a lo planificado y {_n(kpis_temporal["pendiente"])} corresponden a compras '
-        f'planificadas cuyo plazo aún no vence. Esto refleja {_nivel(pct)} de cumplimiento temporal del PAC '
-        f'durante {periodo_label}.'
-    )
+def parrafo_cumplimiento_temporal(periodo_label, kpis_temporal, resumen_fichas=None, anho=None):
+    """Párrafo sobre cumplimiento de fechas planificadas, para el Resumen Ejecutivo.
+
+    El % en fecha se mide SOLO sobre formularios Dentro PAC derivados en el período
+    (`formularios_evaluados`). Los proyectos del plan que todavía no tienen formulario ni OC
+    son otra unidad (fichas) y se informan en una frase aparte con `resumen_fichas` — antes
+    ambas se sumaban y el texto hablaba de '442 formularios' en un período con 164."""
+    periodo = _con_articulo(periodo_label)
+    evaluados = kpis_temporal.get('formularios_evaluados', 0)
+    pct = kpis_temporal.get('pct_en_fecha_formularios')
+    if not evaluados or pct is None:
+        texto = (
+            f'En cuanto al cumplimiento de los plazos planificados, {periodo} no registra formularios Dentro PAC '
+            f'con una fecha de compra planificada comparable.'
+        )
+    else:
+        texto = (
+            f'En cuanto al cumplimiento de los plazos planificados, de los {_n(evaluados)} formularios Dentro PAC '
+            f'derivados durante {periodo} con fecha de compra comparable, {_n(kpis_temporal["en_fecha"])} '
+            f'({pct:.1f}%) se derivaron en fecha o con anticipación y {_n(kpis_temporal["formularios_atrasados"])} '
+            f'presentaron atraso respecto a lo planificado. Esto refleja {_nivel(pct)} de cumplimiento temporal '
+            f'del PAC durante {periodo}.'
+        )
+    if resumen_fichas and resumen_fichas.get('total'):
+        sin_ejecutar = resumen_fichas['pendientes'] + resumen_fichas['atrasadas'] + resumen_fichas.get('sin_fecha', 0)
+        texto += (
+            f' Por separado, {_n(sin_ejecutar)} de las {_n(resumen_fichas["total"])} fichas del Plan de Compras'
+            f'{f" {anho}" if anho else ""} aún no cuentan con formulario ni orden de compra: '
+            f'{_n(resumen_fichas["atrasadas"])} con fecha de compra vencida y {_n(resumen_fichas["pendientes"])} '
+            f'cuyo plazo aún no vence (estado a la fecha de generación del informe).'
+        )
+    return texto
 
 
 def parrafo_capitulo_subdireccion(nombre_display, kpis_sub, ranking_mejor=None, ranking_peor=None):
@@ -121,7 +153,7 @@ def parrafo_capitulo_subdireccion(nombre_display, kpis_sub, ranking_mejor=None, 
 
 def parrafo_conclusiones(periodo_label, kpis_globales, kpis_temporal):
     pct_dentro = kpis_globales['pct_dentro']
-    pct_en_fecha = kpis_temporal['pct_en_fecha']
+    pct_en_fecha = kpis_temporal.get('pct_en_fecha_formularios')
     recomendacion = (
         'Se recomienda reforzar la planificación anticipada en las unidades con menor apego al PAC, '
         'priorizando la incorporación temprana de sus necesidades de compra en el ciclo de planificación '
@@ -130,8 +162,18 @@ def parrafo_conclusiones(periodo_label, kpis_globales, kpis_temporal):
         'Se recomienda mantener las prácticas actuales de planificación y reforzar el seguimiento en las '
         'unidades identificadas con menor desempeño relativo.'
     )
+    if pct_en_fecha is None:
+        cierre_temporal = (
+            ' No hubo formularios Dentro PAC con fecha planificada comparable para evaluar el cumplimiento de plazos.'
+        )
+        y_temporal = '.'
+    else:
+        cierre_temporal = ''
+        y_temporal = (
+            f' y {_nivel(pct_en_fecha)} de cumplimiento de los plazos planificados '
+            f'({pct_en_fecha:.1f}% de los formularios derivados en fecha).'
+        )
     return (
-        f'En síntesis, durante {periodo_label} el Servicio de Salud Osorno registró {_nivel(pct_dentro)} '
-        f'de apego al Plan Anual de Compras ({pct_dentro:.1f}%) y {_nivel(pct_en_fecha)} de cumplimiento '
-        f'de los plazos planificados ({pct_en_fecha:.1f}%). {recomendacion}'
+        f'En síntesis, durante {_con_articulo(periodo_label)} el Servicio de Salud Osorno registró {_nivel(pct_dentro)} '
+        f'de apego al Plan Anual de Compras ({pct_dentro:.1f}%){y_temporal}{cierre_temporal} {recomendacion}'
     )

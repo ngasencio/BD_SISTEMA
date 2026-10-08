@@ -21,6 +21,9 @@ montos distintos (cuotas mensuales de un servicio), y no existe una clave natura
 única que las distinga. El upsert anterior colapsaba esas filas en una sola y
 subestimaba el monto del plan.
 
+Después de cargar, reclasifica Dentro/Fuera PAC de los formularios FSC (la regla depende de
+qué proyectos existen en el plan) y reengancha el cruce FSC-OC-PAC; `--sin-reclasificar` lo omite.
+
 Seguridad:
   - Antes de borrar se guarda un respaldo CSV de las filas que se reemplazan en
     `respaldos/` (junto a este script). Sirve además como historial de versiones.
@@ -179,7 +182,7 @@ def _respaldar(PlanerPAC, anios):
     return ruta
 
 
-def cargar(archivo_pac=None, dry_run=False, forzar=False):
+def cargar(archivo_pac=None, dry_run=False, forzar=False, reclasificar=True):
     print("\n" + "=" * 60)
     print("  PLAN ANUAL DE COMPRAS -> data_planerpac (reemplazo por año)"
           + ("   [SIMULACIÓN]" if dry_run else ""))
@@ -246,7 +249,30 @@ def cargar(archivo_pac=None, dry_run=False, forzar=False):
     print(f"  Insertadas : {len(objetos)}")
     print(f"  Total en data_planerpac ahora: {PlanerPAC.objects.count()}")
     print("=" * 60)
+
+    if reclasificar:
+        _reclasificar_formularios()
+    else:
+        print("\n  [AVISO] --sin-reclasificar: los formularios FSC conservan su clasificación Dentro/Fuera anterior.")
+        print("          Ejecuta una actualización de Formularios (o este script sin esa opción) para ponerla al día.")
     return True
+
+
+def _reclasificar_formularios():
+    """Cambiar el plan cambia qué `id_plan` son válidos, pero los formularios FSC guardan su
+    clasificación Dentro/Fuera ya calculada: sin este paso quedan con la del plan anterior
+    hasta el próximo sync de Formularios (2026-10-08: 43 FSC desfasados tras la 2ª
+    modificación del PAC 2026). Reutiliza la misma regla del ETL de formularios y reengancha
+    el cruce FSC-OC-PAC, que depende de esa clasificación. La carga del PAC ya quedó
+    confirmada: un fallo acá solo se avisa, nunca la revierte."""
+    print("\n  Reclasificando Dentro/Fuera PAC de los formularios FSC...")
+    try:
+        from api.services import reclasificar_dentro_fuera_pac, recalcular_fsc_oc_matching
+        reclasificar_dentro_fuera_pac(_avisar=lambda **kw: print("   ", kw.get("log", "")))
+        recalcular_fsc_oc_matching(_avisar=lambda **kw: print("   ", kw.get("log", "")))
+    except Exception as e:  # noqa: BLE001 — la carga ya está hecha; solo informar
+        print(f"  [AVISO] No se pudo reclasificar los formularios: {e}")
+        print("          Ejecuta una actualización de Formularios para ponerlos al día.")
 
 
 if __name__ == "__main__":
@@ -254,5 +280,8 @@ if __name__ == "__main__":
     ap.add_argument("archivo", nargs="?", help="Excel a cargar (por defecto, el .xlsx más reciente de esta carpeta)")
     ap.add_argument("--dry-run", action="store_true", help="valida y muestra qué haría, sin escribir en la BD")
     ap.add_argument("--forzar", action="store_true", help="omite la guarda contra archivos muy pequeños")
+    ap.add_argument("--sin-reclasificar", action="store_true",
+                    help="no recalcula Dentro/Fuera PAC de los formularios FSC tras cargar el plan")
     args = ap.parse_args()
-    sys.exit(0 if cargar(args.archivo, dry_run=args.dry_run, forzar=args.forzar) else 1)
+    ok = cargar(args.archivo, dry_run=args.dry_run, forzar=args.forzar, reclasificar=not args.sin_reclasificar)
+    sys.exit(0 if ok else 1)

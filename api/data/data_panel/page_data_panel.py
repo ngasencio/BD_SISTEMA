@@ -579,60 +579,16 @@ def _clasificar_dentro_fuera_pac(_avisar=lambda **kw: None):
         ("Sin Clasificar" en el análisis, nunca se descarta).
 
     No cruza con OC todavía (decisión explícita, ver plan del módulo PAC).
+
+    La regla vive en `api.services.reclasificar_dentro_fuera_pac` (única implementación,
+    también la invoca `cargar_pac_servidor.py` tras cargar un PAC nuevo); esta función
+    solo la expone al ETL.
     """
     from django.db import close_old_connections
-    from api.models import FormularioFSCDerivado, PacProyectoMaestro, PlanerPAC, Departamento
+    from api.services import reclasificar_dentro_fuera_pac
 
     close_old_connections()
-
-    ids_pac = set(PacProyectoMaestro.objects.values_list("id_proyecto", flat=True).distinct())
-    ids_pac |= set(
-        PlanerPAC.objects.exclude(id_proyecto__isnull=True).exclude(id_proyecto="")
-        .values_list("id_proyecto", flat=True).distinct()
-    )
-
-    # Departamento (data_departamento) ya existe en el sistema (módulo Usuarios,
-    # importado del Panel SSO) y cubre los 7 establecimientos de la red — mejor
-    # cobertura (98.9%) que un maestro propio construido solo desde mapa_sso.xlsx.
-    mapa_deptos = {}
-    for depto in Departamento.objects.all():
-        mapa_deptos.setdefault(_normalizar_texto(depto.descripcion), depto)
-        if depto.nombre_corto:
-            mapa_deptos.setdefault(_normalizar_texto(depto.nombre_corto), depto)
-
-    qs = FormularioFSCDerivado.objects.all()
-    total = qs.count()
-    if total == 0:
-        _avisar(log="Clasificación PAC: no hay formularios derivados, nada que clasificar.")
-        return
-
-    actualizados = 0
-    sin_clasificar = 0
-    dentro = 0
-    sin_plan = 0
-    for i, fsc in enumerate(qs.iterator(chunk_size=200)):
-        if fsc.id_plan:
-            nuevo_estado = FormularioFSCDerivado.DENTRO if fsc.id_plan in ids_pac else FormularioFSCDerivado.FUERA
-        else:
-            nuevo_estado = FormularioFSCDerivado.FUERA
-            sin_plan += 1
-        depto = mapa_deptos.get(_normalizar_texto(fsc.unidad_requirente))
-        if depto is None:
-            sin_clasificar += 1
-        if nuevo_estado == FormularioFSCDerivado.DENTRO:
-            dentro += 1
-
-        if fsc.dentro_fuera_pac != nuevo_estado or fsc.sso_departamento_id != (depto.id if depto else None):
-            fsc.dentro_fuera_pac = nuevo_estado
-            fsc.sso_departamento = depto
-            fsc.save(update_fields=["dentro_fuera_pac", "sso_departamento"])
-            actualizados += 1
-
-    _avisar(log=(
-        f"Clasificación PAC: {total} formularios evaluados, {dentro} Dentro / {total - dentro} Fuera "
-        f"({sin_plan} sin id_plan, clasificados Fuera por definición), "
-        f"{sin_clasificar} sin depto reconocido ('Sin Clasificar'), {actualizados} filas actualizadas."
-    ))
+    reclasificar_dentro_fuera_pac(_avisar)
 
 
 def ejecutar_proceso_completo(rut=None, dv=None, clave=None, progress_callback=None):
