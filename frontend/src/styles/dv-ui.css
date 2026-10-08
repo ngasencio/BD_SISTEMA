@@ -12,8 +12,8 @@
    que son inertes en cualquier página que no use esas clases — es seguro
    tenerlas cargadas globalmente.
 
-   Si el sistema se adopta en más módulos, mover este archivo a
-   `frontend/src/styles/dv-ui.css` e importarlo una sola vez en `main.jsx`.
+   Ubicación: `frontend/src/styles/dv-ui.css`, importado una sola vez en `main.jsx`
+   (movido desde `features/fsc-oc-pac/styles/` al sumarse Abastecimiento › Formularios).
 
    Actualizar a mano si `dv-ui/css/*.css` cambia — no hay build step que
    sincronice ambas copias.

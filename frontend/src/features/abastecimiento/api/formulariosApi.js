@@ -13,6 +13,10 @@ export const getFormulariosUnificacion  = (params = {}) => apiClient.get('formul
 export const getFormulariosHistorial    = (params = {}) => apiClient.get('formularios/historial/', { params });
 export const getFormularioById          = (id)          => apiClient.get(`formularios-fsc/${id}/`);
 
+// Ficha completa para el botón "Ver": formulario + carro + historial de bandejas + proceso de
+// compra + OC enlazadas. `origen` indica de qué tabla viene el id ('solicitud' | 'derivado').
+export const getFormularioFicha = (origen, id) => apiClient.get('formularios/ficha/', { params: { origen, id } });
+
 export const iniciarActualizacionFormularios  = (credenciales)  => apiClient.post('formularios/actualizar/', credenciales);
 export const estadoActualizacionFormularios   = (taskId)        => apiClient.get(`formularios/actualizar-estado/${taskId}/`);
 export const cancelarActualizacionFormularios = (taskId)        => apiClient.post(`formularios/actualizar-cancelar/${taskId}/`);

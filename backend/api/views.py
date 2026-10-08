@@ -4504,6 +4504,28 @@ def formularios_flujo_view(request):
     return Response(data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def formularios_ficha_view(request):
+    """Ficha completa de un FSC para el botón 'Ver' de Formularios (ver
+    `calcular_formulario_ficha`). `?origen=solicitud|derivado` indica de qué
+    tabla viene el `?id=` — los ids de FormularioFSC y FormularioFSCDerivado NO
+    son intercambiables. Sin cache: se consulta de a un registro y las OC
+    enlazadas cambian cada vez que se confirma o se recalcula un enlace."""
+    from .services import calcular_formulario_ficha
+    origen = request.GET.get("origen", "solicitud").strip()
+    if origen not in ("solicitud", "derivado"):
+        return Response({"error": "origen debe ser 'solicitud' o 'derivado'"}, status=400)
+    pk = request.GET.get("id", "").strip()
+    if not pk.isdigit():
+        return Response({"error": "id es requerido y debe ser numérico"}, status=400)
+    modelo = FormularioFSCDerivado if origen == "derivado" else FormularioFSC
+    try:
+        return Response(calcular_formulario_ficha(origen, int(pk), _mapa_unidad_requirente_organigrama_cacheado()))
+    except modelo.DoesNotExist:
+        return Response({"error": "Formulario no encontrado"}, status=404)
+
+
 _CACHE_KEY_MAPA_UNIDAD_ORGANIGRAMA = "formularios_mapa_unidad_organigrama_v1"
 
 
@@ -4553,7 +4575,7 @@ class FormularioFSCViewSet(viewsets.ReadOnlyModelViewSet):
         "unidad_requirente", "encargado", "jefe", "correo", "requerimiento",
         "especificaciones_tecnicas", "estado",
     ]
-    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_solicitud", "unidad_requirente", "estado", "destino_actual"]
+    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_solicitud", "unidad_requirente", "usuario_requirente", "estado", "destino_actual"]
 
     def get_queryset(self):
         """`?subdireccion=<id>` / `?depto=<id>` — filtro en cascada de la tabla
@@ -4598,7 +4620,7 @@ class FormularioFSCDerivadoViewSet(viewsets.ReadOnlyModelViewSet):
         "unidad_requirente", "comprador", "estado_compra", "encargado", "jefe", "correo",
         "requerimiento", "especificaciones_tecnicas",
     ]
-    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_derivado", "unidad_requirente", "estado_compra"]
+    ordering_fields = ["folio", "anho", "monto_estimado", "fecha_derivado", "unidad_requirente", "comprador", "estado_compra"]
 
     def get_queryset(self):
         """`?establecimiento=<id>` es opcional y solo lo usa el módulo PAC Cumplimiento

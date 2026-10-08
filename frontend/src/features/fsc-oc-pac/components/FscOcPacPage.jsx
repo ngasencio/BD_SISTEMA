@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import '../styles/dv-ui.css';
 import { useFscOcPac } from '../hooks/useFscOcPac';
 import { recalcularMatching } from '../api/fscOcPacApi';
 import ResumenTab from './tabs/ResumenTab';

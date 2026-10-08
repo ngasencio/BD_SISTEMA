@@ -2497,6 +2497,7 @@ def calcular_formularios_alertas(anho=None, dias_min=10, unidades=None):
             continue
         registros.append({
             'id': f.id,
+            'id_formulario': generar_id_formulario(f.folio, f.anho, formulario_texto=f.formulario),
             'folio': f.folio,
             'anho': f.anho,
             'formulario': f.formulario,
@@ -2533,6 +2534,7 @@ def calcular_formularios_unificacion(anho=None):
         tipo = int(m_tipo.group(1)) if m_tipo else None
         key = (f.folio, f.anho, tipo)
         fsc_map[key] = {
+            'id': f.id,
             'folio': f.folio,
             'anho': f.anho,
             'tipo_formulario': tipo,
@@ -2756,6 +2758,7 @@ def calcular_formularios_historial(anho=None, unidad_requirente=None, usuario_re
             monto_est = 0.0
         resultado.append({
             'id': f.id,
+            'id_formulario': generar_id_formulario(f.folio, f.anho, tipo_formulario=tipo),
             'folio': f.folio,
             'anho': f.anho,
             'fecha_solicitud': str(f.fecha_solicitud) if f.fecha_solicitud else None,
@@ -5662,6 +5665,152 @@ def calcular_fsc_oc_detalle_oc(codigo_oc):
         'link_mp': oc.LinkMP,
         'detalle_productos': detalle,
         'enlaces_fsc': enlaces_fsc,
+    }
+
+
+def _resumen_oc_ficha(oc):
+    """Campos de una OrdenCompra que la ficha del FSC muestra en su sección de
+    OC enlazadas (resumen — el detalle completo con productos lo da
+    `calcular_fsc_oc_detalle_oc` cuando el usuario abre 'Ver OC')."""
+    return {
+        'codigo_oc': oc.codigo_oc, 'nombre_oc': oc.NombreOC, 'estado_oc': oc.EstadoOC,
+        'tipo_oc': oc.DescripcionTipoOC or oc.TipoOC, 'proveedor': oc.P_Nombre,
+        'fecha_envio': oc.FechaEnvio, 'fecha_creacion': oc.FechaCreacion,
+        'total_bruto': float(oc.TotalBruto) if oc.TotalBruto is not None else None,
+        'codigo_licitacion': oc.CodigoLicitacion, 'codigo_compra_agil': oc.CodigoCompraAgil,
+        'link_mp': oc.LinkMP,
+    }
+
+
+def _fsc_par(modelo, base):
+    """Fila 'gemela' de `base` en `modelo` (FormularioFSC <-> FormularioFSCDerivado).
+    No hay FK entre ambas tablas: la identidad es folio+año+unidad+fecha de
+    solicitud (misma clave de upsert del ETL). `filter(campo=None)` se traduce a
+    IS NULL, así que los campos vacíos también calzan."""
+    return modelo.objects.filter(
+        folio=base.folio, anho=base.anho,
+        unidad_requirente=base.unidad_requirente, fecha_solicitud=base.fecha_solicitud,
+    ).order_by('-id').first()
+
+
+def calcular_formulario_ficha(origen, pk, mapa_unidad=None):
+    """Ficha completa (solo lectura) de un FSC para el botón 'Ver' de
+    Abastecimiento › Formularios, tanto desde la tabla Solicitudes
+    (`origen='solicitud'`, id de FormularioFSC) como desde Derivados
+    (`origen='derivado'`, id de FormularioFSCDerivado).
+
+    Junta en un solo payload lo que vive repartido en varias tablas: los datos
+    del formulario (cabecera de la fila pedida, completada con su gemela), el
+    carro de productos, el historial de bandejas, el proceso de compra del
+    comprador y las OC enlazadas (`FscOcLink`, más las vinculadas al proceso).
+    Lo propio de un formulario ya derivado (comprador, estado de compra, OC)
+    viene en None / lista vacía si el FSC todavía no se deriva.
+
+    `mapa_unidad` (opcional) es `_mapa_unidad_requirente_organigrama()` — la vista lo pasa
+    cacheado, porque recalcularlo recorre todas las unidades. Con él la ficha informa
+    departamento y subdirección también para un formulario que aún no se deriva.
+
+    Lanza `DoesNotExist` si el id no existe en la tabla correspondiente."""
+    if origen == 'derivado':
+        der = FormularioFSCDerivado.objects.select_related('sso_departamento').get(pk=pk)
+        fsc = _fsc_par(FormularioFSC, der)
+        base = der
+    else:
+        fsc = FormularioFSC.objects.get(pk=pk)
+        der = _fsc_par(FormularioFSCDerivado, fsc)
+        if der is not None:
+            der = FormularioFSCDerivado.objects.select_related('sso_departamento').get(pk=der.pk)
+        base = fsc
+
+    tipo_formulario = _extraer_tipo_formulario_fsc(base)
+    productos = list(FormularioFSCProducto.objects.filter(
+        folio=base.folio, anho=base.anho, tipo_formulario=tipo_formulario,
+    ).order_by('id').values('id', 'categoria', 'producto', 'descripcion', 'cantidad', 'monto', 'item_presupuestario'))
+
+    historial = []
+    if fsc is not None:
+        historial = [
+            {'estado': h.estado, 'fecha': h.fecha_registro.isoformat()}
+            for h in fsc.historial_estados.order_by('fecha_registro', 'id')
+        ]
+
+    nombre_plan = _mapa_nombres_pac().get(base.id_plan) if base.id_plan else None
+    org = (mapa_unidad or {}).get(base.unidad_requirente) or {}
+
+    procesos, enlaces = [], []
+    if der is not None:
+        procesos_qs = (
+            ProcesoCompra.objects.filter(vinculos_formulario__formulario_derivado=der)
+            .select_related('comprador').prefetch_related('vinculos_oc').distinct().order_by('-creado_en')
+        )
+        procesos_db = list(procesos_qs)
+        links = list(FscOcLink.objects.filter(formulario_derivado=der).order_by('-estado', '-score_similitud', 'id'))
+        codigos = {l.orden_compra_id for l in links if l.orden_compra_id}
+        for p in procesos_db:
+            codigos.update(v.orden_compra_id for v in p.vinculos_oc.all())
+        ocs = {oc.codigo_oc: oc for oc in OrdenCompra.objects.filter(codigo_oc__in=codigos)}
+        overrides = _mapa_overrides_pac()
+
+        for l in links:
+            oc = ocs.get(l.orden_compra_id)
+            oc_dict = {'codigo_oc': oc.codigo_oc, 'EnlacePAC': oc.EnlacePAC, 'ID_Proyecto': oc.ID_Proyecto} if oc else None
+            enlaces.append({
+                'link_id': l.id, 'codigo_oc': l.orden_compra_id,
+                # La OC puede no estar en la tabla (el ETL de OC la borró/recreó): el
+                # enlace sobrevive por diseño, así que se informa sin romper la ficha.
+                'oc': _resumen_oc_ficha(oc) if oc else None,
+                'confianza': l.confianza, 'estado': l.estado,
+                'score_similitud': l.score_similitud, 'motivo_rechazo': l.motivo_rechazo,
+                'observaciones': l.observaciones,
+                'estado_pac': _pac_match_estado(base.id_plan, oc_dict, overrides),
+            })
+
+        for p in procesos_db:
+            procesos.append({
+                'id': p.id, 'titulo': p.titulo,
+                'tipo_proceso': p.get_tipo_proceso_display(), 'estado_proceso': p.get_estado_proceso_display(),
+                'comprador': p.comprador.get_full_name() or p.comprador.username,
+                'monto_estimado': float(p.monto_estimado) if p.monto_estimado is not None else None,
+                'fecha_cierre_estimada': p.fecha_cierre_estimada.isoformat() if p.fecha_cierre_estimada else None,
+                'creado_en': p.creado_en.isoformat(), 'finalizado_en': p.finalizado_en.isoformat() if p.finalizado_en else None,
+                'codigo_licitacion': p.licitacion_id, 'codigo_compra_agil': p.codigo_compra_agil,
+                'observaciones': p.observaciones,
+                'ordenes_compra': [
+                    _resumen_oc_ficha(ocs[v.orden_compra_id]) for v in p.vinculos_oc.all() if v.orden_compra_id in ocs
+                ],
+            })
+
+    return {
+        'origen': origen, 'id': base.id,
+        'fsc_id': fsc.id if fsc else None, 'derivado_id': der.id if der else None,
+        'es_derivado': der is not None,
+        'id_formulario': generar_id_formulario(base.folio, base.anho, formulario_texto=base.formulario),
+        'folio': base.folio, 'anho': base.anho, 'formulario': base.formulario,
+        'estado': base.estado, 'destino_actual': fsc.destino_actual if fsc else None,
+        'fecha_solicitud': base.fecha_solicitud, 'fecha_entrega': base.fecha_entrega,
+        'fecha_derivado': der.fecha_derivado if der else None,
+        'unidad_requirente': base.unidad_requirente, 'usuario_requirente': base.usuario_requirente,
+        'departamento': der.sso_departamento.descripcion if der and der.sso_departamento else org.get('nombre_depto'),
+        'subdireccion': org.get('nombre_subdireccion'),
+        'anexo': base.anexo, 'correo': base.correo, 'encargado': base.encargado, 'jefe': base.jefe,
+        'comprador': der.comprador if der else None, 'estado_compra': der.estado_compra if der else None,
+        'requerimiento': base.requerimiento, 'objetivo_compra': base.objetivo_compra,
+        'especificaciones_tecnicas': base.especificaciones_tecnicas,
+        'monto_estimado': base.monto_estimado, 'moneda': base.moneda, 'tipo_monto': base.tipo_monto,
+        'cotizacion': base.cotizacion,
+        'plan_anual': base.plan_anual, 'id_plan': base.id_plan, 'nombre_plan': nombre_plan,
+        'dentro_fuera_pac': der.dentro_fuera_pac if der else None,
+        'justificacion': base.justificacion,
+        'validacion_tecnica': base.validacion_tecnica, 'unidad_validadora': base.unidad_validadora,
+        'justificacion_no_validacion': base.justificacion_no_validacion,
+        'fuente_financiamiento': base.fuente_financiamiento,
+        'item_presupuestario': base.item_presupuestario, 'folio_requerimiento': base.folio_requerimiento,
+        'adj_espec_tecnicas': base.adj_espec_tecnicas, 'adj_cotizacion': base.adj_cotizacion,
+        'adj_validacion': base.adj_validacion, 'adj_form_justificacion': base.adj_form_justificacion,
+        'productos': productos,
+        'historial_estados': historial,
+        'procesos': procesos,
+        'enlaces_oc': enlaces,
     }
 
 

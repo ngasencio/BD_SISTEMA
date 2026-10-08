@@ -206,9 +206,10 @@ GET   contratos/pac/                      PAC linkage pivot by year (5 min cache
 # Formularios FSC (Panel Documental SS Osorno — sync vía Selenium, reemplaza Excel)
 GET   formularios/stats/                  ?anho= KPIs + distributions (5 min cache)
 GET   formularios/flujo/                  ?anho= Pipeline P→AC + rechazados (5 min cache)
-GET   formularios/alertas/                ?dias_min=10&anho= FSC activos con días desde solicitud ≥ umbral, ordenados por días desc
-GET   formularios/unificacion/            ?anho= Grupos candidatos a compra conjunta: layer1=item_presupuestario (≥2 FSC), layer2=categoria. Estados ASDA→DC. (5 min cache)
-GET   formularios/historial/              ?anho=&unidad_requirente=&usuario_requirente= FSC+productos embebidos excl. R/P. Usado por Tab "Historial de Compras". (5 min cache)
+GET   formularios/alertas/                ?dias_min=10&anho= FSC activos con días desde solicitud ≥ umbral, ordenados por días desc (cada fila trae `id_formulario`)
+GET   formularios/unificacion/            ?anho= Grupos candidatos a compra conjunta: layer1=item_presupuestario (≥2 FSC), layer2=categoria. Estados ASDA→DC. Cada nodo/formulario trae `id` (FormularioFSC) para abrir la ficha. (5 min cache)
+GET   formularios/historial/              ?anho=&unidad_requirente=&usuario_requirente= FSC+productos embebidos excl. R/P. Usado por Tab "Historial de Compras". Cada FSC trae `id` y `id_formulario` (para abrir la ficha). (5 min cache)
+GET   formularios/ficha/                  ?origen=solicitud|derivado&id= Ficha completa para el botón "Ver" de Solicitudes y Derivados (`calcular_formulario_ficha`): datos del FSC (cabecera de la tabla pedida completada con su gemela de la otra tabla por folio+año+unidad+fecha_solicitud), carro del tipo correcto, historial de bandejas, ProcesoCompra del comprador y OC enlazadas (`FscOcLink` + las vinculadas al proceso) con resumen y estado PAC. `departamento`/`subdireccion` salen del organigrama aunque el FSC no esté derivado. Sin cache. Los ids de FormularioFSC y FormularioFSCDerivado NO son intercambiables (de ahí `origen`)
 POST  formularios/actualizar/             {rut, dv, clave} → launches async ETL task → {task_id}
 POST  formularios/actualizar-cancelar/{task_id}/  Cancels running ETL
 GET   formularios/actualizar-estado/{task_id}/    Polls ETL progress {status, paso_desc, progreso_pct, logs_recientes, diff}
