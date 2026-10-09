@@ -27,7 +27,7 @@ import { AuthProvider, useAuth } from './store/authStore';
 import { AppLayout } from './components/ui/AppLayout';
 
 // Páginas existentes (compatibilidad hacia atrás)
-import Home from './pages/Home';
+import InicioPage from './features/inicio/components/InicioPage';
 import Dashboard from './pages/Dashboard';
 import { LoginPage } from './features/auth/pages/LoginPage';
 import OrdenesCompraDashboard from './pages/OrdenesCompraDashboard';
@@ -65,7 +65,7 @@ const RequireRole = ({ allowed = [], children }) => {
 /** El gestor de compras ve solo su departamento: su inicio es su panel, no el Home general. */
 const HomeSegunRol = () => {
   const { role } = useAuth();
-  return role === 'gestor_compras' ? <Navigate to="/gestor-compras" replace /> : <Home />;
+  return role === 'gestor_compras' ? <Navigate to="/gestor-compras" replace /> : <InicioPage />;
 };
 
 // Todos los roles salvo gestor_compras (el backend también lo bloquea en /pac-cumplimiento/*)

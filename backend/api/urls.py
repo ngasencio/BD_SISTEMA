@@ -38,7 +38,7 @@ from .views import (
     iniciar_actualizacion_formularios, estado_actualizacion_formularios,
     cancelar_actualizacion_formularios, formularios_stats_view, formularios_flujo_view,
     formularios_alertas_view, formularios_unificacion_view, formularios_historial_view,
-    formularios_organigrama_view, formularios_ficha_view,
+    formularios_organigrama_view, formularios_ficha_view, inicio_resumen_view,
     UsuarioViewSet, user_me, DepartamentoViewSet, EstablecimientoViewSet,
     SigfeAnexo1ViewSet, sigfe_anexo1_estado_bd, sigfe_anexo1_resumen, sigfe_anexo1_guia_simple,
     sigfe_anexo1_serie_nivel1, sigfe_anexo1_mapa_gasto,
@@ -244,6 +244,9 @@ urlpatterns = [
     path('formularios/historial/', formularios_historial_view, name='formularios_historial'),
     path('formularios/organigrama/', formularios_organigrama_view, name='formularios_organigrama'),
     path('formularios/ficha/', formularios_ficha_view, name='formularios_ficha'),
+
+    # Inicio (Home): tablero ejecutivo del año
+    path('inicio/resumen/', inicio_resumen_view, name='inicio_resumen'),
 
     # Módulo PAC — Seguimiento y Rendimiento del Plan Anual de Compras
     path('pac-cumplimiento/dentro-fuera/', pac_cumplimiento_dentro_fuera_view, name='pac_cumplimiento_dentro_fuera'),

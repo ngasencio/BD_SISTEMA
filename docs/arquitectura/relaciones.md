@@ -6,7 +6,7 @@ La dirección de cada fila va de **quien inicia o llama** hacia **quien responde
 |---|---|---|---|---|---|
 | app-shell | home | ruta / | import | frontend/src/App.jsx:74 | verificada |
 | app-shell | mapa-sistema | ruta /mapa-sistema | import | frontend/src/App.jsx (ruta agregada para este módulo) | verificada |
-| home | mapa-sistema | botón Ver Mapa | import | frontend/src/pages/Home.jsx (botón agregado para este módulo) | verificada |
+| home | mapa-sistema | botón Ver Mapa | import | frontend/src/features/inicio/components/InicioPage.jsx (botón «Mapa del sistema») | verificada |
 | app-shell | mod-mercado-publico | rutas /licitaciones, /oc | import | frontend/src/App.jsx:75-76 | verificada |
 | app-shell | mod-compra-agil | ruta /compra-agil | import | frontend/src/App.jsx:82 | verificada |
 | app-shell | mod-pac | rutas /pac, /pac-cumplimiento | import | frontend/src/App.jsx:78,80 | verificada |

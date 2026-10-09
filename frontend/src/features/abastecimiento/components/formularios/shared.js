@@ -1,5 +1,7 @@
 // Utilidades puras compartidas por Abastecimiento › Formularios (sin JSX).
 
+import { dvColor } from '../../../../lib/dvColor.js';
+
 export const fmtN = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
 export const fmtCLP = (n) =>
     new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
@@ -118,12 +120,7 @@ export function bandejasConDias(historial) {
 
 // ─── Colores DV-UI para gráficos (D3 / Chart.js no resuelven `var(--…)` en canvas ni en `color + '33'`) ───
 
-/** Valor hexadecimal actual de un token `--dv-*`; `respaldo` si no hay documento (pruebas) o el token no existe. */
-export function dvColor(token, respaldo = '#8A94A6') {
-    if (typeof document === 'undefined') return respaldo;
-    const valor = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
-    return valor || respaldo;
-}
+export { dvColor };
 
 /** Paleta categórica (10 colores) para agrupar por código de ítem, partiendo de los colores de grupo de DV-UI. */
 export function paletaGrupos() {

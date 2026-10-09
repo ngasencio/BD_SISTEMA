@@ -4505,6 +4505,30 @@ def formularios_flujo_view(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
+def inicio_resumen_view(request):
+    """Tablero del Home (`/`): «¿Cómo vamos en el año?» (ver services_inicio.py).
+
+    Cada bloque respeta el acceso de su módulo de origen: formularios para quienes ven Formularios o el
+    Panel de jefatura, deuda SIGFE solo para Finanzas. Compras y PAC los abre cualquier usuario autenticado
+    (salvo el gestor de compras, que tiene su propio panel). `?anio=` opcional; inválido → año en curso."""
+    from datetime import date
+    from .services_inicio import ROLES_DEUDA, ROLES_FORMULARIOS, calcular_inicio_resumen
+    hoy = date.today()
+    try:
+        anio = int(request.GET.get("anio", hoy.year))
+    except (TypeError, ValueError):
+        anio = hoy.year
+    if not 2015 <= anio <= hoy.year:
+        anio = hoy.year
+    return Response(calcular_inicio_resumen(
+        anio, hoy,
+        con_formularios=_tiene_rol(request.user, ROLES_FORMULARIOS),
+        con_deuda=_tiene_rol(request.user, ROLES_DEUDA),
+    ))
+
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, _IsAbastecimiento])
 def formularios_ficha_view(request):
     """Ficha completa de un FSC para el botón 'Ver' de Formularios (ver
