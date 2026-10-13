@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../store/authStore';
 import { useNotificaciones } from '../hooks/useNotificaciones';
 
@@ -12,12 +11,6 @@ const TIPO_ICONO = {
     FSC_DERIVADO: '📤',
 };
 
-// Para el gestor de compras, cada aviso lleva a la pestaña de su panel donde se ve el hecho.
-// El resto de roles conserva el comportamiento de siempre (solo marcar como leída).
-function rutaDestinoGestor(tipo) {
-    return tipo === 'FSC_BANDEJA' ? '/gestor-compras?tab=solicitudes' : '/gestor-compras?tab=derivacion';
-}
-
 function tiempoRelativo(iso) {
     const diffMs = Date.now() - new Date(iso).getTime();
     const min = Math.floor(diffMs / 60000);
@@ -28,21 +21,16 @@ function tiempoRelativo(iso) {
     return `hace ${Math.floor(h / 24)} d`;
 }
 
-// Campanita global del Topbar — visible para cualquier usuario autenticado
-// (hoy solo las 3 jefaturas de Abastecimiento reciben filas, pero el
-// componente no asume ningún rol: simplemente muestra 0 si no hay nada).
+// Campanita global del Topbar — la monta el Topbar para todo usuario autenticado EXCEPTO el
+// Gestor de Compras, que no tiene notificaciones (hoy solo las jefaturas de Abastecimiento
+// reciben filas; el componente no asume ningún rol: muestra 0 si no hay nada).
 export default function CampanitaNotificaciones() {
-    const { isAuthenticated, role } = useAuth();
-    const navigate = useNavigate();
+    const { isAuthenticated } = useAuth();
     const { count, notificaciones, abierto, cargando, abrir, cerrar, onMarcarLeida, onMarcarTodasLeidas } = useNotificaciones();
     const wrapperRef = useRef(null);
 
     const onClickNotificacion = (n) => {
         if (!n.leida) onMarcarLeida(n.id);
-        if (role === 'gestor_compras') {
-            cerrar();
-            navigate(rutaDestinoGestor(n.tipo));
-        }
     };
 
     useEffect(() => {
@@ -118,7 +106,7 @@ export default function CampanitaNotificaciones() {
                                     role="button"
                                     style={{
                                         display: 'flex', gap: 10, padding: '10px 14px',
-                                        cursor: (n.leida && role !== 'gestor_compras') ? 'default' : 'pointer',
+                                        cursor: n.leida ? 'default' : 'pointer',
                                         background: n.leida ? '#fff' : '#eff6ff',
                                         borderBottom: '1px solid #f1f5f9',
                                     }}

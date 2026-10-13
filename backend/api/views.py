@@ -2124,12 +2124,14 @@ class ComprasNotificacionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixi
                                   mixins.UpdateModelMixin, viewsets.GenericViewSet):
     """Campanita global del Topbar — notificaciones in-app del usuario
     logueado, scoped por `destinatario` (nadie ve notificaciones de otro).
+    El rol gestor_compras NO tiene notificaciones (decisión del usuario, 2026-10-13):
+    `_NoGestorCompras` le responde 403 y el frontend ni muestra la campanita.
     Sin create/delete por API: las filas las crea _notificar_jefaturas()
     server-side. 'leida' es el único campo editable (vía PATCH estándar,
     ver ComprasNotificacionSerializer) — 'marcar como leída' no necesita
     una action dedicada."""
     serializer_class = ComprasNotificacionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _NoGestorCompras]
     pagination_class = None
 
     def get_queryset(self):
@@ -3195,6 +3197,39 @@ class _ETLLiveStream_OC:
             t.update(upd)
 
 
+def _candado_sync_o_409():
+    """Toma el candado de archivo compartido con la actualización automática diaria
+    (`actualizacion_completa`). None si lo obtuvo; un 409 listo para devolver si otra
+    actualización de datos está en curso. Quien lo obtiene debe soltarlo
+    (`_lanzar_hilo_sync` lo hace al terminar el hilo)."""
+    from .services_sync_formularios import adquirir_candado, describir_candado
+    if adquirir_candado("boton"):
+        return None
+    return Response(
+        {"error": f"Hay otra actualización de datos en curso ({describir_candado()}). "
+                  "Intente de nuevo en unos minutos."},
+        status=409,
+    )
+
+
+def _lanzar_hilo_sync(target, args):
+    """Lanza `target(*args)` en un hilo daemon y suelta el candado al terminar (aunque el
+    hilo falle o lo cancelen). Si el hilo no puede arrancar, suelta el candado y re-lanza."""
+    from .services_sync_formularios import liberar_candado
+
+    def _envuelto():
+        try:
+            target(*args)
+        finally:
+            liberar_candado()
+
+    try:
+        threading.Thread(target=_envuelto, daemon=True).start()
+    except Exception:
+        liberar_candado()
+        raise
+
+
 def _ejecutar_actualizacion_oc(task_id: str, fecha_desde_str: str, fecha_hasta_str: str):
     """Ejecuta el ETL de OC en un hilo daemon con reporte de progreso en tiempo real."""
     import contextlib
@@ -3360,6 +3395,10 @@ def iniciar_actualizacion_oc(request):
             status=400,
         )
 
+    bloqueado = _candado_sync_o_409()
+    if bloqueado is not None:
+        return bloqueado
+
     task_id = str(uuid.uuid4())[:8]
     _tareas_actualizacion_oc[task_id] = {
         "status": "iniciado",
@@ -3369,11 +3408,7 @@ def iniciar_actualizacion_oc(request):
         "fecha_hasta": fecha_hasta,
         "error": None,
     }
-    threading.Thread(
-        target=_ejecutar_actualizacion_oc,
-        args=(task_id, fecha_desde, fecha_hasta),
-        daemon=True,
-    ).start()
+    _lanzar_hilo_sync(_ejecutar_actualizacion_oc, (task_id, fecha_desde, fecha_hasta))
     return Response({"task_id": task_id, "status": "iniciado"})
 
 
@@ -3691,6 +3726,10 @@ def iniciar_actualizacion_li(request):
             status=400,
         )
 
+    bloqueado = _candado_sync_o_409()
+    if bloqueado is not None:
+        return bloqueado
+
     task_id = str(uuid.uuid4())[:8]
     _tareas_actualizacion_li[task_id] = {
         "status": "iniciado",
@@ -3700,11 +3739,7 @@ def iniciar_actualizacion_li(request):
         "fecha_hasta": fecha_hasta,
         "error": None,
     }
-    threading.Thread(
-        target=_ejecutar_actualizacion_li,
-        args=(task_id, fecha_desde, fecha_hasta),
-        daemon=True,
-    ).start()
+    _lanzar_hilo_sync(_ejecutar_actualizacion_li, (task_id, fecha_desde, fecha_hasta))
     return Response({"task_id": task_id, "status": "iniciado"})
 
 
@@ -4390,6 +4425,11 @@ def iniciar_actualizacion_formularios(request):
     if not rut or not dv or not clave:
         return Response({"error": "Debe indicar RUT, DV y contraseña del Panel SS Osorno."}, status=400)
 
+    # La guarda de arriba solo ve este proceso; la actualización automática corre aparte.
+    bloqueado = _candado_sync_o_409()
+    if bloqueado is not None:
+        return bloqueado
+
     task_id = str(uuid.uuid4())[:8]
     _tareas_actualizacion_formularios[task_id] = {
         "status": "iniciado",
@@ -4400,11 +4440,7 @@ def iniciar_actualizacion_formularios(request):
         "total_cargados": 0,
         "progreso_pct": 0,
     }
-    threading.Thread(
-        target=_ejecutar_actualizacion_formularios,
-        args=(task_id, rut, dv, clave),
-        daemon=True,
-    ).start()
+    _lanzar_hilo_sync(_ejecutar_actualizacion_formularios, (task_id, rut, dv, clave))
     return Response({"task_id": task_id, "status": "iniciado"})
 
 

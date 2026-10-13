@@ -188,6 +188,17 @@ NOTIF_PLAN_MAX_LOTE = config('NOTIF_PLAN_MAX_LOTE', default=50, cast=int)
 NOTIF_PLAN_PAUSA_SEG = config('NOTIF_PLAN_PAUSA_SEG', default=2, cast=int)
 NOTIF_PLAN_URL_PANEL = 'https://panel.ssosorno.cl/panel_documental/login.php'
 
+# ─── Sincronización automática de Formularios FSC (sin botón) ─────────────────
+# Comando `python manage.py sincronizar_formularios_fsc` (tarea programada de Windows).
+# Cuenta del Panel SS Osorno SOLO en .env (nunca en código). El atributo se llama
+# *_PASSWORD (la variable de entorno sigue siendo PANEL_SSO_CLAVE) para que Django lo
+# enmascare en los reportes de error, que filtran nombres con PASS/KEY/SECRET.
+PANEL_SSO_RUT = config('PANEL_SSO_RUT', default='')
+PANEL_SSO_DV = config('PANEL_SSO_DV', default='')
+PANEL_SSO_PASSWORD = config('PANEL_SSO_CLAVE', default='')
+# A quién avisar si la sincronización falla tras los reintentos (vacío → NOTIF_PLAN_USUARIOS).
+SYNC_FSC_AVISO_A = [e.lower() for e in config('SYNC_FSC_AVISO_A', default='', cast=Csv())]
+
 # ─── Cache ────────────────────────────────────────────────────────────────────
 # LocMemCache: volátil (se pierde al reiniciar). No compartido entre workers.
 # Migrar a Redis cuando el tiempo de recalculo supere 10s en producción.

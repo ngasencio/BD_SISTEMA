@@ -1,10 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoImg from '../assets/logo.jpg';
+import { useAuth } from '../store/authStore';
 import CampanitaNotificaciones from '../features/notificaciones/components/CampanitaNotificaciones';
 
 export default function Topbar() {
     const navigate = useNavigate();
+    const { role } = useAuth();
     return (
         <div className="gob-header-strip">
             <div
@@ -24,7 +26,9 @@ export default function Topbar() {
             </div>
             <span className="gob-org">Servicio de Salud Osorno</span>
             <div className="gob-header-spacer" />
-            <CampanitaNotificaciones />
+            {/* El Gestor de Compras no tiene notificaciones (decisión 2026-10-13): al no montar
+                la campanita tampoco consulta el servidor, que además le responde 403. */}
+            {role !== 'gestor_compras' && <CampanitaNotificaciones />}
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-title)' }}>
                 Sistema Gestión Interno
             </span>
