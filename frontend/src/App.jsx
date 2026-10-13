@@ -7,7 +7,8 @@
  * Estructura de rutas:
  *  /login                       → Pública
  *  /                            → Protegida → AppLayout > Home
- *  /licitaciones                → Protegida → AppLayout > Dashboard
+ *  /licitaciones, /ordenes-compra, /pac, /compra-agil
+ *                               → Protegida (todos los roles MENOS gestor_compras: no ve Abastecimiento)
  *  /abastecimiento/*            → Protegida (rol: admin, abastecimiento, comprador, general)
  *  /compras/mis-formularios     → Protegida (rol: admin, comprador, jefatura, general)
  *  /compras/panel-formularios   → Protegida (rol: admin, jefatura, general — SIN comprador)
@@ -68,8 +69,10 @@ const HomeSegunRol = () => {
   return role === 'gestor_compras' ? <Navigate to="/gestor-compras" replace /> : <InicioPage />;
 };
 
-// Todos los roles salvo gestor_compras (el backend también lo bloquea en /pac-cumplimiento/*)
-const ROLES_CON_PAC_CUMPLIMIENTO = ['admin', 'abastecimiento', 'finanzas', 'viewer', 'comprador', 'jefatura', 'general'];
+// Todos los roles salvo gestor_compras: su único módulo es "Gestor de Compras", así que no ve
+// Abastecimiento (Licitaciones, OC, PAC, Compra Ágil) ni /pac-cumplimiento. El backend también
+// lo bloquea (_NoGestorCompras en views.py).
+const ROLES_SIN_GESTOR_COMPRAS = ['admin', 'abastecimiento', 'finanzas', 'viewer', 'comprador', 'jefatura', 'general'];
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 
@@ -84,20 +87,19 @@ function AppRoutes() {
           {/* Layout principal con Sidebar */}
           <Route element={<AppLayout />}>
 
-            {/* Rutas generales */}
+            {/* Inicio (el gestor_compras es redirigido a su panel) */}
             <Route path="/" element={<HomeSegunRol />} />
-            <Route path="/licitaciones" element={<Dashboard />} />
-            <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
             {/* Mapa del sistema (todos los autenticados) */}
             {mapaSistemaRoutes}
-            {/* Módulo PAC (todos los autenticados) */}
-            {pacRoutes}
-            {/* Módulo PAC — Cumplimiento del Plan Anual de Compras (todos los autenticados salvo gestor_compras) */}
-            <Route element={<RequireRole allowed={ROLES_CON_PAC_CUMPLIMIENTO} />}>
+
+            {/* Mercado Público + PAC (todos los autenticados salvo gestor_compras) */}
+            <Route element={<RequireRole allowed={ROLES_SIN_GESTOR_COMPRAS} />}>
+              <Route path="/licitaciones" element={<Dashboard />} />
+              <Route path="/ordenes-compra" element={<OrdenesCompraDashboard />} />
+              {pacRoutes}
               {pacCumplimientoRoutes}
+              {compraAgilRoutes}
             </Route>
-            {/* Módulo Compra Ágil (todos los autenticados) */}
-            {compraAgilRoutes}
 
             {/* Módulo Abastecimiento (admin + abastecimiento + comprador + general) */}
             <Route element={<RequireRole allowed={['admin', 'abastecimiento', 'comprador', 'general']} />}>

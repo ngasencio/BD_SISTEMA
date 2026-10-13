@@ -49,8 +49,8 @@ export const ROLES = [
         value: 'gestor_compras',
         label: 'Gestor de Compras',
         color: '#0d9488',
-        descripcion: 'Generales + vista de solo lectura de las solicitudes, derivaciones a comprador y Plan de Compra de su propio departamento (según su pertenencia en el Panel SSO).',
-        modulos: [...MODULOS_GENERALES, ...MODULOS_GESTOR],
+        descripcion: 'Solo el módulo Gestor de Compras: vista de solo lectura de las solicitudes, derivaciones a comprador y Plan de Compra de su propio departamento (según su pertenencia en el Panel SSO). No ve Abastecimiento.',
+        modulos: [...MODULOS_GESTOR],
     },
     {
         value: 'general',

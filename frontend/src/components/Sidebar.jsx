@@ -72,7 +72,8 @@ export default function Sidebar() {
                 </div>
                 )}
 
-                {/* ── ABASTECIMIENTO ────────────────── */}
+                {/* ── ABASTECIMIENTO (el gestor de compras no lo ve: su único módulo es "Gestor de Compras") ── */}
+                {role !== 'gestor_compras' && (
                 <div className={`nav-group ${openGroups.abast ? 'open' : ''}`}>
                     <div className="nav-group-title" onClick={() => toggleGroup('abast')}>
                         <span className="nav-group-title-icon">📦</span>
@@ -188,9 +189,6 @@ export default function Sidebar() {
                                     <span>📊</span>
                                     <span className="nav-item-text">Indicadores Res.188</span>
                                 </div>
-                                {/* Cumplimiento y Enlace FSC-OC-PAC: el gestor no los ve (rankings/datos de todos los departamentos) */}
-                                {role !== 'gestor_compras' && (
-                                <>
                                 <div
                                     className={`nav-item ${isActive('/pac-cumplimiento') && pacCumplimientoTab === 'resumen' ? 'active' : ''}`}
                                     onClick={() => goTo('/pac-cumplimiento?tab=resumen', 'abast', 'pac')}
@@ -205,8 +203,6 @@ export default function Sidebar() {
                                     <span>🔗</span>
                                     <span className="nav-item-text">Enlace FSC-OC-PAC</span>
                                 </div>
-                                </>
-                                )}
                             </div>
                         </div>
 
@@ -245,6 +241,7 @@ export default function Sidebar() {
                         )}
                     </div>
                 </div>
+                )}
 
                 {/* ── FINANZAS ──────────────────────── */}
                 {puede('admin', 'finanzas', 'general') && (

@@ -166,9 +166,14 @@ class _IsNotificadorPlan(BasePermission):
 
 class _NoGestorCompras(BasePermission):
     """Excluye SOLO al rol 'gestor_compras' (el resto de roles pasa igual que con
-    IsAuthenticated a secas). Se aplica a /pac-cumplimiento/*: ahí viven los Rankings,
-    la Jerarquía y las comparativas de TODOS los departamentos, y el gestor solo debe ver
-    el suyo (decisión del usuario, 2026-10-06) — su vista propia está en gestor-compras/plan/*.
+    IsAuthenticated a secas). Se aplica a:
+      · /pac-cumplimiento/*: ahí viven los Rankings, la Jerarquía y las comparativas de
+        TODOS los departamentos, y el gestor solo debe ver el suyo (decisión del usuario,
+        2026-10-06) — su vista propia está en gestor-compras/plan/*.
+      · Los datos de Licitaciones, Órdenes de Compra, PAC (Res.188) y Compra Ágil: el gestor
+        no ve el módulo Abastecimiento, solo "Gestor de Compras" (decisión del usuario,
+        2026-10-13). Boletas, Contratos, Formularios y Enlace FSC-OC-PAC ya lo excluyen
+        por _IsAbastecimiento.
     Un superusuario siempre pasa."""
     message = 'Su rol solo tiene acceso a la información de su departamento (Gestor de Compras).'
 
@@ -190,7 +195,7 @@ class _NoGestorCompras(BasePermission):
 
 class LicitacionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = LicitacionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _NoGestorCompras]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['Estado', 'C_NombreOrganismo', 'Tipo', 'EsRenovable']
 
@@ -207,7 +212,7 @@ class LicitacionViewSet(viewsets.ReadOnlyModelViewSet):
 
 class DetalleLicitacionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DetalleLicitacionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _NoGestorCompras]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['licitacion', 'CodigoProducto', 'Categoria']
 
@@ -224,7 +229,7 @@ class DetalleLicitacionViewSet(viewsets.ReadOnlyModelViewSet):
 # =============================================================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def licitaciones_ahorro_stats(request):
     """KPIs y desglose de ahorro para licitaciones adjudicadas. Cache 5min por año."""
     anio = request.GET.get('anio', '').strip()
@@ -242,7 +247,7 @@ def licitaciones_ahorro_stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def licitaciones_gestion_stats(request):
     """Licitaciones activas con semáforo de urgencia. Cache 5min por año."""
     anio = request.GET.get('anio', '').strip()
@@ -260,7 +265,7 @@ def licitaciones_gestion_stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def licitaciones_anos_view(request):
     """Años distintos disponibles en FechaPublicacion de Licitacion. Cache 10min."""
     from django.db import connection
@@ -277,7 +282,7 @@ def licitaciones_anos_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def dashboard_stats(request):
     anio = request.GET.get('anio', '').strip()
     estado = request.GET.get('Estado', '').strip()
@@ -1197,7 +1202,7 @@ def cancelar_actualizacion_sigfe(request, task_id):
 class OrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = OrdenCompra.objects.prefetch_related('detalles').all()
     serializer_class = OrdenCompraSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _NoGestorCompras]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['EstadoOC', 'C_Unidad', 'TipoOC']
 
@@ -1205,13 +1210,13 @@ class OrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
 class DetalleOrdenCompraViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = DetalleOrdenCompra.objects.all()
     serializer_class = DetalleOrdenCompraSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _NoGestorCompras]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['orden_compra', 'CodigoProducto', 'Categoria']
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def ordenes_compra_raw_all(request):
     """Devuelve todas las OC sin paginación para el dashboard (solo campos necesarios)."""
     try:
@@ -1252,7 +1257,7 @@ def ordenes_compra_raw_all(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def ordenes_compra_detalles_por_oc(request):
     """
     Devuelve las líneas de detalle (productos) de la lista de codigo_oc enviada.
@@ -1274,7 +1279,7 @@ def ordenes_compra_detalles_por_oc(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def ordenes_compra_proyectos_licitacion(request):
     """
     Mapa cross-year: CodigoLicitacion → lista de {id_proyecto, nombre_proyecto, n}.
@@ -1656,7 +1661,7 @@ class BoletaGarantiaAuditViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSe
 class PlanerPACViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet):
     queryset = PlanerPAC.objects.all()
     serializer_class = PlanerPACSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _NoGestorCompras]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
     filterset_fields = ['unidad_compra', 'tipo_proyecto', 'pac']
     search_fields = ['nombre_proyecto', 'nombre_item', 'id_proyecto']
@@ -1667,7 +1672,7 @@ class CompraAgilResumenViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet)
     Con 1489 CAs el JSON pesa ~300KB — manejable. Evita 30 peticiones secuenciales."""
     queryset = CompraAgilResumen.objects.all()
     serializer_class = CompraAgilResumenSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _NoGestorCompras]
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
     filterset_fields = ['estadoglosa', 'unidadcompra']
     search_fields = ['codigocompraagil', 'nombre']
@@ -1686,7 +1691,7 @@ class CompraAgilResumenViewSet(NoPaginationMixin, viewsets.ReadOnlyModelViewSet)
 class CompraAgilProductoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CompraAgilProducto.objects.all()
     serializer_class = CompraAgilProductoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _NoGestorCompras]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigocompraagil']
 
@@ -1694,13 +1699,13 @@ class CompraAgilProductoViewSet(viewsets.ReadOnlyModelViewSet):
 class CompraAgilProveedorViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CompraAgilProveedor.objects.all()
     serializer_class = CompraAgilProveedorSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _NoGestorCompras]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['codigocompraagil', 'proveedorseleccionado']
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def compraagil_ahorro_stats_view(request):
     """KPIs y desglose de ahorro para el módulo Compra Ágil. Cache 5min por rango de fechas."""
     fecha_desde = request.GET.get('fecha_desde', '')
@@ -1721,7 +1726,7 @@ def compraagil_ahorro_stats_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def compraagil_comparativa_view(request):
     """Estadísticas comparativas año a año para el tab Comparativa."""
     from .ml_services import calcular_comparativa_stats
@@ -1733,7 +1738,7 @@ def compraagil_comparativa_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def compraagil_patrones_view(request):
     """
     Patrones ML segmentados por tipo para carga progresiva en el frontend.
@@ -1802,7 +1807,7 @@ def compraagil_patrones_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def compraagil_anios_view(request):
     """Años distintos disponibles en fechapublicacion de CompraAgilResumen."""
     from django.db.models.functions import Substr
@@ -1820,7 +1825,7 @@ def compraagil_anios_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_indicadores_view(request):
     """Indicadores Res.188 calculados desde la BD. Cache 5min."""
     try:
@@ -1837,7 +1842,7 @@ def pac_indicadores_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_oc_stats_view(request):
     """Estadísticas de OC para los 8 paneles del tab Órdenes de Compra. Cache 5min."""
     try:
@@ -1854,7 +1859,7 @@ def pac_oc_stats_view(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_oc_productos_view(request):
     """Estadísticas de DetalleOrdenCompra para el tab Análisis Productos. Cache 5min."""
     try:
@@ -2487,7 +2492,7 @@ def gestor_mi_alcance_view(request):
 # =============================================================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def licitaciones_anos_calendario(request):
     """
     Años en que existe al menos una licitación con alguna fecha de evento en ese año.
@@ -2517,7 +2522,7 @@ def licitaciones_anos_calendario(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def licitaciones_calendario(request):
     """
     Licitaciones para el Calendario.
@@ -2551,7 +2556,7 @@ _CA_DATE_FIELDS = ['fechapublicacion', 'fechacierre', 'fechaultimocambio']
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def compraagil_anos_calendario(request):
     """Años distintos con al menos una Compra Ágil con evento en ese año. Cache 10 min."""
     cache_key = 'compraagil_anos_calendario_v1'
@@ -2579,7 +2584,7 @@ def compraagil_anos_calendario(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def compraagil_calendario(request):
     """
     Compras Ágiles para el Calendario.
@@ -2693,7 +2698,7 @@ def _ejecutar_descarga(task_id: str, codigo: str):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def iniciar_descarga_ofertas(request):
     """Inicia el scraper de ofertas en segundo plano. Retorna un task_id para polling."""
     codigo = (request.data.get("codigo") or "").strip()
@@ -2714,7 +2719,7 @@ def iniciar_descarga_ofertas(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def estado_descarga_ofertas(request, task_id):
     """Retorna el estado actual de una tarea de descarga."""
     tarea = _tareas_descarga.get(task_id)
@@ -2730,7 +2735,7 @@ def estado_descarga_ofertas(request, task_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def descargar_archivo_ofertas(request, task_id):
     """
     Transmite el ZIP de la tarea como descarga HTTP (Content-Disposition:
@@ -3004,7 +3009,7 @@ def _ejecutar_actualizacion_compraagil(task_id: str, fecha_desde_str: str, fecha
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def iniciar_actualizacion_compraagil(request):
     """Inicia el ETL de Compra Ágil. Body: {fecha_desde, fecha_hasta} en formato YYYY-MM-DD."""
     for tarea in _tareas_actualizacion_ca.values():
@@ -3037,7 +3042,7 @@ def iniciar_actualizacion_compraagil(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def estado_actualizacion_compraagil(request, task_id):
     """Retorna el estado completo de una tarea de actualización Compra Ágil."""
     tarea = _tareas_actualizacion_ca.get(task_id)
@@ -3339,7 +3344,7 @@ def _ejecutar_actualizacion_oc(task_id: str, fecha_desde_str: str, fecha_hasta_s
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def iniciar_actualizacion_oc(request):
     """Inicia el ETL de OC. Body: {fecha_desde, fecha_hasta} en formato YYYY-MM-DD."""
     for tarea in _tareas_actualizacion_oc.values():
@@ -3372,7 +3377,7 @@ def iniciar_actualizacion_oc(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def estado_actualizacion_oc(request, task_id):
     """Retorna el estado completo de una tarea de actualización OC."""
     tarea = _tareas_actualizacion_oc.get(task_id)
@@ -3670,7 +3675,7 @@ def _ejecutar_actualizacion_li(task_id: str, fecha_desde_str: str, fecha_hasta_s
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def iniciar_actualizacion_li(request):
     """Inicia el ETL de Licitaciones. Body: {fecha_desde, fecha_hasta} en YYYY-MM-DD."""
     for tarea in _tareas_actualizacion_li.values():
@@ -3703,7 +3708,7 @@ def iniciar_actualizacion_li(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def estado_actualizacion_li(request, task_id):
     """Retorna el estado completo de una tarea de actualización Licitaciones."""
     tarea = _tareas_actualizacion_li.get(task_id)
@@ -3775,21 +3780,21 @@ def _cancelar_tarea(tarea_dict: dict, task_id: str) -> Response:
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def cancelar_actualizacion_ca(request, task_id):
     """Cancela una tarea ETL de Compra Ágil en curso."""
     return _cancelar_tarea(_tareas_actualizacion_ca, task_id)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def cancelar_actualizacion_oc(request, task_id):
     """Cancela una tarea ETL de Órdenes de Compra en curso."""
     return _cancelar_tarea(_tareas_actualizacion_oc, task_id)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def cancelar_actualizacion_li(request, task_id):
     """Cancela una tarea ETL de Licitaciones en curso."""
     return _cancelar_tarea(_tareas_actualizacion_li, task_id)
@@ -5607,7 +5612,7 @@ def _validar_anio_reporte(anio_str):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_indicadores_reporte_word(request):
     anio = _validar_anio_reporte(request.GET.get('anio'))
     if anio is None:
@@ -5623,7 +5628,7 @@ def pac_indicadores_reporte_word(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_indicadores_reporte_ppt(request):
     anio = _validar_anio_reporte(request.GET.get('anio'))
     if anio is None:
@@ -5639,7 +5644,7 @@ def pac_indicadores_reporte_ppt(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, _NoGestorCompras])
 def pac_indicadores_reporte_pdf(request):
     anio = _validar_anio_reporte(request.GET.get('anio'))
     if anio is None:
