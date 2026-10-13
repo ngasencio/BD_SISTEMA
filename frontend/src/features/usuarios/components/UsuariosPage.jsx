@@ -58,7 +58,7 @@ export default function UsuariosPage() {
         () => Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== '')),
         [filtros]
     );
-    const { usuarios, establecimientos, loading, error, crear, actualizar, eliminar, actualizarRolMasivo } =
+    const { usuarios, establecimientos, loading, error, refresh, crear, actualizar, eliminar, actualizarRolMasivo } =
         useUsuarios(params);
 
     // Reset página cuando cambian filtros
@@ -106,7 +106,13 @@ export default function UsuariosPage() {
 
     const estMap = useMemo(() => {
         const m = {};
-        establecimientos.forEach(e => { m[e.id] = e.nombre_corto || e.descripcion; });
+        // El perfil guarda el CÓDIGO del Panel (197-203) en la mayoría de las cuentas; algunas
+        // antiguas guardan el id (1-7). Los rangos no se solapan, así que se indexan ambos.
+        establecimientos.forEach(e => {
+            const nombre = e.nombre_corto || e.descripcion;
+            m[e.codigo] = nombre;
+            m[e.id] = m[e.id] ?? nombre;
+        });
         return m;
     }, [establecimientos]);
 
@@ -114,9 +120,10 @@ export default function UsuariosPage() {
     const totalPages = Math.ceil(usuarios.length / PAGE_SIZE);
     const paginated  = usuarios.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+    // Solo se crea desde este modal; editar abre el editor completo, que guarda por su cuenta
+    // (ficha atómica y auditada) y avisa con `onGuardado` para refrescar la tabla.
     const handleSave = async (data) => {
-        if (modal === 'crear') await crear(data);
-        else await actualizar(modal.id, data);
+        await crear(data);
     };
 
     const handleDelete = async () => {
@@ -286,7 +293,7 @@ export default function UsuariosPage() {
                                                     <div
                                                         className="u-nd"
                                                         style={{ marginTop: 4, fontSize: 11, color: u.departamentos_gestor.length ? '#0d9488' : '#dc2626' }}
-                                                        title="Departamento(s) que ve este gestor — se define por su pertenencia en el Panel SSO"
+                                                        title="Departamento(s) que ve este gestor — la asignación hecha en Editar › Organización o, si no tiene, su pertenencia en el Panel SSO"
                                                     >
                                                         {u.departamentos_gestor.length
                                                             ? `🏢 ${u.departamentos_gestor.join(', ')}`
@@ -393,6 +400,7 @@ export default function UsuariosPage() {
                     usuario={modal === 'crear' ? null : modal}
                     establecimientos={establecimientos}
                     onSave={handleSave}
+                    onGuardado={refresh}
                     onClose={() => setModal(null)}
                 />
             )}

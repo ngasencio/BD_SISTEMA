@@ -1194,6 +1194,83 @@ class PerfilUsuario(models.Model):
         return f"{self.user.username} — {self.role}"
 
 
+class AsignacionDepartamentoUsuario(models.Model):
+    """Departamento(s) que un administrador asignó a mano a un usuario desde
+    Gestión de Usuarios. CAPA PROPIA que prevalece sobre `data_pertenencia_usuario`
+    (espejo del Panel SSO, cargado desde fuera de este proyecto y que un re-import
+    pisaría): si el usuario tiene al menos una fila aquí, `resolver_alcance_gestor`
+    usa SOLO estas; si no tiene ninguna, cae a la pertenencia del Panel.
+
+    `departamento_id` es un entero sin FK real a propósito: `Departamento` es
+    `managed=False` (id `int(11)`, tabla externa) — mismo criterio que
+    `FormularioFSCDerivado.sso_departamento` (`db_constraint=False`). Un id que ya no
+    exista en `data_departamento` simplemente se ignora al resolver el alcance."""
+    user            = models.ForeignKey(
+        'auth.User', on_delete=models.CASCADE, related_name='asignaciones_departamento'
+    )
+    departamento_id = models.IntegerField(db_index=True)
+    asignado_por    = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+    )
+    creado_en       = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'data_asignacion_departamento_usuario'
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'departamento_id'], name='uq_asignacion_depto_usuario'),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} → depto {self.departamento_id}"
+
+
+class AuditoriaAdmin(models.Model):
+    """Registro append-only de cada cambio hecho desde la administración de usuarios:
+    quién, cuándo, sobre qué objeto y qué campos (antes → después). Nunca se edita ni
+    se borra desde la aplicación. Las contraseñas NO se guardan (solo que cambiaron).
+
+    Es genérico a propósito (`entidad` + `objeto_id`): sumar una entidad editable nueva
+    no requiere tabla nueva. `usuario_afectado` permite listar el historial de una
+    cuenta; en los cambios al árbol de departamentos queda en NULL."""
+    ENTIDAD_CUENTA       = 'cuenta'
+    ENTIDAD_PERFIL       = 'perfil'
+    ENTIDAD_PANEL        = 'panel'
+    ENTIDAD_ASIGNACION   = 'asignacion'
+    ENTIDAD_DEPARTAMENTO = 'departamento'
+    ENTIDADES = [
+        (ENTIDAD_CUENTA,       'Cuenta de acceso'),
+        (ENTIDAD_PERFIL,       'Perfil del sistema'),
+        (ENTIDAD_PANEL,        'Usuario del Panel SSO'),
+        (ENTIDAD_ASIGNACION,   'Departamento asignado'),
+        (ENTIDAD_DEPARTAMENTO, 'Departamento (jerarquía)'),
+    ]
+
+    actor            = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+    )
+    actor_nombre     = models.CharField(max_length=150, blank=True, default='')
+    usuario_afectado = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+    )
+    entidad          = models.CharField(max_length=20, choices=ENTIDADES)
+    objeto_id        = models.CharField(max_length=50)
+    objeto_etiqueta  = models.CharField(max_length=200, blank=True, default='')
+    # {campo: [antes, después]} — solo los campos que realmente cambiaron.
+    cambios          = models.JSONField(default=dict)
+    creado_en        = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'api_auditoria_admin'
+        ordering = ['-creado_en', '-id']
+        indexes = [
+            models.Index(fields=['entidad', 'objeto_id']),
+            models.Index(fields=['usuario_afectado', 'creado_en']),
+        ]
+
+    def __str__(self):
+        return f"{self.entidad}:{self.objeto_id} por {self.actor_nombre or self.actor_id}"
+
+
 class DevengoSigfeAnual(models.Model):
     """Snapshot vigente de 'Disponibilidad de Devengos Presupuestarios' (SIGFE),
     descargado por establecimiento vía Selenium (api/data/data_devengo/) y sincronizado

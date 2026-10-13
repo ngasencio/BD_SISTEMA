@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ROLES, getRol } from '../constants/roles';
 import LeyendaRoles from './LeyendaRoles';
+import EditorUsuario from './editor/EditorUsuario';
+import { opcionesEstablecimiento } from './editor/opcionesEstablecimiento';
 
 const AVATAR_COLORS = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#0891b2','#db2777'];
 
@@ -16,31 +18,27 @@ const EMPTY = {
     perfil: { role: 'viewer', cargo: '', run: '', establecimiento_id: null },
 };
 
-export default function ModalUsuario({ usuario, establecimientos = [], onSave, onClose }) {
-    const esEdicion = !!usuario;
+/**
+ * Crear usuario: formulario simple (cuenta + perfil). Editar un usuario existente abre el
+ * editor completo (`EditorUsuario`): cuenta, perfil, Panel SSO, departamento e historial.
+ */
+export default function ModalUsuario({ usuario, establecimientos = [], onSave, onGuardado, onClose }) {
+    if (usuario) {
+        return (
+            <EditorUsuario
+                usuario={usuario} establecimientos={establecimientos}
+                onGuardado={onGuardado} onClose={onClose}
+            />
+        );
+    }
+    return <ModalCrearUsuario establecimientos={establecimientos} onSave={onSave} onClose={onClose} />;
+}
+
+function ModalCrearUsuario({ establecimientos = [], onSave, onClose }) {
     const [form, setForm]     = useState(EMPTY);
     const [saving, setSaving] = useState(false);
     const [error, setError]   = useState(null);
     const [showPass, setShowPass] = useState(false);
-
-    useEffect(() => {
-        if (usuario) {
-            setForm({
-                ...usuario,
-                password: '',
-                perfil: {
-                    role:               usuario.perfil?.role               ?? 'viewer',
-                    cargo:              usuario.perfil?.cargo              ?? '',
-                    run:                usuario.perfil?.run                ?? '',
-                    establecimiento_id: usuario.perfil?.establecimiento_id ?? null,
-                },
-            });
-        } else {
-            setForm(EMPTY);
-        }
-        setError(null);
-        setShowPass(false);
-    }, [usuario]);
 
     const set       = (field, val) => setForm(f => ({ ...f, [field]: val }));
     const setPerfil = (field, val) => setForm(f => ({ ...f, perfil: { ...f.perfil, [field]: val } }));
@@ -90,14 +88,7 @@ export default function ModalUsuario({ usuario, establecimientos = [], onSave, o
                         {initials}
                     </div>
                     <div className="mu-header-info">
-                        <div className="mu-header-title">
-                            {esEdicion ? (
-                                [form.first_name, form.last_name].filter(Boolean).join(' ') || form.username || 'Usuario'
-                            ) : 'Nuevo usuario'}
-                        </div>
-                        {esEdicion && (
-                            <div className="mu-header-email">{form.username}</div>
-                        )}
+                        <div className="mu-header-title">Nuevo usuario</div>
                         <div className="mu-role-pill" style={{ background: rolActual.color + '22', color: rolActual.color }}>
                             {rolActual.label}
                         </div>
@@ -124,18 +115,14 @@ export default function ModalUsuario({ usuario, establecimientos = [], onSave, o
                                 />
                             </label>
                             <label className="form-field mu-field">
-                                <span>
-                                    Contraseña {esEdicion
-                                        ? <span className="mu-hint">(vacío = sin cambios)</span>
-                                        : '*'}
-                                </span>
+                                <span>Contraseña *</span>
                                 <div className="mu-pass-wrap">
                                     <input
                                         type={showPass ? 'text' : 'password'}
                                         value={form.password}
                                         onChange={e => set('password', e.target.value)}
-                                        required={!esEdicion}
-                                        placeholder={esEdicion ? '••••••••' : 'Contraseña inicial'}
+                                        required
+                                        placeholder="Contraseña inicial"
                                         minLength={6}
                                         autoComplete="new-password"
                                     />
@@ -186,11 +173,7 @@ export default function ModalUsuario({ usuario, establecimientos = [], onSave, o
                                     onChange={e => setPerfil('establecimiento_id', e.target.value ? Number(e.target.value) : null)}
                                 >
                                     <option value="">— Sin asignar —</option>
-                                    {establecimientos.map(est => (
-                                        <option key={est.id} value={est.id}>
-                                            {est.nombre_corto || est.descripcion}
-                                        </option>
-                                    ))}
+                                    {opcionesEstablecimiento(establecimientos, form.perfil.establecimiento_id)}
                                 </select>
                             </label>
                             <label className="form-field mu-field">
@@ -243,7 +226,7 @@ export default function ModalUsuario({ usuario, establecimientos = [], onSave, o
                         <button type="submit" className="btn-primary mu-btn-save" disabled={saving}>
                             {saving
                                 ? <><span className="mu-saving-dot" />Guardando…</>
-                                : (esEdicion ? '💾 Guardar cambios' : '✅ Crear usuario')}
+                                : '✅ Crear usuario'}
                         </button>
                     </div>
                 </form>

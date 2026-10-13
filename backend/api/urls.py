@@ -40,6 +40,8 @@ from .views import (
     formularios_alertas_view, formularios_unificacion_view, formularios_historial_view,
     formularios_organigrama_view, formularios_ficha_view, inicio_resumen_view,
     UsuarioViewSet, user_me, DepartamentoViewSet, EstablecimientoViewSet,
+    organizacion_arbol_view, organizacion_usuarios_panel_view,
+    organizacion_departamento_view, organizacion_departamento_historial_view,
     SigfeAnexo1ViewSet, sigfe_anexo1_estado_bd, sigfe_anexo1_resumen, sigfe_anexo1_guia_simple,
     sigfe_anexo1_serie_nivel1, sigfe_anexo1_mapa_gasto,
     sigfe_anexo1_alertas, sigfe_anexo1_semaforo, sigfe_anexo1_burn_rate, sigfe_anexo1_deuda_flotante,
@@ -137,6 +139,12 @@ urlpatterns = [
     path('auth/login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', user_me, name='user_me'),
+
+    # Administración de usuarios — jerarquía y vínculo con el Panel SSO (solo admin)
+    path('organizacion/arbol/', organizacion_arbol_view, name='organizacion_arbol'),
+    path('organizacion/usuarios-panel/', organizacion_usuarios_panel_view, name='organizacion_usuarios_panel'),
+    path('organizacion/departamentos/<int:depto_id>/', organizacion_departamento_view, name='organizacion_departamento'),
+    path('organizacion/departamentos/<int:depto_id>/historial/', organizacion_departamento_historial_view, name='organizacion_departamento_historial'),
 
     # Estadísticas y endpoints especiales
     path('dashboard/stats/', dashboard_stats, name='dashboard_stats'),

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.db.models import DecimalField
 from django.db.models.functions import Cast
@@ -5241,11 +5242,91 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_active=(activo.lower() in ('1', 'true', 's')))
         return qs
 
+    # Todo cambio hecho por un administrador queda en AuditoriaAdmin, también los rápidos de la
+    # lista (toggle «Activo», rol masivo) que no pasan por la ficha completa.
+    def perform_create(self, serializer):
+        from .services_admin_usuarios import auditar_alta_usuario
+        with transaction.atomic():
+            usuario = serializer.save()
+            auditar_alta_usuario(self.request.user, usuario)
+
+    def perform_update(self, serializer):
+        from rest_framework.exceptions import ValidationError
+        from .services_admin_usuarios import (
+            ErrorAdministracion, auditar_actualizacion_usuario, capturar_estado_cuenta_perfil,
+            validar_autoproteccion,
+        )
+        usuario, datos = serializer.instance, serializer.validated_data
+        try:
+            validar_autoproteccion(
+                self.request.user, usuario, datos.get('is_active'), (datos.get('perfil') or {}).get('role'),
+            )
+        except ErrorAdministracion as e:
+            raise ValidationError(e.detalle)
+        with transaction.atomic():
+            antes = capturar_estado_cuenta_perfil(usuario)
+            serializer.save()
+            auditar_actualizacion_usuario(
+                self.request.user, usuario, antes, password_cambiada=bool(datos.get('password')),
+            )
+
     def perform_destroy(self, instance):
         if instance.pk == self.request.user.pk:
             from rest_framework.exceptions import ValidationError
             raise ValidationError('No puedes eliminar tu propia cuenta.')
-        instance.delete()
+        from .services_admin_usuarios import auditar_baja_usuario
+        with transaction.atomic():
+            auditar_baja_usuario(self.request.user, instance)
+            instance.delete()
+
+    # --- Ficha completa del usuario (administración; lógica en services_admin_usuarios) ---
+
+    @action(detail=True, methods=['get', 'patch'], url_path='ficha')
+    def ficha(self, request, pk=None):
+        """GET: todo lo editable de un usuario (cuenta, perfil, Panel SSO, departamento).
+        PATCH: {cuenta?, perfil?, panel?, departamentos?} — atómico y auditado."""
+        from .services_admin_usuarios import (
+            ErrorAdministracion, aplicar_cambios_ficha, obtener_ficha_usuario,
+        )
+        usuario = self.get_object()
+        if request.method == 'GET':
+            return Response(obtener_ficha_usuario(usuario))
+        try:
+            return Response(aplicar_cambios_ficha(request.user, usuario, request.data))
+        except ErrorAdministracion as e:
+            return _respuesta_error_admin(e)
+
+    @action(detail=True, methods=['post'], url_path='previsualizar-alcance')
+    def previsualizar_alcance(self, request, pk=None):
+        """Qué vería un gestor con los departamentos enviados, antes de guardar."""
+        from .services_admin_usuarios import ErrorAdministracion, previsualizar_alcance_departamentos
+        self.get_object()
+        try:
+            return Response(previsualizar_alcance_departamentos(request.data.get('departamentos', [])))
+        except ErrorAdministracion as e:
+            return _respuesta_error_admin(e)
+
+    @action(detail=True, methods=['get'], url_path='historial')
+    def historial(self, request, pk=None):
+        """Últimos cambios administrativos hechos sobre esta cuenta."""
+        from .services_admin_usuarios import listar_historial
+        usuario = self.get_object()
+        try:
+            limite = int(request.query_params.get('limite', 50))
+        except (TypeError, ValueError):
+            limite = 50
+        return Response(listar_historial(usuario_id=usuario.id, limite=limite))
+
+
+def _respuesta_error_admin(error):
+    """ErrorAdministracion → respuesta HTTP: `errores` por sección/campo para que el formulario
+    marque cada campo, y `detail` con un texto general."""
+    detalle = error.detalle
+    if isinstance(detalle, dict) and isinstance(detalle.get('detail'), str):
+        return Response({'detail': detalle['detail']}, status=error.status)
+    return Response(
+        {'detail': 'Revise los campos marcados.', 'errores': detalle}, status=error.status,
+    )
 
 
 @api_view(['GET', 'PATCH'])
@@ -5276,6 +5357,48 @@ class EstablecimientoViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class   = EstablecimientoSerializer
     permission_classes = [IsAuthenticated]
     pagination_class   = None
+
+
+# --- Organización (administración): jerarquía de departamentos y vínculo con el Panel SSO ---
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAdmin])
+def organizacion_arbol_view(request):
+    """Árbol Subdirección/Hospital → Departamento → Sub-departamento para el selector en cascada."""
+    from .services_admin_usuarios import construir_arbol_organizacion
+    return Response(construir_arbol_organizacion())
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAdmin])
+def organizacion_usuarios_panel_view(request):
+    """Usuarios del Panel SSO (para revincular una cuenta), con la cuenta que ya los usa."""
+    from .services_admin_usuarios import listar_usuarios_panel
+    return Response(listar_usuarios_panel())
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated, _IsAdmin])
+def organizacion_departamento_view(request, depto_id):
+    """GET: datos del departamento + impacto de editarlo. PATCH: edita (campos del registro
+    `CAMPOS_DEPARTAMENTO`); `reclasificar: true` recalcula Dentro/Fuera PAC de los formularios."""
+    from .services_admin_usuarios import ErrorAdministracion, detalle_departamento, editar_departamento
+    try:
+        if request.method == 'GET':
+            return Response(detalle_departamento(depto_id))
+        reclasificar = str(request.data.get('reclasificar', '')).lower() == 'true'
+        cambios = {k: v for k, v in request.data.items() if k != 'reclasificar'}
+        return Response(editar_departamento(request.user, depto_id, cambios, reclasificar=reclasificar))
+    except ErrorAdministracion as e:
+        return _respuesta_error_admin(e)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, _IsAdmin])
+def organizacion_departamento_historial_view(request, depto_id):
+    """Cambios administrativos hechos a la jerarquía de un departamento."""
+    from .services_admin_usuarios import listar_historial
+    return Response(listar_historial(entidad='departamento', objeto_id=depto_id, limite=50))
 
 
 # =============================================================================

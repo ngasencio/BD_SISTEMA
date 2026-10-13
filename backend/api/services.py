@@ -19,6 +19,7 @@ from .models import (
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto, FormularioFSCEstadoLog,
     SigfeAnexo1, ConceptoJerarquia,
     PacProyectoMaestro, Departamento, Establecimiento, SsoSubdireccion, PertenenciaUsuario,
+    AsignacionDepartamentoUsuario,
     Factura, FacturaSyncLog,
     FscOcLink, CompradorInicial, OcPacOverride,
     ComprasCompradorPerfil, ProcesoCompra, ProcesoCompraFormulario,
@@ -7326,7 +7327,19 @@ _CACHE_ALCANCE_GESTOR_SEG = 60
 
 
 def _alcance_gestor_vacio(modo, motivo):
-    return {'modo': modo, 'motivo': motivo, 'todos': False, 'depto_ids': [], 'departamentos': [], 'unidades': []}
+    return {
+        'modo': modo, 'motivo': motivo, 'todos': False, 'origen': None,
+        'depto_ids': [], 'departamentos': [], 'unidades': [],
+    }
+
+
+def invalidar_cache_alcance_gestor(user_id):
+    """Descarta el alcance cacheado (60 s) de un gestor. Hay que llamarla al cambiar
+    su asignación de departamento: sin esto el administrador vería el cambio recién
+    al cabo de un minuto y creería que no se guardó. Para un gestor la clave siempre
+    termina en `_0` (no elige departamento)."""
+    cache.delete(f'gestor_alcance_{user_id}_0')
+    cache.delete(f'gestor_alcance_{user_id}_todos')
 
 
 def _rol_usuario(user):
@@ -7358,10 +7371,85 @@ def _cuelga_de(depto_id, ancestro_id, mapa_deptos):
     return False
 
 
+def _departamentos_asignados_gestor(user, mapa_deptos):
+    """Departamentos que le corresponden a un gestor, con su origen.
+
+    Retorna `(asignados, origen, motivo_vacio)`:
+      - origen 'propio': el administrador lo asignó a mano (AsignacionDepartamentoUsuario).
+        Si el usuario tiene AL MENOS UNA fila, esta capa manda y la pertenencia del Panel
+        se ignora por completo — aunque todas las filas apunten a departamentos que ya no
+        existen (entonces el alcance queda vacío con su motivo, nunca "vuelve" en silencio a
+        un departamento que el administrador reemplazó a propósito).
+      - origen 'panel': sin asignación propia, vale la pertenencia del Panel SSO
+        (`data_pertenencia_usuario`, por `PerfilUsuario.panel_id`).
+    `asignados` vacío significa "sin alcance", y `motivo_vacio` dice por qué."""
+    propios = list(
+        AsignacionDepartamentoUsuario.objects.filter(user_id=user.id).values_list('departamento_id', flat=True)
+    )
+    if propios:
+        validos = {dep for dep in propios if dep in mapa_deptos}
+        if not validos:
+            return set(), 'propio', 'Los departamentos asignados a su cuenta ya no existen en la organización.'
+        return validos, 'propio', None
+
+    panel_id = getattr(getattr(user, 'perfil', None), 'panel_id', None)
+    if not panel_id:
+        return set(), 'panel', 'Su cuenta no está vinculada al Panel SSO.'
+    validos = {
+        dep for dep in PertenenciaUsuario.objects.filter(
+            id_usuario=panel_id, tipo_dependencia='DEP',
+        ).values_list('id_dependencia', flat=True)
+        if dep in mapa_deptos
+    }
+    if not validos:
+        return set(), 'panel', 'No tiene un departamento asignado en el Panel SSO.'
+    return validos, 'panel', None
+
+
+def _construir_alcance(asignados, modo, origen, mapa_deptos):
+    """Expande los departamentos `asignados` a su alcance completo (cada uno más sus
+    descendientes) y resuelve las `unidad_requirente` de FSC que le corresponden.
+    Única implementación — la usan `resolver_alcance_gestor` y la vista previa del
+    administrador (`previsualizar_alcance_departamentos`), para que lo que el
+    administrador ve antes de guardar sea EXACTAMENTE lo que el gestor verá."""
+    nombres_rama, _ = _mapa_nombres_subdireccion()
+    departamentos = []
+    en_alcance = set()
+    for asignado in sorted(asignados):
+        info = mapa_deptos[asignado]
+        descendientes = {
+            d_id for d_id in mapa_deptos
+            if d_id != asignado and _cuelga_de(d_id, asignado, mapa_deptos)
+        }
+        en_alcance |= {asignado} | descendientes
+        departamentos.append({
+            'id': asignado,
+            'nombre': info['descripcion'],
+            'subdireccion': nombres_rama.get((info['establecimiento_id'], info['subdireccion_id']), 'Sin Clasificar'),
+            'sub_departamentos': sorted(mapa_deptos[d]['descripcion'] for d in descendientes),
+        })
+
+    mapa_por_nombre = _mapa_departamentos_por_nombre()
+    unidades = sorted(
+        unidad for unidad in (
+            FormularioFSC.objects.exclude(unidad_requirente__isnull=True).exclude(unidad_requirente='')
+            .order_by().values_list('unidad_requirente', flat=True).distinct()
+        )
+        if (d := mapa_por_nombre.get(_normalizar_texto_pac(unidad))) and d.id in en_alcance
+    )
+    return {
+        'modo': modo, 'motivo': None, 'todos': False, 'origen': origen,
+        'depto_ids': sorted(en_alcance), 'departamentos': departamentos, 'unidades': unidades,
+    }
+
+
 def resolver_alcance_gestor(user, depto_id=None):
     """Alcance de datos de `user` en el módulo Gestor de Compras.
 
-    Retorna {modo, motivo, depto_ids, departamentos, unidades}:
+    Retorna {modo, motivo, origen, depto_ids, departamentos, unidades}:
+      - origen: de dónde salió el departamento — 'propio' (asignado a mano por un
+        administrador, prevalece), 'panel' (pertenencia del Panel SSO), 'seleccion'
+        (supervisor eligió uno) o 'todos'.
       - departamentos: los nodos asignados (cada uno con `sub_departamentos`, sus
         descendientes).
       - depto_ids: IDs de TODOS los departamentos en alcance (asignados + descendientes).
@@ -7411,7 +7499,7 @@ def resolver_alcance_gestor(user, depto_id=None):
             .order_by().values_list('unidad_requirente', flat=True).distinct()
         )
         resultado = {
-            'modo': 'supervision', 'motivo': None, 'todos': True,
+            'modo': 'supervision', 'motivo': None, 'todos': True, 'origen': 'todos',
             'depto_ids': sorted(mapa_deptos), 'unidades': unidades_todas,
             'departamentos': [{
                 'id': 'todos', 'nombre': 'Todos los departamentos',
@@ -7424,50 +7512,13 @@ def resolver_alcance_gestor(user, depto_id=None):
     if modo == 'supervision':
         if depto_id not in mapa_deptos:
             return _alcance_gestor_vacio(modo, 'Departamento no encontrado.')
-        asignados = {depto_id}
+        asignados, origen = {depto_id}, 'seleccion'
     else:
-        panel_id = getattr(getattr(user, 'perfil', None), 'panel_id', None)
-        if not panel_id:
-            return _alcance_gestor_vacio(modo, 'Su cuenta no está vinculada al Panel SSO.')
-        asignados = {
-            dep for dep in PertenenciaUsuario.objects.filter(
-                id_usuario=panel_id, tipo_dependencia='DEP',
-            ).values_list('id_dependencia', flat=True)
-            if dep in mapa_deptos
-        }
+        asignados, origen, motivo_vacio = _departamentos_asignados_gestor(user, mapa_deptos)
         if not asignados:
-            return _alcance_gestor_vacio(modo, 'No tiene un departamento asignado en el Panel SSO.')
+            return _alcance_gestor_vacio(modo, motivo_vacio)
 
-    nombres_rama, _ = _mapa_nombres_subdireccion()
-    departamentos = []
-    en_alcance = set()
-    for asignado in sorted(asignados):
-        info = mapa_deptos[asignado]
-        descendientes = {
-            d_id for d_id in mapa_deptos
-            if d_id != asignado and _cuelga_de(d_id, asignado, mapa_deptos)
-        }
-        en_alcance |= {asignado} | descendientes
-        departamentos.append({
-            'id': asignado,
-            'nombre': info['descripcion'],
-            'subdireccion': nombres_rama.get((info['establecimiento_id'], info['subdireccion_id']), 'Sin Clasificar'),
-            'sub_departamentos': sorted(mapa_deptos[d]['descripcion'] for d in descendientes),
-        })
-
-    mapa_por_nombre = _mapa_departamentos_por_nombre()
-    unidades = sorted(
-        unidad for unidad in (
-            FormularioFSC.objects.exclude(unidad_requirente__isnull=True).exclude(unidad_requirente='')
-            .order_by().values_list('unidad_requirente', flat=True).distinct()
-        )
-        if (d := mapa_por_nombre.get(_normalizar_texto_pac(unidad))) and d.id in en_alcance
-    )
-
-    resultado = {
-        'modo': modo, 'motivo': None, 'todos': False,
-        'depto_ids': sorted(en_alcance), 'departamentos': departamentos, 'unidades': unidades,
-    }
+    resultado = _construir_alcance(asignados, modo, origen, mapa_deptos)
     cache.set(cache_key, resultado, timeout=_CACHE_ALCANCE_GESTOR_SEG)
     return resultado
 
