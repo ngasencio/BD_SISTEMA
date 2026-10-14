@@ -50,7 +50,7 @@ from .models import (
     PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
     SigfeAnexo1,
     FscOcLink, CompradorInicial,
-    ComprasCompradorPerfil, ProcesoCompra, ComprasNotificacion,
+    ComprasCompradorPerfil, ProcesoCompra, ProcesoCompraFormulario, ComprasNotificacion,
 )
 from .serializers import (
     BoletaGarantiaAuditSerializer, BoletaGarantiaSerializer,
@@ -2308,6 +2308,22 @@ class ProcesoCompraViewSet(viewsets.ModelViewSet):
         proceso.refresh_from_db()
         return Response(self.get_serializer(proceso).data)
 
+    @action(detail=True, methods=['post'], url_path='quitar-formulario')
+    def quitar_formulario(self, request, pk=None):
+        """Quita el proceso de ese formulario. Si era el último formulario del
+        proceso, el proceso se elimina; en una compra conjunta solo se suelta
+        este FSC. Responde {proceso_eliminado: bool}."""
+        from .services import quitar_formulario_de_proceso
+        formulario_id = str(request.data.get('formulario_id') or '').strip()
+        if not formulario_id.isdigit():
+            return Response({'error': 'formulario_id es requerido'}, status=400)
+        proceso = self.get_object()  # respeta el alcance: un comprador solo opera los suyos
+        try:
+            resultado = quitar_formulario_de_proceso(proceso.id, int(formulario_id), request.user)
+        except ProcesoCompraFormulario.DoesNotExist:
+            return Response({'error': 'Ese formulario no está vinculado a este proceso.'}, status=404)
+        return Response(resultado)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, _IsComprador])
@@ -3027,6 +3043,10 @@ def iniciar_actualizacion_compraagil(request):
             status=400,
         )
 
+    bloqueado = _candado_sync_o_409()
+    if bloqueado is not None:
+        return bloqueado
+
     task_id = str(uuid.uuid4())[:8]
     _tareas_actualizacion_ca[task_id] = {
         "status": "iniciado",
@@ -3036,11 +3056,7 @@ def iniciar_actualizacion_compraagil(request):
         "fecha_hasta": fecha_hasta,
         "error": None,
     }
-    threading.Thread(
-        target=_ejecutar_actualizacion_compraagil,
-        args=(task_id, fecha_desde, fecha_hasta),
-        daemon=True,
-    ).start()
+    _lanzar_hilo_sync(_ejecutar_actualizacion_compraagil, (task_id, fecha_desde, fecha_hasta))
     return Response({"task_id": task_id, "status": "iniciado"})
 
 

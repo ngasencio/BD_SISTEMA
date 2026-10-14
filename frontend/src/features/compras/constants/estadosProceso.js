@@ -67,3 +67,11 @@ export const estadoLabel = (codigo) => ESTADO_LABELS[codigo] || codigo;
 const TIPO_CHIP_COLOR_OVERRIDE = { LICITACION: '#d97706', COMPRA_AGIL: '#0ea5e9' };
 export const colorPorTipo = (tipo) =>
     TIPO_CHIP_COLOR_OVERRIDE[tipo] || TIPOS_PROCESO.find(t => t.value === tipo)?.color || '#64748b';
+
+// Color/fondo según los días transcurridos desde la derivación a comprador
+// (>30 rojo, >10 naranja, >5 ámbar, resto verde). Lo comparten la columna "Días"
+// de FormulariosTable y "N días — sin tramitar" del panel Resumen.
+export const coloresDias = (dias) => ({
+    color: dias > 30 ? '#dc2626' : dias > 10 ? '#f97316' : dias > 5 ? '#f59e0b' : '#16a34a',
+    bg:    dias > 30 ? '#fef2f2' : dias > 10 ? '#fff7ed' : dias > 5 ? '#fffbeb' : '#f0fdf4',
+});

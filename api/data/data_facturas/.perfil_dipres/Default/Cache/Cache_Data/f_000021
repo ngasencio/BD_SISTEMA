@@ -1,0 +1,1672 @@
+//Clase Tabla
+var Tabla = function(params) {
+    this.id = params['id_div'];
+    this.tipo = params['tipo'];
+    this.obj_related = params['obj_related'];
+    this.tipo_obj_related = params['tipo_obj_related'];
+    this.node_activo = 0;//20191016 HB
+};
+
+//Inicilizador Tabla
+Tabla.prototype.InitLoad = function() {
+    $("#todosChk_" + this.id).click(function(evento) {
+        if (this.checked) { // check select status
+            $('.chkClass_' + this.id).each(function() { //loop through each checkbox
+                this.checked = true; //select all checkboxes with class "checkbox1"
+            });
+        } else {
+            $('.chkClass_' + this.id).each(function() { //loop through each checkbox
+                this.checked = false; //deselect all checkboxes with class "checkbox1"
+            });
+        }
+
+    });
+/*    if ($("#div_body_" + this.id).length) {
+        $('#tabla_' + this.id).footable();
+        $("td, th").attr("style", "white-space: nowrap; display: table-cell");
+        $('#div_body_' + this.id).removeAttr("hidden");
+    } else {
+        $('#div_body_' + this.id).removeAttr("hidden");
+    }*/
+    $("#btnSiguiente_" + this.id).click(function() {
+        if ($.isNumeric($("#offset_" + this.id).val())) {
+            var currentPage = parseInt($("#offset_" + this.id).val());
+            var nextPage = currentPage + 1;
+            this.irPagina(nextPage);
+        } else {
+            alert("pagina no numerica");
+        }
+    });
+    $("#btnAnterior_" + this.id).click(function() {
+        if ($.isNumeric($("#offset_" + this.id).val())) {
+            var currentPage = parseInt($("#offset_" + this.id).val());
+            var prevPage = currentPage - 1;
+            this.irPagina(prevPage);
+        } else {
+            alert("pagina no numerica");
+        }
+    });
+};
+
+//Cargar posicion de las columnas de la grilla
+Tabla.prototype.LoadIndexes = function() {
+    if ($("#tabla_" + this.id).length) {
+        var table = document.getElementById('tabla_' + this.id);
+        var rowLength = table.rows[0].cells.length;
+        var indexes = new Object();
+        var aux = '';
+        for (var i = 0; i < rowLength; i += 1) {
+            aux = (table.rows[0].cells[i].getAttribute("name")).replace(' ', '_');
+            indexes[aux] = i;
+        }
+        $("#indexes_" + this.id).attr('value', JSON.stringify(indexes));
+    }
+};
+
+Tabla.prototype.getIndex = function(prop) {
+    return $.parseJSON($("#indexes_" + this.id).val())[prop];
+};
+
+//Funcion que carga la grilla
+Tabla.prototype.cargarTabla = function(pag, total,el, params_ajax) {
+    var id_div = this.id;
+    var offset = $('#offset_' + id_div).val();
+    var totales = $('#total_regs_' + id_div).val();
+
+    //$("#" + id_div).append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; margin-top: 25%; z-index: 2147483647;"><img src="' + $("#uri").val() + 'css/img/spinner.gif"> </div>');
+    if (!$("#" + id_div).hasClass('no-mostrar-cargando')) {
+        $("#" + id_div).html('<i class="fa fa-spin fa-spinner"></i> Cargando...');
+    }
+	$(el).prop('disabled',true);
+    var obj_related = $("#" + id_div).attr("obj_related");
+
+
+    var url_call = $("#uri").val() + "tabla.php?pag=" + offset + "&tot=" + totales;
+    if (obj_related !== '') {
+
+        var form_serial = serializeDivs(obj_related, id_div);
+        //add_to_form_obl_fields("form_params", this.id);
+        //Si tiene un formulario asociado
+        //Chequeamos los campos obligatorios
+        //                if (!checkRequiredAll(obj_related))
+        //                        return;
+		if(params_ajax !== undefined){
+			form_serial += '&'+params_ajax.replace(/%%/g,'=');
+		}
+        $.ajax({
+            url: url_call,
+            context: document.body,
+            type: "POST",
+            //data: $("#" + obj_related).find("#form_params").serialize(),
+            data: form_serial,
+            success: function(responseText) {
+                var aux = analiza_respuesta_html(responseText);
+                if (aux == 'OK') {
+                    $("#" + id_div).html(responseText);
+                    eval(id_div + ".InitLoad();");
+                } else {
+                    $("#" + id_div).html('');
+                }
+				$(el).prop('disabled',false);
+                //callback opcional
+                if (typeof(cargarTablaCallback) == "function" && cargarTablaCallback != undefined) {
+                    cargarTablaCallback(id_div, responseText);
+                }
+            }
+        });
+    } else {
+
+        add_to_form_obl_fields("form_params_dummy", id_div);
+		form_serial = $("#form_params_dummy").serialize();
+		if(params_ajax !== undefined){
+			form_serial += '&'+params_ajax.replace(/%%/g,'=');
+		}
+        $.ajax({
+            url: url_call,
+            context: document.body,
+            type: "POST",
+            data: form_serial,
+            success: function(responseText) {
+                var aux = analiza_respuesta_html(responseText);
+                if (aux == 'OK') {
+                    $("#" + id_div).html(responseText);
+                    eval(id_div + ".InitLoad();");
+                } else {
+                    $("#" + id_div).html('');
+                }
+				$(el).prop('disabled',false);
+                //callback opcional
+                if (typeof(cargarTablaCallback) == "function" && cargarTablaCallback != undefined) {
+                    cargarTablaCallback(id_div, responseText);
+                }
+            }
+        });
+    }
+}
+
+Tabla.prototype.irPagina = function(pag) {
+    this.cargarTabla(pag);
+}
+
+Tabla.prototype.deleteFileRowTX = function(objeto, params_json) {
+    /*
+    Función para borrar archivos que se suban con la tx subir_archivo_new. Por defecto llama a la tx borrar_archivo.
+    */
+
+    var id_div = this.id;
+    var id_tabla = 'tabla_' + this.id;
+    var tx1 = params_json['tx'];
+    var params = params_json['labels_no_editable'];
+    var flag_masivo = params_json['flag_masivo'];
+    var id1 = params_json['id1'];
+    var table = document.getElementById(id_tabla);
+    var rowLength = table.rows[0].cells.length;
+
+    if (tx1 == undefined || !tx1)
+        tx1 = 'borrar_archivo_new';
+
+    parametros = params;
+
+    var send_parmas = {};
+
+    if (flag_masivo.indexOf("form") >= 0) {
+        add_to_form_obl_fields(flag_masivo, this.id);
+        obj_tr = $("#" + objeto).closest('tr');
+        for (var i = 0; i < parametros.length; i++) {
+            $("input[type='hidden'][name='" + parametros[i] + "']").attr('value', obj_tr.find("td").eq(this.getIndex(parametros[i])).attr('name'));
+        }
+        send_parmas = $("#" + flag_masivo).serializeObject();
+    } else {
+        send_parmas = add_to_array_obl_fields(send_parmas, this.id);
+        obj_tr = $("#" + objeto).closest('tr');
+        for (var i = 0; i < parametros.length; i++) {
+            send_parmas[parametros[i]] = obj_tr.find("td").eq(this.getIndex(parametros[i])).html();
+        }
+    }
+
+    pass = true;
+
+    if ($.inArray(params_json['valor'].toLowerCase(), ["eliminar", "delete", "erase", "borrar", "remove"]) != -1) {
+        pass = confirm('\xbfDesea continuar? Esta acci\u00f3n eliminar\u00e1 el archivo y registro seleccionado.');
+    }
+    if ($.inArray(params_json['valor'].toLowerCase(), ["anular"]) != -1) {
+        pass = confirm('\xbfDesea continuar? Esta acci\u00f3n anular\u00e1 el registro seleccionado.');
+    }
+
+    if (pass) {
+        $.ajax({
+            url: $("#uri").val() + "procesa_borrar_archivo.php",
+            datatype: "json",
+            type: "POST",
+            data: {
+                data: JSON.stringify(send_parmas),
+                tx: tx1
+            },
+            success: function(responseText) {
+                var respuesta = $.parseJSON(responseText);
+                if (flag_masivo === "SI" || flag_masivo.indexOf("form") >= 0) {
+                    var aux = analiza_respuesta(respuesta);
+                } else {
+                    var aux = analiza_respuesta(respuesta, 'SI');
+                }
+
+                //Si es exitosa la respuesta
+                if (aux == '' || aux == 'OK') {
+                    //Si es una accion masiva o esta asociada a un formulario
+                    if (flag_masivo === "SI" || flag_masivo.indexOf("form") >= 0) {
+                        if (typeof respuesta.RESPUESTA !== 'object' && (respuesta.RESPUESTA).indexOf("http") >= 0) {
+                            $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).html("<i title='" + respuesta.MENSAJE_RESPUESTA + "' style='font-size:18px;color:green;' class='glyphicon glyphicon-ok'></i>");
+                            $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).attr('href', respuesta.RESPUESTA);
+                            $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).attr('target', "_blank");
+                        } else {
+                            $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).html("<i title='" + respuesta.MENSAJE_RESPUESTA + "' style='font-size:18px;color:green;' class='glyphicon glyphicon-ok'></i>");
+                        }
+                    }
+                    //si no es una accion masiva recargamos la tabla - se asume q la tx cambio algo en la grilla
+                    else {
+                        if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                            window.location.href = respuesta.URL_RESPUESTA;
+                        } else {
+                            //alert(respuesta.MENSAJE_RESPUESTA);
+                            eval(id_div).cargarTabla(1);
+                        }
+                    }
+                }
+                //Si NO es exitosa la respuesta
+                else {
+                    //Si es una accion masiva o esta asociada a un formulario
+                    if (flag_masivo === "SI" || flag_masivo.indexOf("form") >= 0) {
+                        $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).html("<i title='" + respuesta.MENSAJE_RESPUESTA + "' class='glyphicon glyphicon-remove' style='font-size:18px;color:red;' ></i>");
+                    } else {
+                        //alert(respuesta.MENSAJE_RESPUESTA);
+                        if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                            window.location.href = respuesta.URL_RESPUESTA;
+                        }
+                    }
+                }
+
+                //Chequeamos si tenemos mas registros que enviar y escondemos el modal de ser necesario
+                if (flag_masivo === "SI") {
+                    if (params_json['i'] < params_json['total'] - 1) {
+                        params_json['i'] = parseInt(params_json['i']) + 1;
+                        eval(id_div + ".rowMasivo('" + flag_masivo + "'," + JSON.stringify(params_json) + ");");
+                        //id_div.rowMasivo(flag_masivo, params_json);
+                    } else {
+                        $("#myModal").modal('hide');
+                    }
+                }
+
+                if (flag_masivo.indexOf("form") >= 0) {
+                    if (params_json['i'] < params_json['total'] - 1) {
+                        if (respuesta.CODIGO_RESPUESTA !== "1") {
+                            //Se marca que alguno(s) de los registros fallo
+                            $("#resp_modal").val('NO_OK');
+                        }
+                        params_json['i'] = parseInt(params_json['i']) + 1;
+                        eval(id_div + ".formMasivo(" + JSON.stringify(params_json) + ");");
+                        //id_div.formMasivo(params_json);
+                        $("#shader").fadeOut();
+                    } else {
+                        if (respuesta.CODIGO_RESPUESTA !== "1") {
+                            //Se marca que alguno(s) de los registros fallo
+                            $("#resp_modal").val('NO_OK');
+                        }
+                        $("#myModal").modal('hide');
+                        $("#shader").fadeOut();
+                    }
+                }
+            }
+        });
+    }
+
+}
+
+Tabla.prototype.formMasivoDirecto = function(params) {
+    if (!checkRequired(params['form']))
+        return;
+    var i = params['i'];
+    if (i == 0) {
+        if ($("input[class='chkClass_" + this.id + "']:checked").length == 0) {
+            alert("Debe seleccionar elementos, por favor.");
+            return false;
+        }
+    }
+    var id_tabla = 'tabla_' + this.id;
+    var campos = params['labels_no_editable'];
+    var form = params['id_form'];
+    var table = document.getElementById(id_tabla);
+    var rowLength = table.rows[0].cells.length;
+    var objeto=this.id;
+    var tx1=params["tx"];
+    var send_parmas = {};
+    var lista = [];
+    var json1 = {};
+    var j=0;
+
+    $("input[class='chkClass_" + this.id + "']:checked").each(function(){
+        send_parmas = add_to_array_obl_fields(send_parmas, this.id);
+        obj_tr = $(this).closest('tr');
+        obj_table = $(this).closest('table');
+        for (var i = 0; i < campos.length; i++) {
+            var index1=eval(objeto + ".getIndex('"+campos[i]+"')");
+            json1[campos[i]] = obj_tr.find("td").eq(eval(objeto + ".getIndex('"+campos[i]+"')")).html();
+            json1["ID_CHK"]='chkClass_' + this.id;
+        }
+        lista[j]=json1;
+        j=j+1;
+    });
+    if (form.indexOf("form") >= 0) {
+        $("#" + form).each(function(){
+            send_parmas[$(this).attr('name')] = $(this).val();
+        });
+    }
+    send_parmas["lista"]=lista;
+    $.ajax({
+            url: $("#uri").val() + "procesa.php",
+            datatype: "json",
+            type: "POST",
+            data: {
+                data: JSON.stringify(send_parmas),
+                tx: tx1
+            },
+            success: function(responseText) {
+                var respuesta = $.parseJSON(responseText);
+                var aux = analiza_respuesta(respuesta,'SI');
+                if(aux=='OK'){
+                    $("input[class='chkClass_" + this.id + "']:checked").each(function(){
+                        var msg=eval(respuesta + "." + 'msg_chkClass_' + this.id);
+                        if(msg===undefined || msg===''){
+                            msg=respuesta.MENSAJE_RESPUESTA;
+                        }
+                        $("#icono__" + objeto + "_" + $(this).replace('chk_', '')).html("<i title='" + msg + "' style='font-size:18px;color:green;' class='glyphicon glyphicon-ok'></i>");
+                    });
+                }else{
+                    $("input[class='chkClass_" + this.id + "']:checked").each(function(){
+                        $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).html("<i title='" + respuesta.MENSAJE_RESPUESTA + "' class='glyphicon glyphicon-remove' style='font-size:18px;color:red;' ></i>");
+                    });
+                }
+            }
+        });
+}
+//Envia una fila de la grilla a una tx - HBR 20171123 - confirm para el sendrowtx - Debe agregar un "confirm" con el texto, en el json que se manda
+Tabla.prototype.sendConfirmRowTX = function(el,params){
+	var conf = true;
+	conf = confirm(params['confirm']);
+	if(conf){
+		return this.sendRowTX(el,params);
+	}else{
+		return;
+	}
+}
+//Envia una fila de la grilla a una tx
+Tabla.prototype.sendRowTX = function(objeto, params_json) {
+
+    var id_div = this.id;
+    var id_tabla = 'tabla_' + this.id;
+    var tx1 = params_json['tx'];
+    var params = params_json['labels_no_editable'];
+    var flag_masivo = params_json['flag_masivo'];
+    var id1 = params_json['id1'];
+    var table = document.getElementById(id_tabla);
+    var rowLength = table.rows[0].cells.length;
+
+    parametros = params;
+
+    var send_parmas = {};
+    var obj_related = $("#" + id_div).attr("obj_related");
+
+    //Si tiene un form necesario agregamos los campos obigatorios al formulario
+/* DA 16/06/2017 */
+/*
+    if (flag_masivo!==undefined && flag_masivo.indexOf("form") >= 0) { 
+        add_to_form_obl_fields(flag_masivo, this.id);
+        obj_tr = $("#" + objeto).closest('tr');
+        for (var i = 0; i < parametros.length; i++) {
+            $("input[type='hidden'][name='" + parametros[i] + "']").attr('value', obj_tr.find("td").eq(this.getIndex(parametros[i])).attr('name'));
+        }
+        send_parmas = $("#" + flag_masivo).serializeObject();
+    }
+*/
+    if (flag_masivo!==undefined && flag_masivo.indexOf("form") >= 0) {
+        add_to_form_obl_fields(flag_masivo, this.id);
+        obj_tr = $("#" + objeto).closest('tr');
+        for (var i = 0; i < parametros.length; i++) {
+            $("input[type='hidden'][name='" + parametros[i] + "']").attr('value', obj_tr.find("td").eq(this.getIndex(parametros[i])).attr('name'));
+        }
+        //send_parmas = $("#" + flag_masivo).serializeObject();
+	    var valores = {};
+	    //to hex
+	    $("#" + flag_masivo).find('input').each(function(){
+		if($(this).attr('data-hex') == 'true'){
+			valores[$(this).attr('name')] = $(this).val();
+			$(this).val(stringToHex($(this).val()));
+		}
+	    });
+	    send_parmas = $("#" + flag_masivo).serializeObject();
+	    var form_serial=$("#form_params_modal").serialize_options();
+	    $("#" + flag_masivo).find('input').each(function(){
+	    if($(this).attr('data-hex') == 'true'){
+		$(this).val(valores[$(this).attr('name')]);
+		}
+	    });
+    }
+    //Si no tiene formulario asociado generamos el arreglo
+    else {
+        send_parmas = add_to_array_obl_fields(send_parmas, this.id);
+        obj_tr = $("#" + objeto).closest('tr');
+        obj_table = $("#" + objeto).closest('table');
+        for (var i = 0; i < parametros.length; i++) {
+            // send_parmas[parametros[i]] = obj_tr.find("td").eq(this.getIndex(parametros[i])).html();
+            //send_parmas[parametros[i]] = obj_tr.find("td").eq(obj_table.find('th[name="' + parametros[i] + '"]').index()).html();
+            send_parmas[parametros[i]] = obj_tr.find("td").eq(obj_table.find('th[name="' + parametros[i] + '"]').index()).attr('name');
+        }
+	if(params_json["codigo_boton"]!='' && params_json["codigo_boton"]!=undefined){
+                send_parmas["codigo_boton"]=params_json["codigo_boton"];
+        }
+    }
+    pass = true;
+    if (params_json['valor'] !== undefined) {
+        if ($.inArray(params_json['valor'].toLowerCase(), ["eliminar", "delete", "erase", "borrar", "remove"]) != -1) {
+            pass = confirm('\xbfDesea continuar? Esta acci\u00f3n eliminar\u00e1 el registro seleccionado.');
+        }
+	if (params_json['valor'].toLowerCase()=="intercambio") {
+            pass = confirm('\xbfDesea enviar el documento por intercambio? Esta acci\u00f3n enviar\u00e1 el documento.');
+        }    
+        if (params_json['valor'].toLowerCase()=="anular") {
+            pass = confirm('\xbfDesea anular el documento? Esta acci\u00f3n dar\u00e1 de baja el documento, dej\u00e1ndolo nulo.');
+        }    
+        if (params_json['valor'].toLowerCase()=="aceptar") {
+            pass = confirm('\xbfDesea aceptar el documento? Esta acci\u00f3n aceptar\u00e1 el documento.');
+        }    
+        if (params_json['valor'].toLowerCase()=="rechazar") {
+            pass = confirm('\xbfDesea rechazar el documento? Esta acci\u00f3n rechazar\u00e1 el documento.');
+        }    
+    }
+    if (pass) {
+        $.ajax({
+            url: $("#uri").val() + "procesa.php",
+            datatype: "json",
+            type: "POST",
+            data: {
+                data: JSON.stringify(send_parmas),
+                tx: tx1
+            },
+            success: function(responseText) {
+                var respuesta = $.parseJSON(responseText);
+                if (flag_masivo === "SI" || flag_masivo.indexOf("form") >= 0) {
+                    var aux = analiza_respuesta(respuesta,false);
+                } else {
+                    var aux = analiza_respuesta(respuesta, 'SI');
+                }
+                //Si es exitosa la respuesta
+                if (aux == '' || aux == 'OK') {
+			params_json['ok']=parseInt(params_json['ok'])+1;
+			
+                    //Si es una accion masiva o esta asociada a un formulario
+                    if (flag_masivo === "SI" || flag_masivo.indexOf("form") >= 0) {
+                        if (typeof respuesta.RESPUESTA !== 'object' && (respuesta.RESPUESTA).indexOf("http") >= 0) {
+                            $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).html("<i title='" + respuesta.MENSAJE_RESPUESTA + "' style='font-size:18px;color:green;' class='glyphicon glyphicon-ok'></i>");
+                            $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).attr('href', respuesta.RESPUESTA);
+                            $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).attr('target', "_blank");
+                        } else {
+                            $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).html("<i title='" + respuesta.MENSAJE_RESPUESTA + "' style='font-size:18px;color:green;' class='glyphicon glyphicon-ok'></i>");
+                        }
+                    }
+                    //si no es una accion masiva recargamos la tabla - se asume q la tx cambio algo en la grilla
+                    else {
+                        if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                            window.location.href = respuesta.URL_RESPUESTA;
+                        }else if (respuesta.RESPUESTA.URL_RESPUESTA !== undefined && respuesta.RESPUESTA.URL_RESPUESTA !== "") {
+                            window.location.href = respuesta.RESPUESTA.URL_RESPUESTA;
+			} else if(respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== undefined && respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== ""){
+                            window.open(respuesta.RESPUESTA.URL_RESPUESTA_BLANK, '_blank');
+                        } else {
+			    if (respuesta.RESPUESTA.URL_DOWNLOAD !== undefined && respuesta.RESPUESTA.URL_DOWNLOAD !== ""){
+                                $.get(respuesta.RESPUESTA.URL_DOWNLOAD, function(response) {
+                                        var arrx=respuesta.RESPUESTA.URL_DOWNLOAD.split('/');
+                                        var filename=arrx[arrx.length-1];
+                                        var xmltext=response.documentElement.outerHTML;
+                                        //var filename = "file.xml";
+                                        var element1 = document.createElement('a');
+                                        var bb = new Blob([xmltext], {type: 'text/plain'});
+                                        element1.setAttribute('href', window.URL.createObjectURL(bb));
+                                        element1.setAttribute('download', filename);
+                                        element1.dataset.downloadurl = ['text/plain', element1.download, element1.href].join(':');
+                                        element1.draggable = true;
+                                        element1.classList.add('dragout');
+                                        element1.click();
+                                });
+                            }
+                            //alert(respuesta.MENSAJE_RESPUESTA);
+			    if (respuesta.RESPUESTA.NO_RELOAD_TABLE!= undefined && respuesta.RESPUESTA.NO_RELOAD_TABLE=="SI"){
+				console.log('NO_RELOAD_TABLE');
+			    }else{
+                            	eval(id_div).cargarTabla(1);
+			    }
+			    var obj_related_reload = $.parseJSON(obj_related);
+				if(respuesta.RESPUESTA.NO_RELOAD_DIVS!= undefined && respuesta.RESPUESTA.NO_RELOAD_DIVS.length > 0 ){
+					array_divs_no_reload = respuesta.RESPUESTA.NO_RELOAD_DIVS;
+					xx =  new Array();
+					obj_related_reload.forEach( function(valor, indice, array) {
+						//if ($.inArray(valor.obj_related, array_divs_no_reload) >= 0){
+							//obj_related_reload.splice(indice,1) ;
+						//}
+						if ($.inArray(valor.obj_related, array_divs_no_reload) == -1) {
+							xx[xx.length]=obj_related_reload[indice];
+						}
+					});
+					console.log('los que no se eliminaron son:')
+					console.log(xx);
+					obj_related_reload = xx;
+				}
+                            reload_div(JSON.stringify(obj_related_reload), $("#" + id_div).attr("tipo_obj_related"));
+                            //reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                        }
+                    }
+			//mvillanueva
+                console.log(obj_related);
+                if (obj_related != ''){
+                    var obj_related_reload = $.parseJSON(obj_related);
+                    if(respuesta.RESPUESTA.NO_RELOAD_DIVS!= undefined && respuesta.RESPUESTA.NO_RELOAD_DIVS.length > 0 ){
+                        array_divs_no_reload = respuesta.RESPUESTA.NO_RELOAD_DIVS;
+                            xx =  new Array();
+                        obj_related_reload.forEach( function(valor, indice, array) {
+                            //if ($.inArray(valor.obj_related, array_divs_no_reload) >= 0){
+                                //obj_related_reload.splice(indice,1) ;
+                            //}
+                            if ($.inArray(valor.obj_related, array_divs_no_reload) == -1) {
+                                xx[xx.length]=obj_related_reload[indice];
+                            }
+                        });
+                        console.log('los que no se eliminaron son:')
+                        console.log(xx);
+                        obj_related_reload = xx;
+                    }
+		    //Si estamos haciendo una accion masiva no se refresca para que no saque elimine los tickets
+                    if (flag_masivo != "SI" && flag_masivo.indexOf("form")<0) {
+                    	reload_div(JSON.stringify(obj_related_reload), $("#" + id_div).attr("tipo_obj_related"));
+		    }
+                    //reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                }
+                //Ingeniero Anonimo
+
+                }
+                //Si NO es exitosa la respuesta
+                else {
+			params_json['falla']=parseInt(params_json['falla'])+1;
+                    //Si es una accion masiva o esta asociada a un formulario
+                    if (flag_masivo === "SI" || flag_masivo.indexOf("form") >= 0) {
+                        $("#icono__" + id_div + "_" + objeto.replace('chk_', '')).html("<i title='" + respuesta.MENSAJE_RESPUESTA + "' class='glyphicon glyphicon-remove' style='font-size:18px;color:red;' ></i>");
+                        if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                            window.location.href = respuesta.URL_RESPUESTA;
+			} else if(respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== undefined && respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== ""){
+                            window.open(respuesta.RESPUESTA.URL_RESPUESTA_BLANK, '_blank');
+                        }
+                    } else {
+                        //alert(respuesta.MENSAJE_RESPUESTA);
+                        if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                            window.location.href = respuesta.URL_RESPUESTA;
+			} else if(respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== undefined && respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== ""){
+                            window.open(respuesta.RESPUESTA.URL_RESPUESTA_BLANK, '_blank');
+                        }
+                    }
+                }
+
+                //Chequeamos si tenemos mas registros que enviar y escondemos el modal de ser necesario
+                if (flag_masivo === "SI") {
+                    if (params_json['i'] < params_json['total'] - 1) {
+                        params_json['i'] = parseInt(params_json['i']) + 1;
+                        eval(id_div + ".rowMasivo('" + flag_masivo + "'," + JSON.stringify(params_json) + ");");
+                        //id_div.rowMasivo(flag_masivo, params_json);
+                    } else {
+                        $("#myModal").modal('hide');
+                    	var aux2 = analiza_respuesta_masivo(respuesta);
+                    }
+                }
+                if (flag_masivo.indexOf("form") >= 0) {
+                    if (params_json['i'] < params_json['total'] - 1) {
+                        if (respuesta.CODIGO_RESPUESTA !== "1") {
+                            //Se marca que alguno(s) de los registros fallo
+                            $("#resp_modal").val('NO_OK');
+                        }
+                        params_json['i'] = parseInt(params_json['i']) + 1;
+                        eval(id_div + ".formMasivo(" + JSON.stringify(params_json) + ");"); //id_div.formMasivo(params_json);
+                        $("#shader").fadeOut();
+                    } else {
+                        if (respuesta.CODIGO_RESPUESTA !== "1") {
+                            //Se marca que alguno(s) de los registros fallo
+                            $("#resp_modal").val('NO_OK');
+                        }
+			if (params_json['total']==1)
+                                                {
+                                                        alert(respuesta.MENSAJE_RESPUESTA);
+                    					var aux2 = analiza_respuesta_masivo(respuesta);
+                                                }
+                                                else
+                                                {
+                                                        alert('Accion Masiva Ejecutada Total:'+params_json['total']+' Exitosos:'+params_json['ok']+' Fallas:'+params_json['falla']);
+                    					var aux2 = analiza_respuesta_masivo(respuesta);
+                                                }
+
+                        $("#myModal").modal('hide');
+                        $("#shader").fadeOut();
+                    }
+                }
+
+
+                //callback opcional
+                if (typeof(sendRowTXCallback) == "function" && sendRowTXCallback != undefined) {
+                    sendRowTXCallback($("#" + id_div), respuesta);
+                }
+            }
+        });
+    }
+}
+
+//Crea un modal
+Tabla.prototype.createModalMasivo = function(params_json) {
+    //Boramos ticket y cruces anteriores
+    try{
+	$(".chkClass_grilla_buscarNEW_emitidos").each(function(){
+	    achilds=$(this).parent().children()[1];
+	    achilds=$(achilds).children();
+	    if (achilds.length>0){
+	      $(achilds[0]).remove();
+	    }
+	});
+    }catch(err) {
+	console.log(err.message);
+    }
+    if ($("input[class='chkClass_" + this.id + "']:checked").length == 0) {
+        alert("Debe seleccionar elementos, por favor.");
+        return false;
+    }
+    params_json = add_to_array_obl_fields(params_json, this.id);
+
+    params_json['id_modal'] = params_json['accion'];
+    $("#myModal").modal('show');
+    $("#shader").fadeOut();
+    if ($("#resp_modal").val() === 'OK' || params_json['id_modal'] !== $("#id_modal").val()) {
+        $("#myModalContent").append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; "><img src="' + $("#uri").val() + 'css/img/spinner_mini.gif"> </div>');
+        $.ajax({
+            url: $("#uri").val() + "filtrosModal.php",
+            datatype: "json",
+            type: "POST",
+            data: {
+                data: params_json
+            },
+            success: function(responseText) {
+                var aux = analiza_respuesta_html(responseText);
+                if (aux == 'OK') {
+                    $("#myModalContent").html(responseText);
+                    $("#myModal").modal('show');
+    		    $("#shader").fadeOut();
+                }
+                /*else{
+                				alert(aux);
+                			}*/
+            }
+        });
+    }
+}
+
+//Crea un modal de edicion, es decir q luego de cargar el formulario lo llena con datos de la grilla
+Tabla.prototype.createEditModal = function(id1, params_json, idtabla, that) {
+    var id_tabla = 'tabla_' + this.id;
+
+    params_json = add_to_array_obl_fields(params_json, this.id);
+
+    //params_json['id_modal'] = params_json[''];
+
+    var table = document.getElementById(id_tabla);
+    var rowLength = table.rows[0].cells.length;
+    if (that === undefined) {
+        that = $("#" + id1);
+    }
+    obj_tr = $(that).closest('tr');
+	obj_table = $(that).closest('table');
+	// (obj_table.find('th[name="' + parametros[i] + '"]').index())
+    for (var i = 0; i < params_json['labels_no_editable'].length; i++) {
+        // params_json[params_json['labels_no_editable'][i]] = obj_tr.find("td").eq(this.getIndex(params_json['labels_no_editable'][i])).attr('name');
+		params_json[params_json['labels_no_editable'][i]] = obj_tr.find("td").eq(obj_table.find('th[name="' + params_json['labels_no_editable'][i] + '"]').index()).attr('name');
+
+    }
+
+    $("#myModalContent").append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; "><img src="' + $("#uri").val() + 'css/img/spinner_mini.gif"> </div>');
+    $("#myModal").modal('show');
+    $("#shader").fadeOut();
+    $.ajax({
+        url: $("#uri").val() + "filtrosModal.php",
+        datatype: "json",
+        type: "POST",
+        data: {
+            data: params_json
+        },
+        type: "POST",
+        success: function(responseText) {
+            var aux = analiza_respuesta_html(responseText);
+            if (aux == 'OK') {
+                $("#myModalContent").html(responseText);
+                $("#myModal").modal('show');
+    		$("#shader").fadeOut();
+                var table = document.getElementById(id_tabla);
+                var rowLength = table.rows[0].cells.length;
+                obj_tr = $('#' + id_tabla).find(that).closest('tr');
+                for (var i = 0; i < rowLength; i += 1) {
+                    var key = table.rows[0].cells[i].getAttribute("name");
+                    //Cargamos los valores de la tabla en el formulario
+                    if ($('#form_params_modal [name="' + key + '"]').is("textarea")) {
+                        var value1 = obj_tr.find("td").eq(i).attr('name');
+                        if (value1 !== undefined) {
+                            $("#form_params_modal textarea[name='" + key + "']").val(value1);
+                        } else {
+                            var value1 = replace_html_escaped_characters(obj_tr.find("td").eq(i).html());
+                            $("#form_params_modal textarea[name='" + key + "']").val(value1);
+                        }
+                    } else if ($('#form_params_modal [name="' + key + '"]').is("input")) {
+                        var value1 = obj_tr.find("td").eq(i).attr('name');
+                        if (value1 == undefined) {
+                            value1 = replace_html_escaped_characters(obj_tr.find("td").eq(i).html());
+                        }
+                        var el1 = $("#form_params_modal input[name='" + key + "']");
+                        el1.val(value1);
+                    } else if ($('#form_params_modal [name="' + key + '"]').is("select")) {
+                        var value1 = obj_tr.find("td").eq(i).attr('name');
+                        var el1 = $("#form_params_modal select[name='" + key + "']");
+                        el1.val(value1);
+                    } else {
+                        var value1 = obj_tr.find("td").eq(i).attr('name');
+                        $("#form_params_modal [name='" + key + "']").html(value1);
+                    }
+                }
+
+                //callback opcional
+                if (typeof(createEditModalCallback) == "function" && createEditModalCallback != undefined) {
+                    createEditModalCallback($(that));
+                }
+            }
+            /*else{
+            				alert(aux);
+            			}*/
+        }
+    });
+}
+
+//Envia filas de la grilla en forma secuencial a una tx
+Tabla.prototype.rowMasivo = function(id, params) {
+    var i = params['i'];
+    if (i == 0) {
+        if ($("input[class='chkClass_" + this.id + "']:checked").length == 0) {
+            alert("Debe seleccionar elementos, por favor.");
+            return false;
+        }
+	    //Boramos ticket y cruces anteriores
+	    try{
+		$(".chkClass_grilla_buscarNEW_emitidos").each(function(){
+		    achilds=$(this).parent().children()[1];
+		    achilds=$(achilds).children();
+		    if (achilds.length>0){
+		      $(achilds[0]).remove();
+		    }
+		});
+	    }catch(err) {
+		console.log(err.message);
+	    }
+    }
+    var total = $("input[class='chkClass_" + this.id + "']:checked").length;
+    params['total'] = total;
+    $("#shader").fadeIn();
+    if (i < total) {
+        params['flag_masivo'] = "SI";
+        this.sendRowTX($("input[class='chkClass_" + this.id + "']:checked")[i].id, params);
+    }
+}
+
+//Envia filas de la grilla con un formulario asociado, en forma secuencial a una tx
+Tabla.prototype.formMasivo = function(params) {
+    if (!checkRequired(params['form']))
+        return;
+    var i = params['i'];
+    if (i == 0) {
+        if ($("input[class='chkClass_" + this.id + "']:checked").length == 0) {
+            alert("Debe seleccionar elementos, por favor.");
+            return false;
+        }
+    }
+    var total = $("input[class='chkClass_" + this.id + "']:checked").length;
+    params['total'] = total;
+    $("#shader").fadeIn();
+    if (i < total) {
+        params['flag_masivo'] = params['form'];
+        this.sendRowTX($("input[class='chkClass_" + this.id + "']:checked")[i].id, params);
+    }
+}
+
+//Manda Tabla Serializada para el editar
+Tabla.prototype.sendSerializedTable = function(params) {
+    var json_table = tableToJsonString("tabla_" + this.id);
+    alert(json_table);
+    var tx1 = params['tx'];
+    add_to_form_obl_fields("form_params_dummy", this.id);
+    $("#form_params_dummy [name='table_json']").remove();
+    $("#form_params_dummy").append('<input type="hidden" name="table_json" value="">');
+    $("#form_params_dummy [name='table_json']").val(json_table);
+    alert($("#form_params_dummy [name='table_json']").val());
+    $.ajax({
+        url: $("#uri").val() + "procesa_form.php?tx=" + tx1,
+        context: document.body,
+        type: "POST",
+        data: $("#form_params_dummy").serialize(),
+        success: function(responseText) {
+            var aux = analiza_respuesta_html(responseText);
+            alert(aux);
+        }
+    });
+}
+
+Tabla.prototype.sendFormFiltrosModal = function(params) {
+    var id_div = this.id;
+    $("#" + this.id).append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; "><img src="' + $("#uri").val() + 'css/img/spinner_mini.gif"> </div>');
+    $("#form_params_modal input[name='id_modal']").remove();
+    $("#form_params_modal").append('<input type="hidden" name="id_modal" value="' + params['id_modal'] + '">');
+    add_to_form_obl_fields("form_params_modal", this.id);
+    $.ajax({
+        url: $("#uri").val() + "filtrosModal.php",
+        context: document.body,
+        type: "POST",
+        data: $("#form_params_modal").serialize(),
+        success: function(responseText) {
+            var aux = analiza_respuesta_html(responseText);
+
+            if (aux == 'OK') {
+                $("#form_params_modal").html(responseText);
+            }
+            /*else{
+            				alert(aux);
+            			}*/
+
+            //callback opcional
+            if (typeof(sendFormFiltrosCallback) == "function" && sendFormFiltrosCallback != undefined) {
+                sendFormFiltrosCallback($("#" + id_div));
+            }
+        }
+    });
+}
+
+Tabla.prototype.getRowsDetails = function(params, obj) {
+    $(obj).attr('loaded', 'SI');
+    var i = params['i'];
+    var id_div = this.id;
+    if ($(obj).attr('oppened') == 'SI') {
+        $("#detalles_row_" + i).hide();
+        $(obj).attr('oppened', 'NO');
+        return;
+    }
+    if ($(obj).attr('loaded') == 'SI' && $(obj).attr('oppened') == 'NO' && $(obj).closest('tr').siblings("#detalles_row_" + i).length > 0) {
+        $("#detalles_row_" + i).show();
+        $(obj).attr('oppened', 'SI');
+        return;
+    }
+    $(obj).attr('oppened', 'SI');
+    var id_detalle = params['id'];
+    var tx_detalle = params['tx'];
+
+    var id_tabla = 'tabla_' + this.id;
+    var table = document.getElementById(id_tabla);
+    //var row = table.rows[i];
+    //var len = table.rows[0].cells.length;
+    var tr = $("#" + id_div + " tbody").find("tr#" + i);
+    var len = tr.find('td').length;
+    var url_call = $("#uri").val() + "tabla_detalle.php?tx=" + tx_detalle + "&id_detalle=" + id_detalle;
+
+    var tr_new = '<tr id="detalles_row_' + i + '" class="detalles-row"><td colspan="' + len + '"><i class="fa fa-spin fa-spinner"></i> Cargando datos...</td></tr>';
+    $(tr).after(tr_new);
+    var tr_obj_new = $("#" + id_div + " tbody").find('tr#detalles_row_' + i).find('td');
+
+    add_to_form_obl_fields("form_params_dummy", this.id);
+    $.ajax({
+        url: url_call,
+        context: document.body,
+        type: "POST",
+        data: $("#form_params_dummy").serialize(),
+        success: function(responseText) {
+            var aux = analiza_respuesta_html(responseText);
+            if (aux == 'OK') {
+                // responseText='<tr id="detalles_row_' + i + '" class="detalles-row"><td colspan="' + len + '">' + responseText + '</td></tr>';
+                // $(tr).after(responseText);
+                tr_obj_new.html(responseText);
+            } else {
+                // alert(aux);
+                tr_obj_new.closest('tr').remove();
+            }
+        }
+    });
+}
+
+Tabla.prototype.getTextArea = function(params, obj) {
+    $(obj).attr('loaded', 'SI');
+    var i = params['i'];
+    if ($(obj).attr('oppened') == 'SI') {
+        $("#detalles_row_" + i).hide();
+        $(obj).attr('oppened', 'NO');
+        return;
+    }
+    if ($(obj).attr('loaded') == 'SI' && $(obj).attr('oppened') == 'NO') {
+        $("#detalles_row_" + i).show();
+        $(obj).attr('oppened', 'SI');
+        return;
+    }
+    $(obj).attr('oppened', 'SI');
+    var id_detalle = params['id'];
+    var tx_detalle = params['tx'];
+
+    var id_tabla = 'tabla_' + this.id;
+    var table = document.getElementById(id_tabla);
+    //var row = table.rows[i];
+    //var len = table.rows[0].cells.length;
+    var tr = $("#" + id_tabla + " tbody [id='" + i + "']")
+    var len = tr.find('td').length
+    var url_call = $("#uri").val() + "textarea.php?tx=" + tx_detalle + "&id_detalle=" + id_detalle;
+    add_to_form_obl_fields("form_params_dummy", this.id);
+    $.ajax({
+        url: url_call,
+        datatype: "json",
+        type: "POST",
+        data: $("#form_params_dummy").serialize(),
+        success: function(responseText) {
+            var respuesta = $.parseJSON(responseText);
+            var aux = analiza_respuesta(respuesta);
+            if (aux == 'OK') {
+                if (respuesta.RESPUESTA.textarea === null) {
+                    responseText = '<tr id="detalles_row_' + i + '"><td colspan="' + len + '"><p id="text_area_' + i + '">No existen registros</p></td></tr>';
+                } else {
+                    responseText = '<tr id="detalles_row_' + i + '"><td colspan="' + len + '"><p id="text_area_' + i + '">' + respuesta.RESPUESTA.textarea + '</p></td></tr>';
+                }
+                //responseText='<p id="text_area_'+i+'">' + respuesta.RESPUESTA.textarea + '</p>';
+                $(tr).after(responseText);
+            }
+        }
+    });
+}
+
+Tabla.prototype.sendEditFormTX = function(params) {
+    var id_div = this.id;
+    var tx1 = params['tx'];
+    var id1 = params['id_elemento'];
+    add_to_form_obl_fields("form_params_modal", this.id);
+    if (!checkRequired('form_params_modal'))
+        return;
+    $.ajax({
+        url: $("#uri").val() + "procesa_form.php?&tx=" + tx1,
+        datatype: "json",
+        type: "POST",
+        data: $("#form_params_modal").serialize_options(),
+        success: function(responseText) {
+            var respuesta = $.parseJSON(responseText);
+            var aux = analiza_respuesta(respuesta);
+            if (aux == '' || aux == 'OK') {
+                if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                    window.location.href = respuesta.URL_RESPUESTA;
+		} else if(respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== undefined && respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== ""){
+                    window.open(respuesta.RESPUESTA.URL_RESPUESTA_BLANK, '_blank');
+                    $("#myModal").modal('hide');
+                    reload_div('[{"obj_related":"' + id_div + '","tipo":"tabla"}]', 'tabla');
+                } else {
+                    $("#myModal").modal('hide');
+		    if (respuesta.RESPUESTA.NO_REFRESH!="SI"){
+	                    reload_div('[{"obj_related":"' + id_div + '","tipo":"tabla"}]', 'tabla');
+	            }
+                }
+            } else {
+                //alert(respuesta.MENSAJE_RESPUESTA);
+                if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                    window.location.href = respuesta.URL_RESPUESTA;
+		} else if(respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== undefined && respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== ""){
+                    window.open(respuesta.RESPUESTA.URL_RESPUESTA_BLANK, '_blank');
+                }
+            }
+
+            if (typeof(sendEditFormTXCallback) == "function" && sendEditFormTXCallback != undefined) {
+                sendEditFormTXCallback($("#" + id_div));
+            }
+        }
+    });
+}
+
+Tabla.prototype.sendEditFileTX = function(params) {
+
+    //var id_div = this.id;
+    var id_div = 'div_modal';
+    var tx1 = params['tx'];
+    var id1 = params['id_elemento'];
+    
+    add_to_form_obl_fields("form_params_modal", this.id);
+
+    if (!checkRequired('form_params_modal'))
+        return;
+
+    var tipo_archivo_ok = true;
+    var peso_archivo = '';
+
+    $("#" + id_div).find('input[type="file"]').each(function() {
+        var $this = $(this);
+
+        var fileName = $this.val().match(/[^\/\\]+$/);
+
+        if (fileName != '' && fileName != undefined && fileName[0] != undefined && fileName != null && fileName != 'null') {
+            var fileExtension = fileName[0].slice((fileName[0].lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+            if ($this.attr('data-extensions') != '') {
+                array_ext = $this.attr('data-extensions').replace(' ', '').split(',');
+                if ($.inArray(fileExtension, array_ext) == -1) {
+                    tipo_archivo_ok = false;
+                }
+            }
+
+            if ($this.attr('data-peso') != '') {
+                peso_archivo = $this.attr('data-peso');
+            }
+        }
+    });
+
+    setTimeout(function() {
+        if (tipo_archivo_ok) {
+            var data1 = new FormData($("#" + id_div).find('form')[0]);
+            $.ajax({
+                url: $("#uri").val() + "subir_files.php?app_dinamica=" + $("#app_dinamica").val() + "&session_id=" + $("#session_id").val() + "&rutCliente=" + $("#rutCliente").val() + '&peso=' + peso_archivo,
+                context: document.body,
+                type: "POST",
+                async: false,
+                cache: false,
+                contentType: false,
+                processData: false,
+                data: data1,
+                success: function(responseText) {
+                    if (responseText == 'OK') {
+                        var i = 0;
+                        var procesar_file = 1;
+                        var timeout = 1;
+                        $("#" + id_div).find('input[type="file"]').each(function() {
+                            i = i + 1;
+                            var $this = $(this);
+                            var nombre = 'filename_' + i;
+
+                            if ($('input[name="subir_hex"]').length > 0 && $('input[name="subir_hex"]').val() == 1) {
+                                procesar_file = 0;
+                                var selectedFile = $this[0].files[0];
+                                selectedFile.convertToBase64(function(base64) {
+                                    $('#' + id_div + ' form').find('input[name="' + nombre + '_b64' + '"]').remove();
+                                    $('<input>').attr({
+                                        type: 'hidden',
+                                        name: nombre + '_b64',
+                                        value: base64
+                                    }).appendTo('#' + id_div + ' form');
+                                    procesar_file = 1;
+                                });
+                            }
+                            if ($this.val() == '') {
+                                if ($this.closest('div').hasClass('required')) {
+                                    alert("Debe seleccionar el(los) archivos");
+                                    $("#" + id_div).find('#spinnercirclegif').remove();
+                                    //$(el).removeAttr('disabled');
+                                    $("#" + id_div).find('input[type="file"]').removeAttr('disabled');
+                                    return false;
+                                }
+                            } else {
+
+                                var fileName = $this.val().match(/[^\/\\]+$/);
+                                //if($.inArray(fileExtension, array_ext) != -1){
+                                $('#' + id_div + ' form').find('input[name="' + nombre + '"]').remove();
+                                $('<input>').attr({
+                                    type: 'hidden',
+                                    name: nombre,
+                                    value: fileName
+                                }).appendTo('#' + id_div + ' form');
+                                //$this.remove();
+                                $this.val('');
+                            }
+                        });
+                        var procesa_interval = setInterval(function() {
+                            if (procesar_file || timeout == 20) {
+                                clearInterval(procesa_interval);
+                                $.ajax({
+                                    url: $("#uri").val() + "procesa_file.php?app_dinamica=" + $("#app_dinamica").val() + "&session_id=" + $("#session_id").val() + "&rutCliente=" + $("#rutCliente").val() + "&tx=" + tx1,
+                                    datatype: "json",
+                                    type: "POST",
+                                    data: serializeDivsForModal(id_div),
+                                    success: function(responseText) {
+                                        $("#" + id_div).find('#spinnercirclegif').remove();
+                                        //$(el).removeAttr('disabled');
+                                        $("#" + id_div).find('input[type="file"]').removeAttr('disabled');
+                                        var respuesta = $.parseJSON(responseText);
+                                        var aux = analiza_respuesta(respuesta, 'NO');
+                                        if (aux == '' || aux == 'OK') {
+                                            if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                                window.location.href = respuesta.URL_RESPUESTA;
+                                            } else {
+                                                $("#myModal").modal('hide');
+                                                reload_div('[{"obj_related":"' + params['div_dinamico'] + '","tipo":"tabla"}]', 'tabla');
+                                            }
+                                        } else {
+                                            //alert(respuesta.MENSAJE_RESPUESTA);
+                                            if (respuesta.MENSAJE_RESPUESTA != '') alert(respuesta.MENSAJE_RESPUESTA);
+                                            if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                                window.location.href = respuesta.URL_RESPUESTA;
+                                            }
+                                        }
+
+                                        //callback opcional, por cada archivo subido
+                                        if (typeof(sendFileFormCallback) == "function" && sendFileFormCallback != undefined) {
+                                            sendFileFormCallback($("#" + id_div), responseText);
+                                        }
+                                    }
+                                });
+                            }
+                            timeout++;
+                        }, 300);
+                        /*}else{
+                            $("#" + id_div).find('#spinnercirclegif').remove();
+                            alert("Debe subir un archivo de formato v\u00e1lido ("+$this.attr('data-extensions')+")");
+                            return false;
+                        }*/
+                    } else {
+                        $("#" + id_div).find('#spinnercirclegif').remove();
+                        //$(el).removeAttr('disabled');
+                        $("#" + id_div).find('input[type="file"]').removeAttr('disabled');
+                        alert(responseText);
+                        return false;
+                    }
+                }
+            });
+        } else {
+            $("#" + id_div).find('#spinnercirclegif').remove();
+            $("#" + id_div).find('input[type="file"]').removeAttr('disabled');
+            alert("Debe seleccionar un archivo de formato v\u00e1lido.");
+            return false;
+        }
+    }, 300);
+}
+// Función para agregar una fila a una tabla con nodejs - HBR 20170802
+Tabla.prototype.nodeAddRow = function(datos_tabla_hex){
+        var id_div = this.id;
+
+        id_div_node = id_div+'_node';
+
+        if($('#'+id_div_node).length > 0)
+                $('#'+id_div_node).remove();
+
+        $('body').append('<div id ="'+id_div_node+'" tipo="tabla" class="hide"></div>');
+
+        var parametros = [];
+        parametros["id_div"] = id_div_node;
+        parametros["tipo"] = "tabla";
+        parametros["obj_related"] = '';
+        parametros["tipo_obj_related"] = '';
+
+        window[id_div_node] = id_div_node;
+        window[id_div_node] = new Tabla(parametros);
+
+        var url_row = $("#uri").val() + "tabla_row.php";
+        $.ajax({
+                url: url_row,
+                context: document.body,
+                type: "POST",
+                //data: $("#" + obj_related).find("#form_params").serialize(),
+                data: {
+                        datos_tabla_hex : datos_tabla_hex,
+                        div_dinamico : id_div_node
+                },
+                success: function(responseText) {
+
+                        $('#'+id_div_node).html(responseText);
+
+                        //callback opcional
+                        if (typeof(nodeAddRowCallback) == "function" && nodeAddRowCallback != undefined) {
+                                nodeAddRowCallback($("#" + id_div), responseText);
+                        }else{
+
+                                // real_tabla = $('table#tabla_'+id_div).DataTable();
+
+                                // sacando el máximo id
+                                maxid = 0;
+                                $('table#tabla_'+id_div).find('tbody').find('tr').each(function(){
+                                        one_tr = $(this);
+                                        thisid = one_tr.find('td').first().html();
+                                        if(+thisid > +maxid){
+                                                maxid = +thisid;
+                                        }
+                                });
+
+                                $('table#tabla_'+id_div_node).find('tbody tr').each(function () {
+                                        var d = this;
+
+                                        maxid++;
+
+                                        // fix para ocultar los campos que no deberían mostrarse
+                                        if (one_tr != undefined){
+                                                one_tr.find('td').each(function(){
+                                                        one_tr = $(this);
+                                                        if(!one_tr.is(':visible')){
+                                                                $(d).find('td').eq(one_tr.index()).addClass('hidden');
+                                                        }
+                                                });
+                                        }
+
+                                        $(d).attr('id', (maxid - 1));
+                                        $(d).attr('name', (maxid - 1));
+                                        $(d).find('td').first().attr('name', maxid);
+                                        $(d).find('td').first().text(maxid);
+
+
+                                        var new_btn_id = $(d).find('.btn').attr('id');
+                                        var new_btn_onclick = $(d).find('.btn').attr('onclick');
+
+                                        if(new_btn_id != undefined && new_btn_onclick != undefined){
+                                                var old_btn_id = maxid+new_btn_id.substring(1);
+
+                                                $(d).find('.btn').attr('id', old_btn_id);
+
+                                                new_btn_onclick = new_btn_onclick.replace(new_btn_id, old_btn_id);
+                                                new_btn_onclick = new_btn_onclick.replace('"undefined"', '"'+old_btn_id+'"');
+
+                                                new_btn_onclick = new_btn_onclick.replace(id_div_node, id_div);
+
+                                                $(d).find('.btn').attr('onclick', new_btn_onclick);
+                                        }
+
+                                        // real_tabla.row.add(d);
+
+
+                                        // console.log(d);
+                                        $('#'+id_div).find('table').DataTable().row.add(d);
+					$('#'+id_div).find('table').DataTable().draw();//HBR 20191016
+
+                                });
+
+                                setTimeout(function(){
+                                  $('#'+id_div).find('table').DataTable().draw();
+                                }, 200);
+
+                        }
+                }
+        });
+}
+// Función para editar una fila de una tabla con nodejs - HBR 20170802
+Tabla.prototype.nodeEditRow = function(id_name, id_value, datos_tabla_hex){
+        // datos_tabla_hex : lo que devuelve una función de grilla, en hexa
+	if(this.node_activo == 1)//HBR 20191016
+	{
+		console.log('node ya esta en curso');
+		return;
+	}
+	this.node_activo = 1;//HBR 20191016
+
+        var id_div = this.id;
+        var that = this;
+
+        id_div_node = id_div+'_node_'+id_value;
+
+        if($('#'+id_div_node).length > 0)
+                $('#'+id_div_node).remove();
+
+        $('body').append('<div id ="'+id_div_node+'" tipo="tabla" class="hide"></div>');
+
+        var parametros = [];
+        parametros["id_div"] = id_div_node;
+        parametros["tipo"] = "tabla";
+        parametros["obj_related"] = '';
+        parametros["tipo_obj_related"] = '';
+
+        window[id_div_node] = id_div_node;
+        window[id_div_node] = new Tabla(parametros);
+
+        var url_row = $("#uri").val() + "tabla_row.php";
+        $.ajax({
+                url: url_row,
+                context: document.body,
+                type: "POST",
+                //data: $("#" + obj_related).find("#form_params").serialize(),
+                data: {
+                        datos_tabla_hex : datos_tabla_hex,
+                        div_dinamico : id_div_node
+                },
+                success: function(responseText) {
+
+                        $('#'+id_div_node).html(responseText);
+
+                        //callback opcional
+                        if (typeof(nodeEditRowCallback) == "function" && nodeEditRowCallback != undefined) {
+				that.node_activo = 0;//HBR 20191016
+                                nodeEditRowCallback($("#" + id_div), responseText);
+                        }else{
+
+                                // editar nodo
+                                if($('table#tabla_'+id_div).length > 0){
+                                        real_tabla = $('table#tabla_'+id_div).DataTable();
+                                        currentPage = real_tabla.page();
+                                        the_value = $('table#tabla_'+id_div).find('[data-campo="'+id_name+'"][name="'+id_value+'"]');
+
+                                        if(the_value != undefined && the_value.length > 0){
+                                                the_tr = the_value.closest('tr');
+                                                var real_d = real_tabla.row(the_tr);
+                                                // var real_node = real_d.node();
+                                                if(real_d != undefined){
+                                                        var old_num = the_tr.find('td').first().attr('name');
+                                                        var index = +real_d.index();
+
+                                                        d = $('table#tabla_'+id_div_node).find('tbody tr');
+							d = d.clone();//HBR 20191016
+                                                        // fix para ocultar los campos que no deberían mostrarse
+                                                        the_tr.find('td').each(function(){
+                                                                the_td = $(this);
+                                                                if(!the_td.is(':visible')){
+                                                                        d.find('td').eq(the_td.index()).addClass('hidden');
+                                                                }
+                                                        });
+
+                                                        d.attr('id', the_tr.attr('id'));
+                                                        d.attr('name', the_tr.attr('name'));
+                                                        d.find('td').first().attr('name', the_tr.find('td').first().attr('name'));
+                                                        d.find('td').first().text(the_tr.find('td').first().text());
+
+
+                                                        var new_btn_id = d.find('.btn').attr('id');
+                                                        var new_btn_onclick = d.find('.btn').attr('onclick');
+
+                                                        if(new_btn_id != undefined && new_btn_onclick != undefined){
+                                                                var old_btn_id = old_num+new_btn_id.substring(1);
+
+                                                                d.find('.btn').attr('id', old_btn_id);
+
+                                                                new_btn_onclick = new_btn_onclick.replace(new_btn_id, old_btn_id);
+                                                                new_btn_onclick = new_btn_onclick.replace('"undefined"', '"'+old_btn_id+'"');
+
+                                                                new_btn_onclick = new_btn_onclick.replace(id_div_node, id_div);
+
+                                                                d.find('.btn').attr('onclick', new_btn_onclick);
+                                                        }
+
+                                                        // console.log('Borrando nodo con '+id_name+'='+id_value);
+                                                        that.nodeDeleteRow(id_name, id_value, 0);
+
+                                                        //real_tabla.row.add(d).draw();//HBR 20191016
+							//HBR 20191016
+							intentos = 1;
+							while($('table#tabla_'+id_div).find('tr#'+d.attr('id')).length == 0 && intentos < 20){
+								// console.log('d id'+);
+								if(d.attr('id') != undefined && d != undefined){
+									// console.log('check length:'+$('table#tabla_'+id_div).find('tr#'+d.attr('id')).length);
+									real_tabla.row.add(d);
+									real_tabla.draw();
+								}else{
+									real_tabla.page(parseInt(currentPage)).draw(false);
+									that.node_activo = 0;
+									// $('#'+id_div_node).remove();
+									return;
+								}
+								console.log('intento: '+intentos);
+								intentos++;
+							}
+
+                                                        setTimeout(function(){
+                                                        // moviendo el elemento al index que corresponde, para que no se vea feo
+                                                          // real_tabla.row(the_tr).remove();
+                                                          real_tabla.page(currentPage).draw(false);
+                                                          // real_tabla.draw();
+                                                          //$('#'+id_div_node).remove();//HBR 20191016
+							  that.node_activo = 0;//HBR 20191016
+                                                        }, 300);//HBR 20191016
+						}else{//HBR 20191016
+							that.node_activo = 0;
+							return;
+                                                }
+					}else{//HBR 20191016
+						console.log('the_value es undefined');
+						// $('#'+id_div_node).remove();
+						that.node_activo = 0;
+                                        }
+                                }
+                        }
+		},//HBR 20191016
+		error: function(e){
+			that.node_activo = 0;
+                }
+        });
+}
+
+// Función para eliminar una fila de una tabla con nodejs - HBR 20170802
+Tabla.prototype.nodeDeleteRow = function(id_name, id_value, ordenar){
+        var id_div = this.id;
+
+        if(ordenar == undefined)
+                ordenar = 1;
+
+        tabla_p = $("#" + id_div).find('table');
+
+        tabla_p.find('[data-campo="'+id_name+'"][name="'+id_value+'"]').each(function(){
+                the_tr = $(this).closest('tr');
+                if(the_tr != undefined && the_tr.length > 0){
+                        index = tabla_p.DataTable().row(the_tr).index();
+                        tabla_p.DataTable().row(the_tr).remove().draw();
+
+                        // reordenando la tabla
+                        if (ordenar) {
+                                var rowCount = tabla_p.DataTable().data().length,
+                                tempRow,
+                                tempNode;
+                                for (var i=index;i<=rowCount; i++) {
+                                        tempRow = tabla_p.DataTable().row(i);
+                                        if (tempRow != undefined){
+                                                tempNode = tempRow.node();
+                                                var new_orden = +$(tempNode).find('td').first().attr('name') - 1;
+                                                $(tempNode).find('td').first().attr('name', new_orden);
+                                                $(tempNode).find('td').first().text(new_orden);
+						tabla_p.DataTable().draw();
+                                        }
+                                }
+                        }
+                }
+        });
+
+        setTimeout(function(){
+          tabla_p.DataTable().draw();
+        }, 200);
+}
+//-----------------
+// A.A 18/07/2017 //
+Tabla.prototype.sendFileTX = function(id_div,params,id_elemento) {
+    var tx1 = params['tx'];
+    var id1 = params['id_elemento'];
+
+    var tipo_archivo_ok = true;
+    var peso_archivo = '';
+
+    $("#" + id_div).find('input[type="file"]').each(function() {
+        var $this = $(this);
+
+        var fileName = $this.val().match(/[^\/\\]+$/);
+
+        if (fileName != '' && fileName != undefined && fileName[0] != undefined && fileName != null && fileName != 'null') {
+            var fileExtension = fileName[0].slice((fileName[0].lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+            if ($this.attr('data-extensions') != '') {
+                array_ext = $this.attr('data-extensions').replace(' ', '').split(',');
+                if ($.inArray(fileExtension, array_ext) == -1) {
+                    tipo_archivo_ok = false;
+                }
+            }
+
+            if ($this.attr('data-peso') != '') {
+                peso_archivo = $this.attr('data-peso');
+            }
+        }
+    });
+
+    setTimeout(function() {
+        if (tipo_archivo_ok) {
+            var data1 = new FormData($("#" + id_div).find('form')[0]);
+            data1.append('files', $('#' + id_elemento)[0].files[0]);
+            $.ajax({
+                url: $("#uri").val() + "subir_files.php?app_dinamica=" + $("#app_dinamica").val() + "&session_id=" + $("#session_id").val() + "&rutCliente=" + $("#rutCliente").val() + '&peso=' + peso_archivo,
+                context: document.body,
+                type: "POST",
+                async: false,
+                cache: false,
+                contentType: false,
+                processData: false,
+                data: data1,
+                success: function(responseText) {
+                    if (responseText == 'OK') {
+                        var i = 0;
+                        var procesar_file = 1;
+                        var timeout = 1;
+                        $("#" + id_div).find('input[type="file"]').each(function() {
+                            i = i + 1;
+                            var $this = $(this);
+                            var nombre = 'filename_' + i;
+
+                            
+                            if ($this.val() == '') {
+                                console.log($this);
+                                if ($this.closest('div').hasClass('required')) {
+                                    alert("Debe seleccionar el(los) archivos");
+                                    $("#" + id_div).find('#spinnercirclegif').remove();
+                                    $("#" + id_div).find('input[type="file"]').removeAttr('disabled');
+                                    return false;
+                                }
+                            } else {
+
+                                var fileName = $this.val().match(/[^\/\\]+$/);
+                                $('#' + id_div + ' form').find('input[name="' + nombre + '"]').remove();
+                                $('<input>').attr({
+                                    type: 'hidden',
+                                    name: nombre,
+                                    value: fileName
+                                }).appendTo('#' + id_div + ' form');
+                                $this.val('');
+                            }
+                        });
+                        var procesa_interval = setInterval(function() {
+                            if (procesar_file || timeout == 20) {
+                                var valorCampo = "";
+                                var nombreCampo = "";
+                                var arrayDatos = {};
+                                var temp;
+                                $('#'+id_div).closest('tr').find('td').each (function() {
+                                    if ($(this).attr('data-campo')!=undefined){
+                                        nombreCampo = $(this).attr('data-campo');
+                                        valorCampo = $(this).attr('name');
+                                        arrayDatos[nombreCampo] = valorCampo;
+                                    } 
+                                });
+
+                                nombreCampo = $('#'+id_div+' > form').find(':hidden')[1].name;
+                                valorCampo = $('#'+id_div+' > form').find(':hidden')[1].value;
+                                arrayDatos[nombreCampo] = valorCampo;
+                                clearInterval(procesa_interval);
+                                $.ajax({
+                                    url: $("#uri").val() + "procesa_file.php?app_dinamica=" + $("#app_dinamica").val() + "&session_id=" + $("#session_id").val() + "&rutCliente=" + $("#rutCliente").val() + "&tx=" + tx1,
+                                    datatype: "json",
+                                    type: "POST",
+                                    data:arrayDatos,
+                                    success: function(responseText) {
+                                        $("#" + id_div).find('#spinnercirclegif').remove();
+                                        $("#" + id_div).find('input[type="file"]').removeAttr('disabled');
+                                        var respuesta = $.parseJSON(responseText);
+                                        var aux = analiza_respuesta(respuesta, 'NO');
+                                        
+                                        if (aux == '' || aux == 'OK') {
+                                            alert(respuesta.MENSAJE_RESPUESTA);
+                                            if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                                window.location.href = respuesta.URL_RESPUESTA;
+                                            } else {
+                                                $("#myModal").modal('hide');
+                                                reload_div('[{"obj_related":"' + params['id_div'] + '","tipo":"tabla"}]', 'tabla');
+                                            }
+                                        } else {
+                                            // console.log(respuesta.CODIGO_RESPUESTA);
+                                            if (respuesta.MENSAJE_RESPUESTA != '') alert(respuesta.MENSAJE_RESPUESTA);
+                                            if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                                window.location.href = respuesta.URL_RESPUESTA;
+                                            }
+                                        }
+
+                                        //callback opcional, por cada archivo subido
+                                        if (typeof(sendFileTXCallback) == "function" && sendFileTXCallback != undefined) {
+                                            sendFileTXCallback($("#" + id_div), responseText);
+                                        }
+                                    }
+                                });
+                            }
+                            timeout++;
+                        }, 300);
+                        /*}else{
+                            $("#" + id_div).find('#spinnercirclegif').remove();
+                            alert("Debe subir un archivo de formato v\u00e1lido ("+$this.attr('data-extensions')+")");
+                            return false;
+                        }*/
+                    } else {
+                        $("#" + id_div).find('#spinnercirclegif').remove();
+                        //$(el).removeAttr('disabled');
+                        $("#" + id_div).find('input[type="file"]').removeAttr('disabled');
+                        alert(responseText);
+                        return false;
+                    }
+                }
+            });
+        } else {
+            $("#" + id_div).find('#spinnercirclegif').remove();
+            $("#" + id_div).find('input[type="file"]').removeAttr('disabled');
+            alert("Debe seleccionar un archivo de formato v\u00e1lido.");
+            return false;
+        }
+    }, 300);
+}
+// FIN A.A 18/07/2017 //
+
+//Crea un modal de edicion, es decir q luego de cargar el formulario lo llena con datos de la grilla
+Tabla.prototype.createEditModalPar = function(id1, params_json, idtabla, that,par1) {
+    var id_tabla = 'tabla_' + this.id;
+
+    params_json = add_to_array_obl_fields(params_json, this.id);
+
+    //params_json['id_modal'] = params_json[''];
+
+    var table = document.getElementById(id_tabla);
+    var rowLength = table.rows[0].cells.length;
+    if (that === undefined) {
+        that = $("#" + id1);
+    }
+    obj_tr = $(that).closest('tr');
+        obj_table = $(that).closest('table');
+        // (obj_table.find('th[name="' + parametros[i] + '"]').index())
+    for (var i = 0; i < params_json['labels_no_editable'].length; i++) {
+        // params_json[params_json['labels_no_editable'][i]] = obj_tr.find("td").eq(this.getIndex(params_json['labels_no_editable'][i])).attr('name');
+                params_json[params_json['labels_no_editable'][i]] = obj_tr.find("td").eq(obj_table.find('th[name="' + params_json['labels_no_editable'][i] + '"]').index()).attr('name');
+
+    }
+
+    $("#myModalContent").append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; "><img src="' + $("#uri").val() + 'css/img/spinner_mini.gif"> </div>');
+    $("#myModal").modal('show');
+    $("#shader").fadeOut();
+    $.ajax({
+        url: $("#uri").val() + "filtrosModal.php",
+        datatype: "json",
+        type: "POST",
+        data: {
+            data: params_json
+        },
+        type: "POST",
+        success: function(responseText) {
+            var aux = analiza_respuesta_html(responseText);
+            if (aux == 'OK') {
+                $("#myModalContent").html(responseText);
+                $("#myModal").modal('show');
+                $("#shader").fadeOut();
+                var table = document.getElementById(id_tabla);
+                var rowLength = table.rows[0].cells.length;
+                obj_tr = $('#' + id_tabla).find(that).closest('tr');
+		$('<input>').attr({
+		    type: 'hidden',
+		    id: 'id_tabla_detalle',
+		    name: 'id_tabla_detalle',
+		    value: par1
+		}).appendTo('#form_params_modal');
+                for (var i = 0; i < rowLength; i += 1) {
+                    var key = table.rows[0].cells[i].getAttribute("name");
+                    //Cargamos los valores de la tabla en el formulario
+                    if ($('#form_params_modal [name="' + key + '"]').is("textarea")) {
+                        var value1 = obj_tr.find("td").eq(i).attr('name');
+                        if (value1 !== undefined) {
+                            $("#form_params_modal textarea[name='" + key + "']").val(value1);
+                        } else {
+                            var value1 = replace_html_escaped_characters(obj_tr.find("td").eq(i).html());
+                            $("#form_params_modal textarea[name='" + key + "']").val(value1);
+                        }
+                    } else if ($('#form_params_modal [name="' + key + '"]').is("input")) {
+                        var value1 = obj_tr.find("td").eq(i).attr('name');
+                        if (value1 == undefined) {
+                            value1 = replace_html_escaped_characters(obj_tr.find("td").eq(i).html());
+                        }
+                        var el1 = $("#form_params_modal input[name='" + key + "']");
+                        el1.val(value1);
+                    } else if ($('#form_params_modal [name="' + key + '"]').is("select")) {
+                        var value1 = obj_tr.find("td").eq(i).attr('name');
+                        var el1 = $("#form_params_modal select[name='" + key + "']");
+                        el1.val(value1);
+                    } else {
+                        var value1 = obj_tr.find("td").eq(i).attr('name');
+                        $("#form_params_modal [name='" + key + "']").html(value1);
+                    }
+                }
+
+                //callback opcional
+                if (typeof(createEditModalCallback) == "function" && createEditModalCallback != undefined) {
+                    createEditModalCallback($(that));
+                }
+            }
+            /*else{
+                                        alert(aux);
+                                }*/
+        }
+    });
+}
+

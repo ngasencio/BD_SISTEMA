@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
     crearProceso, actualizarProceso, cambiarEstadoProceso, agregarOcAProceso,
     getHistorialProceso, getProcesos, buscarLicitacion, buscarCompraAgil, buscarOc,
-    desvincularProcesoMp, quitarOcDeProceso,
+    desvincularProcesoMp, quitarOcDeProceso, quitarFormularioDeProceso,
     importarLicitacion, importarCompraAgil, importarOc,
 } from '../api/comprasApi';
 import { TIPOS_PROCESO, ESTADOS_POR_TIPO_PROCESO, estadoLabel, tipoLabel, ESTADO_COLOR } from '../constants/estadosProceso';
@@ -359,13 +359,41 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
     };
 
     const handleDesvincularMp = async (proceso) => {
-        if (!window.confirm(`¿Quitar el enlace con "${proceso.licitacion || proceso.codigo_compra_agil}"? Podrás buscar y enlazar el correcto después.`)) return;
+        if (!window.confirm(
+            `¿Quitar el enlace con "${proceso.licitacion || proceso.codigo_compra_agil}"?\n\n` +
+            'El proceso se mantiene en este formulario, sin código de Mercado Público. ' +
+            'Después puedes quitarlo por completo con el botón 🗑 o enlazar otro.',
+        )) return;
         setError(null);
         try {
             await desvincularProcesoMp(proceso.id);
             onCambiado?.();
             cargarProcesos(true);
         } catch { setError('No fue posible quitar el enlace.'); }
+    };
+
+    // 🗑 Quitar el proceso de este formulario — disponible SIEMPRE, con o sin
+    // código de Mercado Público (antes, tras "quitar el enlace" el proceso
+    // quedaba sin código y sin ningún botón para sacarlo). El backend elimina
+    // el proceso completo si era el único formulario; en una compra conjunta
+    // solo suelta este FSC y el proceso sigue para los demás.
+    const handleQuitarProceso = async (proceso) => {
+        const otros = Math.max((proceso.n_formularios || 1) - 1, 0);
+        const nOc = proceso.n_ordenes_compra || 0;
+        const mensaje = otros > 0
+            ? `¿Sacar este formulario del proceso "${proceso.titulo}"?\n\nEl proceso sigue activo para los otros ${otros} formulario(s) de la compra conjunta.`
+            : `¿Eliminar el proceso "${proceso.titulo}" de este formulario?\n\n` +
+              `Se borra también su historial${nOc > 0 ? ` y el enlace con ${nOc} orden(es) de compra (las OC no se tocan)` : ''}. ` +
+              'Esta acción no se puede deshacer.';
+        if (!window.confirm(mensaje)) return;
+        setError(null);
+        try {
+            await quitarFormularioDeProceso(proceso.id, fsc.id);
+            onCambiado?.();
+            cargarProcesos(false);
+        } catch (err) {
+            setError(err.response?.data?.error || 'No fue posible quitar el proceso de este formulario.');
+        }
     };
 
     const handleQuitarOc = async (codigoOc) => {
@@ -540,6 +568,21 @@ export default function FscProcesoPanel({ fsc, onCerrar, onCambiado }) {
                                                             </button>
                                                         </>
                                                     )}
+                                                    <button
+                                                        type="button"
+                                                        title={(p.n_formularios || 1) > 1
+                                                            ? 'Sacar este formulario del proceso'
+                                                            : 'Eliminar este proceso del formulario'}
+                                                        onClick={e => { e.stopPropagation(); handleQuitarProceso(p); }}
+                                                        style={{
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                                                            border: '1px solid #fecaca', background: '#fff', color: '#dc2626',
+                                                            cursor: 'pointer', fontSize: 11, padding: 0,
+                                                        }}
+                                                    >
+                                                        🗑
+                                                    </button>
                                                     <EstadoProcesoBadge codigo={p.estado_proceso} />
                                                 </div>
                                             );

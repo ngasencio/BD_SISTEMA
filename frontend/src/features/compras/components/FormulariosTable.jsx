@@ -1,5 +1,5 @@
 import React from 'react';
-import { tipoLabel, estadoLabel, colorPorTipo } from '../constants/estadosProceso';
+import { tipoLabel, estadoLabel, colorPorTipo, coloresDias } from '../constants/estadosProceso';
 
 const fmtN = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
 const fmtCLP = (n) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n ?? 0);
@@ -32,8 +32,7 @@ function diasDesde(fechaStr) {
 
 export function DiasBadge({ dias }) {
     if (dias === null || dias === undefined) return <span style={{ color: '#94a3b8' }}>—</span>;
-    const color = dias > 30 ? '#dc2626' : dias > 10 ? '#f97316' : dias > 5 ? '#f59e0b' : '#16a34a';
-    const bg    = dias > 30 ? '#fef2f2' : dias > 10 ? '#fff7ed' : dias > 5 ? '#fffbeb' : '#f0fdf4';
+    const { color, bg } = coloresDias(dias);
     return (
         <span style={{
             display: 'inline-block', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,

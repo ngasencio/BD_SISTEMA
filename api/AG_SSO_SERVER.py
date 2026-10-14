@@ -44,6 +44,10 @@ MAX_REINTENTOS = 5
 ESPERA_ENTRE_INTENTOS = 2.0
 ESPERA_ENTRE_DETALLES = 0.8  # Pausa entre llamadas de detalle
 ESPERA_ENTRE_PAGINAS = 0.5   # Pausa entre páginas de listado
+# El gateway de api2.mercadopublico.cl corta a ~29 s (HTTP 504) y la API tarda ~1 s por ítem
+# listado: con 50 por página casi siempre expira; con 10 responde en ~9 s (20 ya roza el límite,
+# 25+ falla). Medido 2026-10-13. No subir.
+TAMANO_PAGINA = 10
 
 URL_BASE_API = "https://api2.mercadopublico.cl"
 URL_LISTADO = f"{URL_BASE_API}/v2/compra-agil"
@@ -138,7 +142,7 @@ class MercadoPublicoCompraAgilClient:
         Obtiene el listado completo de Compras Ágiles con paginación automática.
         Retorna lista de items (no detalles, solo el listado básico).
         """
-        params = {**params_base, "region": self.cfg.region, "tamano_pagina": 50, "numero_pagina": 1}
+        params = {**params_base, "region": self.cfg.region, "tamano_pagina": TAMANO_PAGINA, "numero_pagina": 1}
         
         items_totales = []
         

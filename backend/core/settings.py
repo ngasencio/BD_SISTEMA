@@ -196,6 +196,16 @@ NOTIF_PLAN_URL_PANEL = 'https://panel.ssosorno.cl/panel_documental/login.php'
 PANEL_SSO_RUT = config('PANEL_SSO_RUT', default='')
 PANEL_SSO_DV = config('PANEL_SSO_DV', default='')
 PANEL_SSO_PASSWORD = config('PANEL_SSO_CLAVE', default='')
+# Compra Ágil se actualiza de noche desde esta fecha FIJA hasta hoy (YYYY-MM-DD). El rango crece
+# cada día: moverla hacia adelante acorta la corrida cuando se vuelva demasiado larga.
+SYNC_COMPRA_AGIL_DESDE = config('SYNC_COMPRA_AGIL_DESDE', default='2026-09-01')
+# Cada noche solo se repasan los últimos N días (incluido hoy); lo que falte del rango desde el
+# piso (histórico, o días que una caída dejó sin leer) se completa solo, lo más reciente primero.
+SYNC_COMPRA_AGIL_DIAS_REPASO = config('SYNC_COMPRA_AGIL_DIAS_REPASO', default=3, cast=int)
+# Días que se bajan a la vez (la API tolera 4-6 sin degradarse en listados; medido 2026-10-14).
+SYNC_COMPRA_AGIL_HILOS = config('SYNC_COMPRA_AGIL_HILOS', default=6, cast=int)
+# Tope de una corrida: pasado esto no se empiezan bloques nuevos y sigue la noche siguiente.
+SYNC_COMPRA_AGIL_PRESUPUESTO_MIN = config('SYNC_COMPRA_AGIL_PRESUPUESTO_MIN', default=360, cast=int)
 # A quién avisar si la sincronización falla tras los reintentos (vacío → NOTIF_PLAN_USUARIOS).
 SYNC_FSC_AVISO_A = [e.lower() for e in config('SYNC_FSC_AVISO_A', default='', cast=Csv())]
 

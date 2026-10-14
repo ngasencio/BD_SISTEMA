@@ -1,0 +1,1225 @@
+function postAndRedirect(url, postData)
+{
+    var postFormStr = "<form method='POST' action='" + url + "'>\n";
+
+    for (var key in postData)
+    {
+        if (postData.hasOwnProperty(key))
+        {
+            postFormStr += "<input type='hidden' name='" + key + "' value='" + postData[key] + "'></input>";
+        }
+    }
+
+    postFormStr += "</form>";
+
+    var formElement = $(postFormStr);
+
+    $('body').append(formElement);
+    $(formElement).submit();
+}
+
+/*function quote_literal de postgres*/
+function quote_literal(input){
+        if (input != null && input != undefined && input != true && input != false && isNaN(input)){
+                return input;
+        }else if(input === undefined){
+                return null;
+        }else{
+                return input;
+        }
+}
+/* Reemplaza caracteres escapeados... por ejemplo &gt*/
+function replace_html_escaped_characters(input){
+        input=input.replace(new RegExp('&gt;', 'g'), '>');
+        input=input.replace(new RegExp('&lt;', 'g'), '<');
+        return input;
+}
+/*función para imprimir un objeto, para debug*/
+function print_r(arr,level) {
+        var dumped_text = "";
+        if(!level) level = 0;
+
+        /*The padding given at the beginning of the line.*/
+        var level_padding = "";
+        for(var j=0;j<level+1;j++) level_padding += "    ";
+
+       if(typeof(arr) == 'object') {
+          for(var item in arr) {
+             var value = arr[item];
+
+             if(typeof(value) == 'object') {
+                dumped_text += level_padding + "'" + item + "' ...\n";
+                dumped_text += print_r(value,level+1);
+            } else {
+                dumped_text += level_padding + "'" + item + "' => \"" + value + "\"\n";
+            }
+        }
+    } else {
+      dumped_text = "===>"+arr+"<===("+typeof(arr)+")";
+  }
+  return dumped_text;
+};
+
+/*Ir a una URL*/
+function goToURL(url) {
+    window.location.href = url;
+}
+function goToURLHex(url) {
+    window.location.href = hexToString(url);
+}
+/** A.A. 24/04/2017 **/
+/*Ir a una URL en nueva ventana*/
+function goToURL_blank(url) {
+    window.open (url,"_blank");
+}
+/*********************/
+
+/*Check if Number*/
+function numeros(e, dec) {
+    var key;
+    var keychar;
+    if (window.event)
+        key = window.event.keyCode;
+    else if (e)
+        key = e.which;
+    else
+        return true;
+        keychar = String.fromCharCode(key); // control keys
+        if ((key == null) || (key == 0) || (key == 8) || (key == 9) || (key == 13) || (key == 27))
+            return true;
+        // numbers
+        else if ((("0123456789").indexOf(keychar) > -1))
+            return true;
+        // decimal point jump
+        else if (dec && (keychar == ".")) {
+            return false;
+        } else
+        return false;
+    }
+
+    function numerosTodos(e, dec) {
+        var key;
+        var keychar;
+        if (window.event)
+            key = window.event.keyCode;
+        else if (e)
+            key = e.which;
+        else
+            return true;
+        keychar = String.fromCharCode(key); // control key
+
+        if ((key == null) || (key == 0) || (key == 8) || (key == 9) || (key == 13) || (key == 27))
+            return true;
+        return (/^([-+]{1})?\d$/.test(keychar));
+/*
+        else if ((("0123456789").indexOf(keychar) > -1))
+                return true;
+
+        else if (dec && (keychar == "-")) {
+                return false;
+        } else
+                return false;
+                */
+            }
+
+            function format_miles(that){
+               valor = $(that).val().replace(/\./g,"");
+               $(that).val(addCommas(valor));
+           };
+
+           function validaMail(campo) {
+              if(campo == '') return true;
+                var regex = /^([a-zA-Z0-9_\.\-])+\@(([a-zA-Z0-9\-])+\.)+([a-zA-Z0-9]{2,4})+$/; //SM 20191218 Se cambia validacion por una con mas restricciones
+                //var regex = /^(([^<>()\[\]\\.,;:\s@ñÑ"]+(\.[^<>()\[\]\\.,;:\s@ñÑ"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/; //SM 20191218 Se cambia validacion por una con mas restricciones
+                //var regex = /[\w-\.]{2,}@([\w-]{2,}\.)*([\w-]{2,}\.)[\w-]{2,4}/;
+                //var regex = /[\w-\.]{2,}@(([\w-]{2,}\.)*([\w-]{2,}\.)[\w-]{2,4})$/; // HBR 20171201
+
+        //Se utiliza la funcion test() nativa de JavaScript
+        if (regex.test(campo.trim())) {
+            return true;
+        }
+        return false;
+    }
+
+    function validaRut(campo) {
+      if(campo == '') return true;
+
+        /*if (campo.length == 0) {
+                return true;
+            }*/
+            if (campo.length < 8) {
+                return false;
+            }
+
+            campo = campo.replace('-', '')
+            campo = campo.replace(/\./g, '')
+
+            var suma = 0;
+            var caracteres = "1234567890kK";
+            var contador = 0;
+            for (var i = 0; i < campo.length; i++) {
+                u = campo.substring(i, i + 1);
+                if (caracteres.indexOf(u) != -1)
+                    contador++;
+            }
+            if (contador == 0) {
+                return false
+            }
+
+            var rut = campo.substring(0, campo.length - 1)
+            var drut = campo.substring(campo.length - 1)
+            var dvr = '0';
+            var mul = 2;
+
+            for (i = rut.length - 1; i >= 0; i--) {
+                suma = suma + rut.charAt(i) * mul
+                if (mul == 7) mul = 2
+                    else mul++
+                }
+            res = suma % 11
+            if (res == 1) dvr = 'k'
+                else if (res == 0) dvr = '0'
+                    else {
+                        dvi = 11 - res
+                        dvr = dvi + ""
+                    }
+                    if (dvr != drut.toLowerCase()) {
+                        return false;
+                    } else {
+                        return true;
+                    }
+                }
+
+                function checkRut(obj) {
+                    if (!validaRut($(obj).val())) {
+                        alert("Rut Inv\xe1lido");
+                        $(obj).val("");
+                    }
+                }
+
+                function checkMail(obj) {
+                    if (!validaMail($(obj).val())) {
+                        alert("Correo Inv\xe1lido");
+                        $(obj).val("");
+                    }
+                    $(obj).val($.trim($(obj).val())); // HBR 20171201
+                }
+
+                /** A.A. 24/04/2017 **/
+                function CheckCharacter(e) {
+                        var tcl= (document.all) ? e.keyCode : e.which;
+                        if ((tcl != 8 && tcl != 0) && (tcl < 48 || tcl > 122))
+                                return false;
+
+                        return true;
+                }
+                /*****************************/
+
+                function d2h(d) {
+                    return d.toString(16);
+                }
+
+                function h2d(h) {
+                    return parseInt(h, 16);
+                }
+
+                function stringToHex(tmp) {
+                    var str = '',
+                    i = 0,
+                    tmp_len = tmp.length,
+                    c;
+
+                    for (; i < tmp_len; i += 1) {
+                        c = tmp.charCodeAt(i);
+                        str += d2h(c);
+                    }
+                    return str;
+                }
+
+                function hexToString(tmp) {
+                    var arr = tmp.split(' '),
+                    str = '',
+                    i = 0,
+                    arr_len = arr.length,
+                    c;
+
+                    for (; i < arr_len; i += 1) {
+                        c = String.fromCharCode(h2d(arr[i]));
+                        str += c;
+                    }
+
+                    return str;
+                }
+
+                function formato_rut(rut)
+                {
+                    rut=rut.replace('.','').replace('.','').replace('-','');
+                    if (!/\./.test(rut)) {
+                        var nuevo = "";
+                        for (var i = 0; i < rut.length; i++) {
+                            if (i == 1 || i == 4) {
+                                nuevo += rut[i] + '.';
+                            } else if (i == (rut.length - 1)) {
+                                nuevo += '-' + rut[i];
+                            } else {
+                                nuevo += rut[i];
+                            }
+                        }
+                        return nuevo;
+                    }
+                }
+                Number.prototype.toMoney = function(decimals, decimal_sep, thousands_sep)
+                {
+                 var n = this,
+   c = isNaN(decimals) ? 2 : Math.abs(decimals), //if decimal is zero we must take it, it means user does not want to show any decimal
+   d = decimal_sep || '.', //if no decimal separator is passed we use the dot as default decimal separator (we MUST use a decimal separator)
+
+   t = (typeof thousands_sep === 'undefined') ? ',' : thousands_sep, //if you don't want to use a thousands separator you can pass empty string as thousands_sep value
+
+   sign = (n < 0) ? '-' : '',
+
+   i = parseInt(n = Math.abs(n).toFixed(c)) + '',
+
+   j = ((j = i.length) > 3) ? j % 3 : 0;
+   return sign + (j ? i.substr(0, j) + t : '') + i.substr(j).replace(/(\d{3})(?=\d)/g, "$1" + t) + (c ? d + Math.abs(n - i).toFixed(c).slice(2) : '');
+}
+
+function tableToJsonString1(id) {
+        var table = $("#" + id).tableToJSON({});
+        return JSON.stringify(table);
+    }
+
+function tableToJsonString(id) {
+        //var table = $("#" + id).tableToJSON({
+        //    ignoreHiddenRows: false
+        //});
+
+        /*var table = $("#" + id).tableToJSON({});
+        console.log(id);
+        return JSON.stringify(table);*/
+
+                // enviando solo los campos escogidos y el checkbox - HBR 20170307
+                var array_out = [];
+
+
+                var table_indexes = [];
+
+                var table = $("#" + id);
+
+                table.find('th').each(function(){
+                        if($(this).attr('data-enviar') == 'si' || $(this).find('input[type="checkbox"]').length > 0){
+                                table_indexes.push($(this).index());
+                        }
+                });
+                // console.log(table_indexes);
+                table.find('tr').each(function(){
+                        var array_aux = [];
+                        $(this).find('td').each(function(){
+                                if($.inArray($(this).index(), table_indexes) != -1){
+                                                // console.log($(this).index());
+                                                // console.log($(this).text());
+                                                if($(this).find('input[type="checkbox"]').length > 0){
+                                                        if($(this).find('input[type="checkbox"]').is(':checked')){
+                                                                array_aux.push('on');
+                                                        }else{
+                                                                array_aux.push('off');
+                                                        }
+                                                }else{
+                                                        array_aux.push($(this).text());
+                                                }
+                                }
+                        });
+                        if(array_aux.length > 0){
+                                array_out.push(array_aux);
+                        }
+                });
+                return JSON.stringify(array_out);
+
+        //return createTableToJsonString(id);
+
+}
+
+function export_array_to_csv(filename, rows) {
+        var processRow = function(row) {
+            var finalVal = '';
+            for (var j = 0; j < row.length; j++) {
+                var innerValue = row[j] === null ? '' : row[j];
+                if (row[j] instanceof Date) {
+                    innerValue = row[j];
+                };
+                if(innerValue != undefined){
+                 var result = innerValue.replace(/"/g, '""');
+                 if (result.search(/("|,|\n)/g) >= 0)
+                   result = '"' + result + '"';
+               if (j > 0)
+                   finalVal += ';';
+               finalVal += result;
+           }
+       }
+       return finalVal + '\n';
+   };
+
+   var csvFile = '';
+   for (var i = 0; i < rows.length; i++) {
+        console.log(rows[i]);
+    csvFile += processRow(rows[i]);
+}
+
+var blob = new Blob([csvFile], {
+    type: 'text/csv;charset=utf-8;'
+});
+        if (navigator.msSaveBlob) { // IE 10+
+            navigator.msSaveBlob(blob, filename);
+        } else {
+            var link = document.createElement("a");
+                if (link.download !== undefined) { // feature detection
+                    var url = URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", filename);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            }
+        }
+
+        function table_to_csv(filename,id_tabla,campos){
+          console.log('Filename: ' + filename);
+          console.log('Id_tabla: ' + id_tabla);
+          console.log('Campos: ' + campos);
+
+          if (id_tabla == 'tabla_grilla_pos_principal'){
+              if ($('#' + id_tabla + ' > tbody > tr > td').hasClass('dataTables_empty')){
+                  window.alert('No se encontraron registros para exportar.');
+                  return False
+              }
+
+              // Asigno fecha a la descarga del csv (como dato adicional)
+              let v_fecha = new Date();
+              let v_sec = v_fecha.getSeconds();
+              v_sec = ('00' + v_sec).slice(-2)
+              let v_min = v_fecha.getMinutes();
+              v_min = ('00' + v_min).slice(-2)
+              let v_hora = v_fecha.getHours();
+              v_hora = ('00' + v_hora).slice(-2)
+              let v_dia = v_fecha.getDate();
+              v_dia = ('00' + v_dia).slice(-2)
+              let v_mes = v_fecha.getMonth() + 1;
+              v_mes = ('00' + v_mes).slice(-2)
+              let v_anyo =v_fecha.getFullYear();
+              filename = filename.split('.')[0];
+              filename = filename + '_' + v_anyo + v_mes + v_dia + v_hora + v_min + v_sec + '.csv';
+          }
+
+          if($('#' + id_tabla + ' tr').length > 0){
+             var array_out=[];
+             var array_campos=[];
+             var j=0;
+             var pag=1;
+             var pagina_actual = $(".paginate_button.active").find("a").attr("data-dt-idx");
+
+             // var pag_obj=$(".paginate_button a[data-dt-idx=\"" + pag + "\"]");
+             var prev_pag_btn=$(".paginate_button.previous");
+             while(!prev_pag_btn.hasClass('disabled')){
+                 prev_pag_btn.click();
+                 prev_pag_btn=$(".paginate_button.previous");
+             }
+             var pag_obj=$(".paginate_button.next");
+             var pag_next_obj=$(".paginate_button a[data-dt-idx=\"" + (pag + 1) + "\"]");
+             while(pag == 1 || !pag_obj.hasClass('disabled')){
+                 if(j>0){
+                     pag_obj.click();
+                 }
+                 $('#' + id_tabla + ' tr').each(function() {
+                     var array_aux=[];
+                     var i=0;
+                     var aux=0;
+                     if(j==0){
+                         $(this).find("th").each(function(){
+                             if ($(this).attr('name') != '--NUM--' && $(this).attr('name') != '--EDIT--' && $(this).attr('name') != '--EDIT--' && $(this).attr('name') != '' && (campos[0].toUpperCase() == 'ALL' || $.inArray($(this).attr('name'), campos) != -1)){
+                                 array_aux[aux]=$(this).attr('name');
+                                 array_campos[aux]=i;
+                                 aux++;
+                             }
+                             i++;
+                         });
+                     } else {
+                         $(this).find("td").each(function(){
+                             if ($.inArray(i, array_campos) != -1){
+                                 if (id_tabla == 'tabla_grilla_pos_principal'){
+                                     if ($(this).attr('name')) {
+                                         array_aux[aux] = $(this).attr('name');
+                                     } else {
+                                         array_aux[aux] = '';
+                                     }
+                                     aux++;
+                                 } else {
+                                     array_aux[aux]=$(this).text();
+                                     aux++;
+                                 }
+                             }
+                             i++;
+                         });
+                     }
+                     // console.log(array_aux);
+                     if(aux){
+                         array_out.push(array_aux);
+                     }
+                     j++;
+                 });
+                 // array_out.push('-----'+pag);
+                 pag++;
+                 // pag_obj=$(".paginate_button a[data-dt-idx=\"" + pag + "\"]");
+                 pag_next_obj=$(".paginate_button a[data-dt-idx=\"" + (pag + 1) + "\"]");
+                 pag_obj=$(".paginate_button.next");
+                 if(pag_obj.hasClass('disabled')){
+                     //click en la p▒gina actual
+                     $('.paginate_button a[data-dt-idx="'+pagina_actual+'"]').click();
+                 }
+             }
+             export_array_to_csv(filename,array_out);
+         }else{
+             alert('No se encontraron registros para exportar.');
+         }
+     }
+
+
+/*FUERZA A QUE EL INPUT RECIBA SOLO NUMEROS O UNA COMA EJ:12,92  o 0,23*/
+/**
+ * [formatDecimalChile description]
+ * @param  {DOM}    el           elemento tipo input
+ * @param  {text}   currency     tipo de moneda
+ * @param  {number} descimales   cantidad de decimales
+ */
+ function formatDecimalChile(el,currency,decimales){
+        try {
+
+                var l = currency||'clp';
+                var d = decimales||2;
+
+                if(l == 'clp'){
+     // $(el).number(true,d,',');
+     //console.log($(el).val());
+     $(el).val($.number($(el).val(),d,',','.'));
+   }
+   else if(l == 'usd'){
+      //$(el).number(true,d,'.');
+      $(el).val($.number($(el).val(),d,',','.'));
+    }
+    $(el).off("number");
+
+  }
+  catch(er){
+   console.log(er);
+ }
+}
+        /*
+     function formatDecimalChile(el){
+        try {
+            var reg = /^[0-9]+([.][0-9]*)?$/;
+            if(!reg.test(el.value)){
+            el.value = el.value.substring(0, el.value.length-1);
+    }
+        }
+        catch(er){
+            console.log(err);
+
+        }
+    }
+*/
+
+/*function table_to_csv(filename,id_tabla,campos){
+        var array_out=[];
+        var array_campos=[];
+        var j=0;
+        var pag=1;
+                var pagina_actual = $(".paginate_button.active").find("a").attr("data-dt-idx");
+
+        var pag_obj=$(".paginate_button a[data-dt-idx=\"" + pag + "\"]");
+        var pag_next_obj=$(".paginate_button a[data-dt-idx=\"" + (pag + 1) + "\"]");
+        while(pag_obj.length > 0 && pag_next_obj.length > 0){
+                if(j>0){
+                        pag_obj.click();
+                }
+                $('#' + id_tabla + ' tr').each(function() {
+                        var array_aux=[];
+                        var i=0;
+                        var aux=0;
+                        if(j==0){
+                                $(this).find("th").each(function(){
+                                        if ($(this).attr('name') != '--NUM--' && $(this).attr('name') != '' && (campos[0].toUpperCase() == 'ALL' || $.inArray($(this).attr('name'), campos) != -1)){
+                                                array_aux[aux]=$(this).attr('name');
+                                                array_campos[aux]=i;
+                                                aux++;
+                                        }
+                                        i++;
+                                });
+                        }
+                        else{
+                                $(this).find("td").each(function(){
+                                if ($.inArray(i, array_campos) != -1){
+                                        array_aux[aux]=$(this).attr('name');
+                                        aux++;
+                                }
+                                i++;
+                                });
+                        }
+                                                // console.log(array_aux);
+                        if(aux){
+                                                        array_out.push(array_aux);
+                        }
+                                                j++;
+                });
+                                // array_out.push('-----'+pag);
+                pag++;
+                pag_obj=$(".paginate_button a[data-dt-idx=\"" + pag + "\"]");
+                                pag_next_obj=$(".paginate_button a[data-dt-idx=\"" + (pag + 1) + "\"]");
+                                if(pag_next_obj.length == 0){
+                                        //click en la página actual
+                                        $('.paginate_button a[data-dt-idx="'+pagina_actual+'"]').click();
+                                }
+        }
+
+        export_array_to_csv(filename,array_out);
+
+    }*/
+/*
+function table_to_csv(filename, id_tabla, campos) {
+        var array_out = [];
+        var array_campos = [];
+        var j = 0;
+        $('#' + id_tabla + ' tr').each(function() {
+                var array_aux = [];
+                var i = 0;
+                var aux = 0;
+                if (j == 0) {
+                        $(this).find("th").each(function() {
+                                                                if ($(this).attr('name') != '--NUM--' && $(this).attr('name') != '' && (campos[0].toUpperCase() == 'ALL' || $.inArray($(this).attr('name'), campos) != -1)){
+                                        array_aux[aux] = $(this).attr('name');
+                                        array_campos[aux] = i;
+                                        aux++;
+                                }
+                                i++;
+                        });
+                } else {
+                        $(this).find("td").each(function() {
+                                if ($.inArray(i, array_campos) != -1) {
+                                        array_aux[aux] = $(this).attr('name');
+                                        aux++;
+                                }
+                                i++;
+                        });
+                }
+                array_out.push(array_aux);
+                j++
+        });
+        export_array_to_csv(filename, array_out);
+}
+*/
+
+/**
+ * Author : CD 02-02-2017
+ * Invoca al php que crea contrato recibe path al contrato creado y lo abre en un nuevo tab del navegador
+ * @param  varchar idSolicitud [description]
+ * @param  varchar rutCliente  [description]
+ * @param  varchar rutUsuario  [description]
+ * @param  varchar sesion      [description]
+ * @return void
+ */
+ function buildContrato(idSolicitud,rutCliente,rutUsuario,sesion){
+
+    try{
+        showSpinner();
+        $.ajax({
+            url: "../appDinamicaClasses/ajax_php/ajax_icar_crear_contrato_tx.php",
+            data: "idSolicitud="+idSolicitud+"&session_id="+sesion+"&rutCliente="+rutCliente+"&rutUsuario="+rutUsuario,
+            type: 'GET',
+            dataType:"JSON",
+            success: function (data) {
+                hideSpinner();
+                if (data.status=="ok"){
+                    window.open(data.path,'_blank');
+                }
+                else
+                {
+                    alert(data.msj);
+                }
+            },
+            error: function (data) {
+                hideSpinner();
+                alert(data.msj);
+            }
+        });
+    }catch(er){
+        console.log(er);
+    }
+}
+
+/*Check if Number*/
+function float_numeros(e, dec) {
+    var key;
+    var keychar;
+    if (window.event)
+        key = window.event.keyCode;
+    else if (e)
+        key = e.which;
+    else
+        return true;
+        keychar = String.fromCharCode(key);
+        if ((key == null) || (key == 0) || (key == 8) || (key == 9) || (key == 13) || (key == 27))
+            return true;
+        else if(keychar == "." && event.target.value.indexOf('.') == -1)
+                return true;
+        else if (!isNaN(keychar) && (isInt(parseInt(keychar))||isFloat(parseFloat(keychar))))
+            return true;
+        else
+        return false;
+    }
+
+
+/*
+function float_numeros(obj) {
+        if($(obj).val()===""){
+                return;
+        }
+        if(!Number.isInteger($(obj).val()) && !isFloat($(obj).val())){
+                $(obj).val('');
+                return false;
+                //alert('Número Inválido');
+        }
+        return true;
+}*/
+function isInt(n){
+    return Number(n) === n && n % 1 === 0;
+}
+
+function isFloat(n){
+    return Number(n) === n && n % 1 !== 0;
+}
+
+(function ($) {
+
+    $.fn.getStyles = function (only, except) {
+
+        // the map to return with requested styles and values as KVP
+        var product = {};
+
+        // the style object from the DOM element we need to iterate through
+        var style;
+
+        // recycle the name of the style attribute
+        var name;
+
+        // if it's a limited list, no need to run through the entire style object
+        if (only && only instanceof Array) {
+
+            for (var i = 0, l = only.length; i < l; i++) {
+                // since we have the name already, just return via built-in .css method
+                name = only[i];
+                product[name] = this.css(name);
+            }
+
+        } else {
+
+            // otherwise, we need to get everything
+            var dom = this.get(0);
+
+            // standards
+            if (window.getComputedStyle) {
+
+                // convenience methods to turn css case ('background-image') to camel ('backgroundImage')
+                var pattern = /\-([a-z])/g;
+                var uc = function (a, b) {
+                    return b.toUpperCase();
+                };
+                var camelize = function (string) {
+                    return string.replace(pattern, uc);
+                };
+
+                // make sure we're getting a good reference
+                if (style = window.getComputedStyle(dom, null)) {
+                    var camel, value;
+                    // opera doesn't give back style.length - use truthy since a 0 length may as well be skipped anyways
+                    if (style.length) {
+                        for (var i = 0, l = style.length; i < l; i++) {
+                            name = style[i];
+                            camel = camelize(name);
+                            value = style.getPropertyValue(name);
+                            product[camel] = value;
+                        }
+                    } else {
+                        // opera
+                        for (name in style) {
+                            camel = camelize(name);
+                            value = style.getPropertyValue(name) || style[name];
+                            product[camel] = value;
+                        }
+                    }
+                }
+            }
+            // IE - first try currentStyle, then normal style object - don't bother with runtimeStyle
+            else if (style = dom.currentStyle) {
+                for (name in style) {
+                    product[name] = style[name];
+                }
+            } else if (style = dom.style) {
+                for (name in style) {
+                    if (typeof style[name] != 'function') {
+                        product[name] = style[name];
+                    }
+                }
+            }
+
+        }
+
+        // remove any styles specified...
+        // be careful on blacklist - sometimes vendor-specific values aren't obvious but will be visible... e.g., excepting 'color' will still let '-webkit-text-fill-color' through, which will in fact color the text
+        if (except && except instanceof Array) {
+            for (var i = 0, l = except.length; i < l; i++) {
+                name = except[i];
+                delete product[name];
+            }
+        }
+
+        // one way out so we can process blacklist in one spot
+        return product;
+
+    };
+
+    // sugar - source is the selector, dom element or jQuery instance to copy from - only and except are optional
+    $.fn.copyCSS = function (source, only, except) {
+        var styles = $(source).getStyles(only, except);
+        this.css(styles);
+        var width = $(source).css('width'); // fix de ancho de botón para IE - HBR 20180208
+        this.css('width', width);// fix de ancho de botón para IE - HBR 20180208
+    };
+
+})(jQuery);
+
+function click_boton_by_name(name){
+        $("input[name='"+name+"']").click();
+}
+
+function hex2a(hexx) {
+    var hex = hexx.toString();//force conversion
+    var str = '';
+    for (var i = 0; i < hex.length; i += 2)
+        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+    return str;
+}
+/* FUNCION NUEVA PARA MODELO NOTARIO SGONZALEZ_20181207*/
+function buildContratoNotario(idSolicitud,rutEmpresa,rutUsuario,sesion){
+        try{
+                showSpinner();
+                $.ajax({
+                        url: "../appDinamicaClasses/ajax_php/ajax_icar_crear_contrato_tx_notario.php",
+                        data: "idSolicitud="+idSolicitud+"&session_id="+sesion+"&rutCliente="+rutEmpresa+"&rutUsuario="+rutUsuario,
+                        type: 'GET',
+                        dataType:"JSON",
+                        success: function (data) {
+                                console.log(data);
+                                hideSpinner();
+                                if (data.status=="ok"){
+                                        window.open(data.path,'_blank');
+                                        alert(data.msj);
+
+                                }
+                                else
+                                {
+                                        alert(data.msj);
+                                }
+                        },
+                        error: function (data) {
+                                hideSpinner();
+                                alert(data.msj);
+                        }
+                });
+        }catch(er){
+                console.log(er);
+        }
+}
+/**/
+/* FUNCIONES PARA SINCRONIZACION DE EVENTOS CON NODE-EXPRESS-SOCKET.IO CD 20170619*/
+/**
+ * [getSessionQR Dibuja un codigo qr dentro del obj jQuery recibido por parametro]
+ */
+ function getSessionQR(idSolicitud,idSession,idTarea,idCliente,idUsuario,appDinamica,App,obj){
+  try{
+    $.ajax({
+      url: "../appDinamicaClasses/ajax_php/getSessionQR.php",
+      type: 'post',
+      data: {
+        idSession:idSession,
+        idSolicitud: idSolicitud,
+        idTarea:idTarea,
+        idCliente:idCliente,
+        idUsuario:idUsuario,
+        appDinamica:appDinamica,
+        App:App
+      },
+      dataType:"JSON",
+      success: function (data) {
+        if(data.error == 0){
+          obj.attr("src",$('#uri').val()+data.data.url).show();
+          /* CD 30-08-2017 MUESTRA MODAL CON DETALLE QR */
+          $('.modal-qr-img').attr("src",$('#uri').val()+data.data.url);
+          obj.unbind("click").bind("click",function(){
+                $('#qrZoomModal').modal("show");
+                });
+          /* CD 30-08-2017 */
+        }
+      },
+      error: function (data) {
+        console.log(data);
+      }
+    });
+  }catch(er){
+    console.log(er);
+  }
+}
+
+/**
+ * [monitorQr Dibuja un codigo qr con los datos de la solicitud , para generar sicronización con la App Móvil]
+ * @return {[type]} [description]
+ */
+function monitorQr(obj){
+        try{
+                if(obj.data("loaded") == 0){
+                        getSessionQR($('input[name=idSolicitud]').val(), $('input[name=session_id]').val(),$('input[name=idTarea]').val(),$('#rutCliente').val(),$('#rutUsuario').val(),$('#app_dinamica').val(),$('#aplicacion').val(),obj);
+                        // CD: 21-08-2019 Agrega clases de "conecctado a node" al elemento QR siempre y cuando la conexión y el elementos existan
+                        if($('.qr-container .qr-input').length > 0 || socket.id != 'undefined'){
+                                $('.qr-container .phone-connection').addClass("connected");
+                                $('.qr-container .qr-input').css({"border-color":"green"});
+                                $('.qr-container .qr-input').css({"border":"solid 2px green","border-radius":"3px"});
+                        }
+                        // CD: 21-08-2019 Agrega clases de "conecctado a node" al elemento QR
+                        obj.data("loaded",1);
+                }
+        }catch(er){
+                console.log(er);
+        }
+}
+/*
+ function monitorQr(obj){
+  try{
+    if(obj.data("loaded") == 0){
+      getSessionQR($('input[name=idSolicitud]').val(), $('input[name=session_id]').val(),$('input[name=idTarea]').val(),$('#rutCliente').val(),$('#rutUsuario').val(),$('#app_dinamica').val(),$('#aplicacion').val(),obj);
+      obj.data("loaded",1);
+      initSocketSincronization();
+    }
+  }catch(er){
+    console.log(er);
+  }
+}
+*/
+/**
+ * [iniiSocketSincronization inicializa la sincronización con el servidor express]
+ * @return {[type]} [description]
+ */
+ function initSocketSincronization(){
+  console.log("initSocketSincronization");
+  try{
+    /* La variable socket es heredada de la instacia iniciada en index.php*/
+    socket = io.connect('https://servicios.acepta.com/');
+    socket.on('connect', function(e){
+      console.log("conectado a node express");
+    });
+
+    socket.on('disconnect', function(){
+      console.log("desconectado");
+    });
+
+  }catch(er){
+    console.log(er);
+  }
+}
+
+/**
+ * [iniiSocketSincronization inicializa la sincronización con el servidor express]
+ * @return {[type]} [description]
+ * se reemplaza por la fx anterior que es mas generica 2017-08-09
+ */
+function initSocketSincronization_ICAR(){
+  console.log("initSocketSincronization i-CAR");
+  try{
+    /* La variable socket es heredada de la instacia iniciada en index.php*/
+    socket = io.connect('https://portal.i-car.cl/');
+    socket.on('connect', function(e){
+      console.log("conectado a node express");
+    });
+
+    socket.on('disconnect', function(){
+      console.log("desconectado");
+    });
+
+  }catch(er){
+    console.log(er);
+  }
+}
+/*
+ function initSocketSincronization_ICAR(){
+  console.log("initSocketSincronization_ICAR");
+
+  try{
+    var options = {}
+
+   //var endpoint ='https://servicios.acepta.com/';
+   var endpoint ='https://portal.i-car.cl/';
+   socket = io(endpoint,options);
+   console.log(socket.id);
+
+   if(typeof socket.id == 'undefined'){
+
+     socket.on('connect', function(e){
+      console.log("conectado a I-CAR");
+      $('.qr-container .phone-connection').addClass("connected");
+      $('.qr-container .qr-input').css({"border-color":"green"});
+      $('.qr-container .qr-input').css({"border":"solid 2px green","border-radius":"3px"});
+      socket.emit('storeClientInfo', {
+        solicitud:$('input[name=idSolicitud]').val(),
+        session:$('#session_id').val(),
+        tarea:$('#idTarea').val(),
+      }
+      );
+    });
+   }
+
+        socket.on('reload', function(data){
+                alert ('en initSocketSincronization_ICAR');
+                console.log("reload");
+                reload_div('[{"obj_related":"icar_con_adjuntar_documentos_crear_solicitud_dinamica", "tipo":"form"}]', 'tabla');
+                reload_div('[{"obj_related":"icar_con_grilla_documentos_solicitud_dinamica", "tipo":"tabla"}]', 'tabla');
+                // nuevos
+                reload_div('[{"obj_related":"form2_modal_icar_spie_buscar_solicitudes", "tipo":"form"}]', 'tabla');
+                reload_div('[{"obj_related":"grilla_modal_icar_spie_buscar_solicitudes", "tipo":"tabla"}]', 'tabla');
+
+        });
+
+   socket.on('disconnect', function(){
+    console.log("desconectado");
+    $('.qr-container .phone-connection').removeClass("connected");
+    $('.qr-container .qr-input').css({"border":"solid 2px red","border-radius":"3px"});
+  });
+
+ }catch(er){
+  console.log(er);
+}
+}
+*/
+function killExpressSesion(){
+  try{
+    console.log("Se eliminara la sesion socket");
+    if(typeof socket != 'undefined'){
+      socket.emit('killSession', {
+        solicitud:$('input[name=idSolicitud]').val(),
+        session:$('#session_id').val(),
+        tarea:$('#idTarea').val(),
+      }
+      );
+    }
+  }catch(e){
+    console.log(e);
+  }
+}
+/* CD : 22/06/2017 */
+function generaInformes(idSolicitud,rutCliente,rutUsuario,sesion,docTx,nombreBaseDoc){
+        try{
+                showSpinner();
+                $.ajax({
+                        url: "../appDinamicaClasses/ajax_php/ajax_icar_genera_informes.php",
+                        data:{
+                                idSolicitud:idSolicitud,
+                                session_id:sesion,
+                                rutCliente:rutCliente,
+                                rutUsuario:rutUsuario,
+                                nombreBaseDoc:nombreBaseDoc,
+                                docTx:docTx
+                        },
+                        type: 'GET',
+                        dataType:"JSON",
+                        success: function (data) {
+                                hideSpinner();
+                                if (data.status=="ok"){
+                                        window.open(data.path,'_blank');
+                                } else {
+                                        alert(data.msj);
+                                }
+                        },
+                        error: function (data) {
+                                hideSpinner();
+                                alert(data.msj);
+                        }
+                });
+        } catch(er) {
+                hideSpinner();
+                console.log(er);
+        }
+}
+/* CD : 22/06/2017 */
+/**
+ * description  : goSiguienteStep: Avanza al siguiete step tomando como referencia al step seleccionado.
+ * @return              : void
+ * author               : CD
+ * fecha                : 07-11-2017
+ */
+function goSiguienteStep(){
+        try{
+                var id = null;
+                console.log("var steps_height.activestep largo "+$('.steps_height.activestep').next().length)
+                if($('.steps_height.activestep').next().length > 0){
+                        id = $('.steps_height.activestep').next().attr("id");
+                        console.log('id:'+id);
+                }
+                if(id != null){
+                        $('#'+id).click();
+                }
+        }catch(e){
+                console.log(e);
+        }
+}
+
+//$("#TREE3").igTree('toggleCheckstate',$(this))
+//$("#TREE3").igTree("nodeByPath",'bitacora.F.bitacora')[0]
+function check_tree(obj1,arr1){
+        var data1='';
+        $("#"+obj1+" li").each(function(){
+                data1=$(this).attr('data-path');
+                for (x of arr1) {
+                        if (data1==x){
+                                console.log('MARCO');
+                                $("#"+obj1).igTree('toggleCheckstate',$(this));
+                                break;
+                        }
+                }
+        });
+}
+
+function alfanumerico(e, dec){
+    var key;
+    var keychar;
+    if (window.event)
+        key = window.event.keyCode;
+    else if (e)
+        key = e.which;
+    else
+        return true;
+
+    keychar = String.fromCharCode(key); // control key
+
+        if ((key == null) || (key == 0) || (key == 8) || (key == 9) || (key == 13) || (key == 27))
+            return true;
+        //return (/^[a-z0-9 ]{1,}$/gi.test(keychar));
+        return (/^[a-z0-9\u00f1\.\,\- ]{1,}$/gi.test(keychar));
+}
+function addIntervalDays(signo,valor){
+        x=new Date();
+        if (signo=="" || valor==""){
+                return x;
+        }
+        y=eval("new Date(x.getTime()"+signo+" "+(valor*86400000)+")");
+        return y;
+}
+
+function tableToJsonString2(id) {
+               // enviando solo los campos escogidos y el checkbox - HBR 20170307
+                var array_out = [];
+                var table_indexes = [];
+                var table = $("#" + id);
+
+                var jsonColumnas = {};
+                table.find('th').each(function(){
+                        //console.log($(this).index());
+                        //console.log($(this).text());
+                        jsonColumnas[$(this).index()]=$(this).text().trim();
+                });
+
+                console.log(jsonColumnas);
+                var jsonData = [];
+                table.find('tr').each(function(){
+                        var jData = {};
+                        $(this).find('td').each(function(){
+                                var select1 = $(this).find("select");
+                                var input1 = $(this).find("input");
+                                //console.log($(this).index());
+                                //console.log($(this).text());
+                                if (select1.length)
+                                {
+                                        if (select1.attr('id1')!=undefined)
+                                        {
+                                                jData[jsonColumnas[$(this).index()]]=select1.attr('id1');
+                                        }
+                                        else
+                                        {
+                                                jData[jsonColumnas[$(this).index()]]=select1.val();
+                                        }
+                                }
+                                else if (input1.length)
+                                {
+                                        jData[jsonColumnas[$(this).index()]]=input1.val();
+                                }
+                                else
+                                {
+                                        jData[jsonColumnas[$(this).index()]]=$(this).text();
+                                }
+
+                        });
+                        jsonData.push(jData);
+                });
+                console.log(jsonData);
+
+                return JSON.stringify(jsonData);
+
+        //return createTableToJsonString(id);
+
+}
+
+
+function searchEditableTable(id,search1) {
+               // enviando solo los campos escogidos y el checkbox - HBR 20170307
+                var search2=search1.toUpperCase();
+                var array_out = [];
+                var table_indexes = [];
+                var table = $("#" + id);
+
+                table.find('tr').each(function(){
+                        var jData = {};
+                        $(this).find('td').each(function(){
+                                var select1 = $(this).find("select");
+                                var input1 = $(this).find("input");
+                                if (select1.length)
+                                {
+                                        if (select1.attr('id1')!=undefined)
+                                        {
+                                                if (select1.attr('id1').toUpperCase().indexOf(search2)>=0){
+                                                        select1.focus();
+                                                }
+                                        }
+                                        else
+                                        {
+                                                if (select1.val()!=null && select1.val() !=undefined){
+                                                        if (select1.val().toUpperCase().indexOf(search2)>=0){
+                                                                select1.focus();
+                                                        }
+                                                }
+                                        }
+                                }
+                                else if (input1.length)
+                                {
+                                        if (input1.val()!=null && input1.val()!=undefined){
+                                                if (input1.val().toUpperCase().indexOf(search2)>=0){
+                                                        input1.focus();
+                                                }
+                                        }
+                                }
+                                else
+                                {
+                                        if ($(this).text()!=null && $(this).text()!=undefined){
+                                                if ($(this).text().toUpperCase().indexOf(search2)>=0){
+                                                        $(this).focus();
+                                                }
+                                        }
+                                }
+                        });
+                });
+}

@@ -420,11 +420,30 @@ def calcular_asociaciones_proveedor(min_support=0.05):
 # ML — Asociaciones por unidad compradora (FP-Growth)
 # =============================================================================
 
+# FP-Growth materializa en memoria TODOS los itemsets frecuentes. Cada "transacción"
+# es una unidad compradora con cientos de productos, así que con pocas unidades un
+# soporte de 1 unidad vuelve "frecuente" cada combinación de los productos de una
+# sola unidad (C(858,4) ≈ 2×10^10): el 2026-10-14, tras sincronizar Compra Ágil, la
+# tabla quedó con 5 unidades y 6 hilos de runserver llegaron a 17 GB de RAM,
+# dejando el servidor inutilizable. Estas cotas acotan el trabajo sin importar los
+# datos: a lo sumo C(40,1)+C(40,2)+C(40,3) ≈ 10 mil itemsets.
+_FPGROWTH_MIN_UNIDADES = 2   # un patrón debe repetirse en al menos 2 unidades
+_FPGROWTH_MAX_ITEMS = 40     # productos candidatos (los de mayor soporte)
+_FPGROWTH_MAX_LEN = 3        # tamaño máximo de un conjunto de productos
+
+
 def calcular_apriori_comprador(min_support=0.05):
     """
     Detecta qué productos compra frecuentemente la misma unidad compradora.
     Cada 'transacción' es una unidad + los productos que compró en sus CAs.
+
+    El trabajo está acotado (ver _FPGROWTH_*): solo se consideran productos
+    presentes en ≥ `_FPGROWTH_MIN_UNIDADES` unidades y, si son más de
+    `_FPGROWTH_MAX_ITEMS`, los de mayor soporte. Cuando se recorta, se avisa en
+    `advertencia` (el frontend la muestra junto con los resultados).
     """
+    import math
+    from collections import Counter
     from .models import CompraAgilProducto, CompraAgilResumen
     from mlxtend.frequent_patterns import fpgrowth, association_rules
     import pandas as pd
@@ -454,21 +473,39 @@ def calcular_apriori_comprador(min_support=0.05):
     if len(unidad_productos) < 2:
         return {'frecuentes': [], 'reglas': [], 'advertencia': 'Pocas unidades para análisis'}
 
-    vocab = sorted({p for prods in unidad_productos.values() for p in prods})
-    if len(vocab) < 2:
+    n_unidades = len(unidad_productos)
+    conteo = Counter(p for prods in unidad_productos.values() for p in prods)
+    n_vocab_total = len(conteo)
+    if n_vocab_total < 2:
         return {'frecuentes': [], 'reglas': [], 'advertencia': 'Vocabulario insuficiente'}
 
-    rows = []
-    for unidad, prods in unidad_productos.items():
-        rows.append({v: (v in prods) for v in vocab})
+    # Soporte absoluto mínimo: el pedido por `min_support`, pero nunca menos de 2 unidades.
+    min_count = max(_FPGROWTH_MIN_UNIDADES, math.ceil(min_support * n_unidades))
+    candidatos = sorted(
+        ((p, c) for p, c in conteo.items() if c >= min_count),
+        key=lambda pc: (-pc[1], pc[0]),   # mayor soporte primero; desempate estable por nombre
+    )
+    if len(candidatos) < 2:
+        return {
+            'frecuentes': [], 'reglas': [],
+            'n_unidades': n_unidades, 'n_productos_vocab': n_vocab_total,
+            'advertencia': f'Ningún producto se repite en al menos {min_count} unidades compradoras.',
+        }
 
-    import pandas as pd
+    advertencia = None
+    if len(candidatos) > _FPGROWTH_MAX_ITEMS:
+        advertencia = (
+            f'Se analizaron los {_FPGROWTH_MAX_ITEMS} productos más repetidos entre unidades '
+            f'(de {len(candidatos)} que se repiten en ≥{min_count} unidades).'
+        )
+        candidatos = candidatos[:_FPGROWTH_MAX_ITEMS]
+    vocab = sorted(p for p, _ in candidatos)
+
+    rows = [{v: (v in prods) for v in vocab} for prods in unidad_productos.values()]
     df = pd.DataFrame(rows, dtype=bool)
 
-    try:
-        freq = fpgrowth(df, min_support=min_support, use_colnames=True, max_len=4)
-    except Exception:
-        freq = fpgrowth(df, min_support=max(min_support, 0.15), use_colnames=True, max_len=3)
+    # El soporte efectivo es el absoluto exigido (min_count / n), nunca menos que el pedido.
+    freq = fpgrowth(df, min_support=min_count / n_unidades, use_colnames=True, max_len=_FPGROWTH_MAX_LEN)
 
     if freq.empty:
         return {'frecuentes': [], 'reglas': [], 'advertencia': 'No se encontraron patrones'}
@@ -498,12 +535,16 @@ def calcular_apriori_comprador(min_support=0.05):
     except Exception:
         pass
 
-    return {
+    resultado = {
         'frecuentes': frecuentes[:20],
         'reglas': reglas[:15],
-        'n_unidades': len(unidad_productos),
-        'n_productos_vocab': len(vocab),
+        'n_unidades': n_unidades,
+        'n_productos_vocab': n_vocab_total,
+        'n_productos_analizados': len(vocab),
     }
+    if advertencia:
+        resultado['advertencia'] = advertencia
+    return resultado
 
 
 # =============================================================================

@@ -21,6 +21,10 @@ export const agregarOcAProceso = (id, codigo_oc) =>
 export const desvincularProcesoMp = (id) => apiClient.post(`compras-procesos/${id}/desvincular-mp/`);
 export const quitarOcDeProceso = (id, codigo_oc) =>
     apiClient.post(`compras-procesos/${id}/quitar-oc/`, { codigo_oc });
+// Saca el proceso de ESTE formulario; si era el último, el proceso se elimina
+// (en compra conjunta solo se suelta este FSC). Responde { proceso_eliminado }.
+export const quitarFormularioDeProceso = (id, formulario_id) =>
+    apiClient.post(`compras-procesos/${id}/quitar-formulario/`, { formulario_id });
 export const getHistorialProceso = (id) => apiClient.get(`compras-procesos/${id}/historial/`);
 export const getDetalleProcesoMp = (id) => apiClient.get(`compras-procesos/${id}/detalle-mp/`);
 

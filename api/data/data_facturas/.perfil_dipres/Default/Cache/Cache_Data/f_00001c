@@ -1,0 +1,1062 @@
+File.prototype.convertToBase64 = function(callback){
+        var reader = new FileReader();
+        reader.onload = function(e) {
+                 callback(e.target.result)
+        };
+        reader.onerror = function(e) {
+                 callback(null);
+        };
+        reader.readAsDataURL(this);
+};
+
+$(document).keypress(function(event) {
+        if(event.which==13 && !$(event.target).is("textarea")) {
+            event.preventDefault();
+                        // $("#buscar").click();
+            return false;
+        }
+});
+//Clase Form
+var Form = function(params) {
+        this.id = params['id_div'];
+        this.tipo = params['tipo'];
+        this.obj_related = params['obj_related'];
+        this.tipo_obj_related = params['tipo_obj_related'];
+};
+
+//Carga el Formulario
+Form.prototype.cargarForm = function(params_ajax) {
+        var id_div=this.id;
+        //var send_parmas = {};
+        //send_parmas = add_to_array_obl_fields(send_parmas, "" + this.id);
+        var obj_related = $("#" + this.id).attr("obj_related");
+        if (obj_related !== '' && obj_related!= undefined) {
+                var form_serial=serializeDivs(obj_related,this.id);
+        }
+        else{
+                add_to_form_obl_fields("form_params_dummy", this.id);
+                var form_serial=$("#form_params_dummy").serialize();
+        }
+
+        if(params_ajax !== undefined){
+                form_serial += '&'+params_ajax.replace(/%%/g,'=');
+        }
+        if (!$("#" + id_div).hasClass('no-mostrar-cargando')) {
+                $("#" + id_div).append('<i class="fa fa-spin fa-spinner"></i>Cargando...');
+        }
+        //$("#" + id_div).append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; margin-top: 25%; z-index: 2147483647;"><img src="' + $("#uri").val() + 'css/img/spinner.gif"> </div>');
+        var url_call = $("#uri").val() + "filtros.php";
+        $.ajax({
+                url: url_call,
+                context: document.body,
+                type: "POST",
+                //data: {  data: JSON.stringify(send_parmas) },
+                data: form_serial,
+                success: function(responseText) {
+                        //$("#" + id_div).find('#spinnercirclegif').remove();
+                        var aux=analiza_respuesta_html(responseText);
+                        if(aux=='OK'){
+                                $("#" + id_div).html(responseText);
+                                if($("#VALORES_CAMPOS").val()!==''){
+                                        var form=$.parseJSON($("#VALORES_CAMPOS").val());
+                                        parseValuesForm(form);
+                                }
+                        }/*else{
+                                alert(aux);
+                        }*/
+                        if($("#" + id_div).attr('flag_cargar')=='SI' && $("#identificador").val()!=='NO_BUSCAR'){
+                                $("#" + id_div +" #buscar").click();
+                        }
+
+                        $.datepicker.regional['es'] = {
+                                closeText: 'Cerrar',
+                                prevText: '<Ant',
+                                nextText: 'Sig>',
+                                currentText: 'Hoy',
+                                monthNames: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
+                                monthNamesShort: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+                                dayNames: ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'],
+                                dayNamesShort: ['Dom', 'Lun', 'Mar', 'Mié', 'Juv', 'Vie', 'Sáb'],
+                                dayNamesMin: ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'S&aacute;'],
+                                weekHeader: 'Sm',
+                                dateFormat: 'dd/mm/yy',
+                                firstDay: 1,
+                                isRTL: false,
+                                showMonthAfterYear: false,
+                                yearSuffix: ''
+                        };
+                        $.datepicker.setDefaults($.datepicker.regional["es"]);
+                        if(typeof(cargarFormCallback) == "function" && cargarFormCallback != undefined){
+                                cargarFormCallback($("#" + id_div));
+                        }
+                        $('select[data-has_dependant="True"]').change();
+                }
+        });
+};
+
+Form.prototype.sendFormFiltros = function() {
+        var id_div=this.id;
+        $("#" + id_div).append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; "><img src="' + $("#uri").val() + 'css/img/spinner_mini.gif"> </div>');
+        //add_to_form_obl_fields("form_params", this.id);
+                var obj_related = $("#" + this.id).attr('obj_related');
+                obj_related_concat = '';
+                if(obj_related != undefined && obj_related != ''){
+                        obj_related = obj_related.replace('[','').replace(']','');
+                        obj_related_concat = ', '+obj_related.replace('[','').replace(']','');
+                }
+                var form_serial=serializeDivs('[{"obj_related":"' + this.id + '","tipo":"form"}'+obj_related_concat+']',this.id);
+        $.ajax({
+                url: $("#uri").val() + "filtros2.php",
+                context: document.body,
+                type: "POST",
+                //data: $("#" + id_div + " #form_params").serialize(),
+                data: form_serial,
+                success: function(responseText) {
+                                        var aux=analiza_respuesta_html(responseText);
+                                                $("#" + id_div).find('#spinnercirclegif').remove();
+                                        if(aux=='OK'){
+                                                // $("#" + id_div).html(responseText);
+                                        }/*else{
+                                                alert(aux);
+                                        }*/
+                                        // $("#" + id_div).html(responseText);
+
+                                        reload_div('['+obj_related+']', $("#" + id_div).attr("tipo_obj_related"));
+
+                                        //callback opcional
+                                        if(typeof(sendFormFiltrosCallback) == "function" && sendFormFiltrosCallback != undefined){
+                                                sendFormFiltrosCallback($("#" + id_div));
+                                        }
+                }
+        });
+}
+
+Form.prototype.sendForm = function(el, tx1) {
+                var id_div=this.id;
+
+                /*if($(el).val() != ''){
+                //      $(el).attr('disabled', 'disabled');
+                }*/
+
+        if (!checkRequired(id_div)){
+                                $(el).removeAttr('disabled');
+                return;
+                }
+
+        reload_div($("#" + this.id).attr("obj_related"), $("#" + this.id).attr("tipo_obj_related"),el);
+                //$(el).removeAttr('disabled');
+}
+Form.prototype.sendConfirmFormTX = function(el,params){
+        var conf = true;
+        conf = confirm(params['desc_defecto']);
+        if(conf){
+                return this.sendFormTX(el,params['tx']);
+        }else{
+                return;
+        }
+}
+Form.prototype.sendFormTX = function(el, tx1,ac=null,codigo_boton=null) {
+        var id_div=this.id;
+
+                // alert($(el).val());
+                if($(el).val() != ''){
+                        $(el).attr('disabled', 'disabled');
+                }
+
+                if (!checkRequired(id_div)){
+                                $(el).removeAttr('disabled');
+                return;
+                }
+
+        var obj_related = $("#" + this.id).attr("obj_related");
+        //add_to_form_obl_fields("form_params", this.id);
+
+        if (tx1.indexOf("http") >= 0) {
+                $("#form_params").attr('action', tx1);
+                $("#form_params").attr('method', 'POST');
+                $("#form_params").submit();
+                                $(el).removeAttr('disabled');
+        } else {
+
+                                var valores = {};
+                                //to hex
+                                $("#"+id_div).find('input').each(function(){
+                                        if($(this).attr('data-hex') == 'true'){
+                                                valores[$(this).attr('name')] = $(this).val();
+                                                $(this).val(stringToHex($(this).val()));
+                                        }
+                                });
+                                //var serialized = $("#+id_div").serialize_options();
+                                var form_serial=serializeDivs('[{"obj_related":"' + this.id + '","tipo":"form"}]',this.id);
+                                if (codigo_boton!=null)
+                                {
+                                        form_serial=form_serial+'&codigo_boton='+codigo_boton;
+                                }
+                                //to val
+                                $("#"+id_div).find('input').each(function(){
+                                        if($(this).attr('data-hex') == 'true'){
+                                                $(this).val(valores[$(this).attr('name')]);
+                                        }
+                                });
+
+                $.ajax({
+                        url: $("#uri").val() + "procesa_form.php?tx=" + tx1,
+                        datatype: "json",
+                        type: "POST",
+                        //data: serialized,
+                        data: form_serial,
+                        success: function(responseText) {
+                                                                $(el).removeAttr('disabled');
+                                var respuesta = $.parseJSON(responseText);
+
+                                var aux = analiza_respuesta(respuesta,'SI');
+                                if (aux=='OK') {
+                                        //alert(respuesta.MENSAJE_RESPUESTA);
+
+                                        if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                                //alert(respuesta.MENSAJE_RESPUESTA);
+                                                window.location.href = respuesta.URL_RESPUESTA;
+                                        } else if(respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== undefined && respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== ""){
+                                                                                        window.open(respuesta.RESPUESTA.URL_RESPUESTA_BLANK, '_blank');
+                                        } else if(respuesta.RESPUESTA.URL_RESPUESTA !== undefined && respuesta.RESPUESTA.URL_RESPUESTA !== ""){
+                                                                                        window.location.href = respuesta.RESPUESTA.URL_RESPUESTA;
+                                                                                } else {
+                                                $("#myModal").modal('hide');
+                                                if($(el).closest('div[tipo="modal"]').length > 0){
+                                                //NBV_20170321
+                                                        if(respuesta.RESPUESTA.CIERRA_MODAL == undefined || respuesta.RESPUESTA.CIERRA_MODAL == 'SI'){
+                                                                eval($(el).closest('div[tipo="modal"]').attr('id')).hideModal();
+                                                        }
+                                                }
+
+                                                if(respuesta.RESPUESTA.NO_REFRESH!='SI' && $("#" + id_div).attr("obj_related") != '' && $("#" + id_div).attr("obj_related") != undefined){
+                                                        reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                                                }
+                                        }
+                                } else {
+                                        //alert(respuesta.MENSAJE_RESPUESTA);
+                                        if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                                window.location.href = respuesta.URL_RESPUESTA;
+                                        }else{
+                                                if(respuesta.RESPUESTA.NO_REFRESH!='SI' && $("#" + id_div).attr("obj_related") != '' && $("#" + id_div).attr("obj_related") != undefined){
+                                                        reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                                                }
+                                        }
+
+                                }
+
+                                //callback opcional
+                                /*if(typeof(sendFormTXCallback) == "function" && sendFormTXCallback != undefined){
+                                        sendFormTXCallback($("#" + id_div), respuesta);
+                                }*/
+                                if(typeof(eval(window['sendFormTXCallback_'+id_div])) == "function" && eval(window['sendFormTXCallback_'+id_div]) != undefined){
+                                        console.log('Entra al callback especial');
+                                        eval('sendFormTXCallback_'+id_div)($("#" + id_div), respuesta);
+                                }else if(typeof(sendFormTXCallback) == "function" && sendFormTXCallback != undefined){
+                                        sendFormTXCallback($("#" + id_div), respuesta);
+                                }
+                        }
+                });
+        }
+}
+
+Form.prototype.exportarSql = function(el, tabla) {
+        var id_div=this.id;
+
+                tx1 = 'exportar_tabla_sql';
+
+                // alert($(el).val());
+                if($(el).val() != ''){
+                        $(el).attr('disabled', 'disabled');
+                }
+
+                if (!checkRequired(id_div)){
+                                $(el).removeAttr('disabled');
+                return;
+                }
+
+        var obj_related = $("#" + this.id).attr("obj_related");
+        //add_to_form_obl_fields("form_params", this.id);
+
+        var valores = {};
+                //to hex
+                $("#"+id_div).find('input').each(function(){
+                        if($(this).attr('data-hex') == 'true'){
+                                valores[$(this).attr('name')] = $(this).val();
+                                $(this).val(stringToHex($(this).val()));
+                        }
+                });
+                //var serialized = $("#+id_div").serialize_options();
+                var form_serial=serializeDivs('[{"obj_related":"' + this.id + '","tipo":"form"}]',this.id);
+
+                //to val
+                condicion = '';
+                $("#"+id_div).find('input, select').each(function(){
+                        //generando la condición con los inputs, enviándola en hexa y agregándosela al form_serial después
+                        if($(this).attr('type') != 'button' && $(this).attr('name') != 'uri_params' && $(this).attr('name') != 'current_url' && $(this).attr('name') != 'uri_comun'){
+                                condicion = (condicion == '')? $(this).attr('name')+" = '"+$(this).val()+"'" : condicion+' and '+$(this).attr('name')+" = '"+$(this).val()+"'";
+                        }
+
+                        //hex to val (volviendo los input_hex a texto en pantalla)
+                        if($(this).attr('data-hex') == 'true'){
+                                $(this).val(valores[$(this).attr('name')]);
+                        }
+                });
+
+                form_serial+='&tabla='+tabla+'&condicion='+stringToHex(condicion);
+
+                $.ajax({
+                                url: $("#uri").val() + "procesa_form.php?tx=" + tx1,
+                                datatype: "json",
+                                type: "POST",
+                                //data: serialized,
+                                data: form_serial,
+                                success: function(responseText) {
+                                                $(el).removeAttr('disabled');
+                                                var respuesta = $.parseJSON(responseText);
+
+                                                if(respuesta.CODIGO_RESPUESTA == 1){
+                                                        $("#"+id_div).find('form')[0].reset();
+
+                                                        var file_data = '';
+                                                        var filename = 'dump_pantalla_dinamica_'+respuesta.RESPUESTA.tabla+'.sql';
+                                                        var datos = respuesta.RESPUESTA.file_datos.replace(/\\\"\\\"/g,"&quot;").replace(/\\\"/g,"").replace(/{\"/g,"").replace(/\"}/g,"").split('","');
+
+                                                        for(var r in datos){
+                                                                file_data += datos[r].replace(/&quot;/g, "\"")+'\n';
+                                                        }
+
+                                                        var blob = new Blob([file_data], {
+                                                                type: 'text/plain;charset=utf-8;'
+                                                        });
+                                                        if (navigator.msSaveBlob) { // IE 10+
+                                                                        navigator.msSaveBlob(blob, filename);
+                                                        } else {
+                                                                        var link = document.createElement("a");
+                                                                        if (link.download !== undefined) { // feature detection
+                                                                                        var url = URL.createObjectURL(blob);
+                                                                                        link.setAttribute("href", url);
+                                                                                        link.setAttribute("download", filename);
+                                                                                        link.style.visibility = 'hidden';
+                                                                                        document.body.appendChild(link);
+                                                                                        link.click();
+                                                                                        document.body.removeChild(link);
+                                                                        }
+                                                        }
+                                                }else{
+                                                        alert(respuesta.MENSAJE_RESPUESTA);
+                                                }
+                                }
+                });
+}
+
+Form.prototype.toggleDivs = function(el, params) {
+
+                var tx1=params['tx'];
+        var id_div=this.id;
+
+        var divs = params['onchange'];
+
+                if(divs){
+                        for (var i in divs){
+                                if($('div#'+divs[i].obj_related) != undefined){
+                                        $('div#'+divs[i].obj_related).toggleClass('hide');
+                                }
+                        }
+                }
+
+}
+Form.prototype.sendConfirmMasiveFormTX = function(el, params) {
+        var conf = true;
+        conf = confirm(params['desc_defecto']);
+        if(conf){
+                return this.sendMasiveFormTX(el,params);
+        }else{
+                return;
+        }
+}
+Form.prototype.sendMasiveFormTX = function(el, params) {
+                if($(el).val() != ''){
+                        $(el).attr('disabled', 'disabled');
+                }
+
+                var tx1=params['tx'];
+        var id_div=this.id;
+
+                if (!checkRequired(id_div)){
+                        $(el).removeAttr('disabled');
+                        return;
+                }
+
+                if (!checkRequiredMasive(JSON.stringify(params['onchange']))){
+                        $(el).removeAttr('disabled');
+                        return;
+                }
+
+        //var obj_related = $("#" + this.id).attr("obj_related");
+        //add_to_form_obl_fields("form_params", this.id);
+        if (tx1.indexOf("http") >= 0) {
+                $("#form_params").attr('action', tx1);
+                $("#form_params").attr('method', 'POST');
+                $("#form_params").submit();
+                                $(el).removeAttr('disabled');
+        } else {
+                var data_post1=serializeDivs(JSON.stringify(params['onchange']),this.id);
+                if(params["codigo_boton"]!='' && params["codigo_boton"]!=undefined){
+                        data_post1=data_post1+'&codigo_boton='+params["codigo_boton"];
+                }
+                $.ajax({
+                        url: $("#uri").val() + "procesa_form.php?tx=" + tx1,
+                        datatype: "json",
+                        type: "POST",
+                        //data: serializeDivs(JSON.stringify(params['onchange']),this.id),
+                        data: data_post1,
+                        success: function(responseText) {
+                                $(el).removeAttr('disabled');
+                                var respuesta = $.parseJSON(responseText);
+
+                                        //limpio el form
+                                        /*
+                                        $("#" + id_div).find('form')[0].reset();
+                                        $("#" + id_div).find('form').find('input,select').each(function(){
+                                                if($(this).attr('type') != 'hidden' && $(this).attr('type') != 'button' && $(this).attr('type') != 'file'){
+                                                        $(this).val('');
+                                                }
+                                        });
+                                        */
+                                        // HB 20180417 se agrega else
+                                        if(respuesta.RESPUESTA != undefined){
+                                                if(respuesta.RESPUESTA.URL_RESPUESTA !== undefined && respuesta.RESPUESTA.URL_RESPUESTA !== ""){
+                                                        respuesta.URL_RESPUESTA = respuesta.RESPUESTA.URL_RESPUESTA;
+                                                }else if(respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== undefined && respuesta.RESPUESTA.URL_RESPUESTA_BLANK !== ""){
+                                                       window.open(respuesta.RESPUESTA.URL_RESPUESTA_BLANK, '_blank');
+                                                }
+                                        }
+
+                                var aux = analiza_respuesta(respuesta,'SI');
+                                if (aux=='OK') {
+                                        //alert(respuesta.MENSAJE_RESPUESTA);
+                                        if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+
+                                                if(respuesta.MENSAJE_RESPUESTA != ''){
+                                                                                                        // alert(respuesta.MENSAJE_RESPUESTA);
+                                                                                                }
+                                                window.location.href = respuesta.URL_RESPUESTA;
+                                        } else {
+                                                $("#myModal").modal('hide');
+                                                if($(el).closest('div[tipo="modal"]').length > 0){
+                                                        //NBV_20170321
+                                                        if(respuesta.RESPUESTA.CIERRA_MODAL == undefined || respuesta.RESPUESTA.CIERRA_MODAL == 'SI'){
+                                                                eval($(el).closest('div[tipo="modal"]').attr('id')).hideModal();
+                                                        }
+                                                        //NBV_20170321
+                                                }
+                                                if(respuesta.RESPUESTA.NO_REFRESH!='SI'){
+                                                        //mvillanueva
+                                                        var obj_related = $("#" + id_div).attr("obj_related");
+                                                        console.log(obj_related);
+                                                        if (obj_related != ''){
+                                                                var obj_related_reload = $.parseJSON(obj_related);
+                                                                if(respuesta.RESPUESTA.NO_RELOAD_DIVS!= undefined && respuesta.RESPUESTA.NO_RELOAD_DIVS.length > 0 ){
+                                                                        array_divs_no_reload = respuesta.RESPUESTA.NO_RELOAD_DIVS;
+                                            xx =  new Array();
+                                                                        obj_related_reload.forEach( function(valor, indice, array) {
+                                                                                //if ($.inArray(valor.obj_related, array_divs_no_reload) >= 0){
+                                                                                        //obj_related_reload.splice(indice,1) ;
+                                                                                //}
+                                                                                //xx =  new Array();
+                                                                                if ($.inArray(valor.obj_related, array_divs_no_reload) == -1) {
+                                                                                        xx[xx.length]=obj_related_reload[indice];
+                                                                                }
+                                                                        });
+                                                                        console.log('los que no se eliminaron son:')
+                                                                        console.log(xx);
+                                                                        obj_related_reload = xx;
+                                                                }
+                                                                reload_div(JSON.stringify(obj_related_reload), $("#" + id_div).attr("tipo_obj_related"));
+                                                                //reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                                                        }
+                                                        //mvillanueva
+
+                                                        //reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                                                }
+                                        }
+                                } else {
+                                        //alert(respuesta.MENSAJE_RESPUESTA);
+                                        if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                                window.location.href = respuesta.URL_RESPUESTA;
+                                        }else{
+                                                if(respuesta.CODIGO_RESPUESTA == '1'){
+                                                        reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                                                }
+                                        }
+                                }
+
+
+                                //DO 2018-04-24 callback opcional para cada div
+                                if(typeof(eval(window['sendMasiveFormTXCallback_'+id_div])) == "function" && eval(window['sendMasiveFormTXCallback_'+id_div]) != undefined){
+                                        console.log('Entra al callback especial');
+                                        eval('sendMasiveFormTXCallback_'+id_div)($("#" + id_div), respuesta);
+                                //callback opcional
+                                }else if(typeof(sendMasiveFormTXCallback) == "function" && sendMasiveFormTXCallback != undefined){
+                                        sendMasiveFormTXCallback($("#" + id_div), respuesta);
+                                }
+                                //FIN DO
+
+                                /*if(typeof(sendMasiveFormTXCallback) == "function" && sendMasiveFormTXCallback != undefined){
+                                        sendMasiveFormTXCallback($("#" + id_div), respuesta);
+                                }
+                                */
+                        }
+                });
+        }
+}
+
+Form.prototype.sendEditFormTX = function(params) {
+        var id_div=this.id;
+        var tx1 = params['tx'];
+        var id1 = params['id_elemento'];
+        add_to_form_obl_fields("form_params_modal", this.id);
+        if (!checkRequired('form_params_modal'))
+                return;
+        $.ajax({
+                url: $("#uri").val() + "procesa_form.php?&tx=" + tx1,
+                datatype: "json",
+                type: "POST",
+                //data: $("#form_params_modal").serialize(),
+                data: $("#form_params_modal").serialize_options(),
+                success: function(responseText) {
+                        var respuesta = $.parseJSON(responseText);
+                        var aux=analiza_respuesta(respuesta,'SI');
+                        if (aux=='' || aux=='OK') {
+                                //alert(respuesta.MENSAJE_RESPUESTA);
+                                if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                        window.location.href = respuesta.URL_RESPUESTA;
+                                } else {
+                                        $("#myModal").modal('hide');
+                                        reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                                }
+                        } else {
+                                //alert(respuesta.MENSAJE_RESPUESTA);
+                                if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                        window.location.href = respuesta.URL_RESPUESTA;
+                                }
+                        }
+
+                                                //callback opcional
+                                                if(typeof(sendEditFormTXCallback) == "function" && sendEditFormTXCallback != undefined){
+                                                        sendEditFormTXCallback($("#" + id_div));
+                                                }
+                }
+        });
+}
+
+Form.prototype.onChangeReload = function(params) {
+        var id_div=this.id;
+        reload_div(JSON.stringify(params['onchange']),'');
+}
+
+Form.prototype.addFormTable = function(params) {
+        var id_div=this.id;
+        if (!checkRequired(id_div)){
+                return;
+        }
+        // NBV 20180525 -> Se agrega en el campo size la cantidad de elementos que se puede agregar
+        var size =params["size"];
+        var id_tabla="tabla_"+id_div+"_group";
+        var llaves=params["tx"];
+        //var llaves = JSON.parse(llave);
+        /*if($("#"+id_div+"_group").length==0){
+                $("#"+id_div).after('<div class="sol-sm-12" id="' + id_div+'_group' + '"></div>');
+        }*/
+
+        // NBV 20180525 -> Se agrega en el campo size la cantidad de elementos que se puede agregar
+        console.log('SIZE =>'+size);
+        if(size!=''){
+                var cantidad_tr = $("#"+id_tabla+" tr").length;
+                //Valido si se pueden agregar mas elementos
+                if(cantidad_tr>size){
+                //      console.log('Ya no se pueden agregar mas elementos');
+                        alert('Ya se completo el máx. de elementos permitidos.');
+                                exit=1;
+                                sigue=false;
+                                return false;
+                }else{
+                        console.log('Aun no se completa el total de elementos permitidos');
+                }
+        }
+
+        if($("#"+id_tabla).length==0){
+                // NBV 2017116
+                //var option_all = $("option:selected",this).map(function () {   return $(this).text();   }).get().join(' y ');
+                //var lengthCampo = $("option:selected",this).length;
+                //console.log(option_all);
+                var table='<table style="margin-bottom: 40px;" id="' + id_tabla+ '"><thead hidden><tr><th></th>';
+                $("#"+id_div+" input[type='text']:not('[role=\"textbox\"]'), #" + id_div + " select, #"+id_div+" input[type='date'], #"+id_div+" textarea, #"+id_div+" div.input-list-container").each(function(){
+                        table=table+'<th>'+$(this).attr('name')+'_desc</th><th>'+$(this).attr('name')+'</th>';
+                });
+                table=table+'</tr></thead><tbody><tr><td><span onclick="removeTrTableForm(this);" class="fa fa-times" style="padding-left: 30px;color:red;" aria-hidden="true"></span></td>';
+                console.log('ID_DIV =>'+id_div);
+                $("#"+id_div+" input[type='text'], #"+id_div+" select, #"+id_div+" input[type='date'], #"+id_div+" textarea, #"+id_div+" div.input-list-container").each(function(){
+                        console.log($(this));
+                        var option_all = $("option:selected",this).map(function () {   return $(this).text();   }).get().join(' y ');
+                        var lengthCampo = $("option:selected",this).length;
+                        if($(this).is('input')){
+                                if ($(this).attr('aria-label')!="Search"){
+                                        table=table+'<td id="' + $(this).val()+ '" style="padding-left: 30px;white-space: normal;">'+$(this).val()+'</td><td hidden>'+$(this).val()+'</td>';
+                                }
+                        }else if($(this).is('textarea')){
+                                        table=table+'<td id="' + $(this).val()+ '" style="padding-left: 30px;white-space: normal;">'+$(this).val()+'</td><td hidden>'+$(this).val()+'</td>';
+
+                        }else if($(this).hasClass('input-list-container')){
+                                valores = ''; $('[name="lista_rut_dato[]"], [name="lista_rut_no_inc_dato[]"]').each(function(){
+                                        valores = (valores == '')? $(this).val() : valores+' , '+$(this).val();
+                                });
+                                        table=table+'<td id="' +valores+ '" style="padding-left: 30px;white-space: normal;">'+valores+'</td><td hidden>'+valores+'</td>';
+                        }else{
+                                if (lengthCampo>1){
+                                        table=table+'<td id="' + $(this).val()+ '" style="padding-left: 30px;white-space: normal;">'+option_all+'</td><td hidden>'+$(this).val()+'</td>';
+                                }else{
+                                        table=table+'<td id="' + $(this).val()+ '" style="padding-left: 30px;white-space: normal;">'+$("option:selected",this).text()+'</td><td hidden>'+$(this).val()+'</td>';
+                                }
+                        }
+                });
+                table=table+'</tr></tbody></table>';
+                //$("#div2_form_controller_dinamico_v2_table > tbody  > tr").find("#filtros")
+                $("#"+id_div+"_group").html(table);
+        }else{
+                var tr='<tr><td><span onclick="removeTrTableForm(this);" class="fa fa-times" style="padding-left: 30px;color:red;" aria-hidden="true"></span></td>';
+                var exit=0;
+        //NUEVO
+                var exit=0;
+                var sigue=false;
+                $("#"+id_div+" input[type='text'], #"+id_div+" select, #"+id_div+" input[type='date'], #"+id_div+" textarea, #"+id_div+" div.input-list-container").each(function(){
+                        var name = $(this).attr('name');
+                        var valor = $(this).val();
+                        var texto = $("option:selected",this).text();
+                        // NBV 2017116
+                        var option_all = $("option:selected",this).map(function () {   return $(this).text();   }).get().join(' y ');
+                        var lengthCampo = $("option:selected",this).length;
+                        //console.log(option_all);
+                        sigue=false;
+                        //tr=tr+'<td id="' +valor+ '" style="padding-left: 30px;">'+texto+'</td><td hidden>'+valor+'</td>';
+                        if($(this).is('input')){
+                                if ($(this).attr('aria-label')!="Search"){
+                                        tr=tr+'<td id="' + $(this).val()+ '" style="padding-left: 30px;white-space: normal;">'+$(this).val()+'</td><td hidden>'+$(this).val()+'</td>';
+                                }
+                        }else if($(this).is('textarea')){
+                                        tr=tr+'<td id="' + $(this).val()+ '" style="padding-left: 30px;white-space: normal;">'+$(this).val()+'</td><td hidden>'+$(this).val()+'</td>';
+                        }else if($(this).hasClass('input-list-container')){
+                                console.log('ENCONTRE ELEMENTO LISTA !!!!');
+                                valores = ''; $('[name="lista_rut_dato[]"],[name="lista_rut_no_inc_dato[]"]').each(function(){
+                                        valores = (valores == '')? $(this).val() : valores+' , '+$(this).val();
+                                });
+                                        tr=tr+'<td id="' +valores+ '" style="padding-left: 30px;white-space: normal;">'+valores+'</td><td hidden>'+valores+'</td>';
+                        }else{
+                                if (lengthCampo>1){
+                                        tr=tr+'<td id="' +valor+ '" style="padding-left: 30px;white-space: normal;">'+option_all+'</td><td hidden>'+valor+'</td>';
+                                }else{
+                                        tr=tr+'<td id="' +valor+ '" style="padding-left: 30px;white-space: normal;">'+texto+'</td><td hidden>'+valor+'</td>';
+                                }
+                        }
+                });
+                $('#'+id_tabla+' > tbody > tr').each(function(){
+                        if($(this).text()==$(tr).text()){
+                                alert('Registro Repetido.');
+                                exit=1;
+                                sigue=false;
+                                return false;
+                        }else{
+                                sigue=true;
+                        }
+                });
+                if(sigue){
+                        $.each(llaves, function(i, item) {
+                                var aplica = item['aplica'];
+                                $('#'+id_tabla+' > tbody > tr > td:nth-child(2)').each(function() {
+                                        var td_ini = $(this).attr('id');
+                                        var tr_ini = $(tr).find('td:eq(2)').text();
+                                        if(aplica == tr_ini){
+                                                sigue=false;
+                                                exit=0;
+                                                return false;
+                                        }else{
+                                                if(sigue){
+                                                        if(tr_ini == td_ini){
+                                                                exit=1;
+                                                                sigue=false;
+                                                                return false;
+                                                        }
+                                                }
+                                        }
+                                });
+                        });
+                }
+        //NUEVO
+                /*$("#"+id_div+" input[type='text'], #"+id_div+" select").each(function(){
+                        if($(this).attr('name')==llave){
+                                if($("#"+id_tabla+" > tbody  > tr").find("#"+$(this).val()).length>0){
+                                        alert('Registro repetido');
+                                        exit=1;
+                                        return;
+                                }
+                        }
+                        if($(this).is('input')){
+                                tr=tr+'<td id="' + $(this).val()+ '" style="padding-left: 30px;">'+$(this).val()+'</td><td hidden>'+$(this).val()+'</td>';
+                        }else{
+                                tr=tr+'<td id="' + $(this).val()+ '" style="padding-left: 30px;">'+$("option:selected",this).text()+'</td><td hidden>'+$(this).val()+'</td>';
+                        }
+                });
+                */
+                if(exit==1){
+                        return ;
+                }
+                tr=tr+'</tr>';
+                if($('#' + id_tabla+' body tr:last').length>0){
+                        $('#' + id_tabla+' tr:last').after(tr);
+                }else{
+                        $('#' + id_tabla+' tbody').append(tr);
+                }
+                /*$('#' + id_div+'_table > tbody  > tr').each(function() {
+                        $('td',this).each(function() {
+                                alert($(this).html());
+                                alert($(this).attr('id'));
+                                if($(this).attr('id')==llave){
+                                        alert('No se puede agregar el mismo filtro');
+                                        return;
+                                }
+                        });
+                });
+                */
+        }
+}
+
+function removeTrTableForm(obj){
+        obj.closest('tr').remove();
+}
+Form.prototype.sendFileForm = function(tx1, id_acordeon, params, el){
+        if($(el).val() != ''){
+                var tx1=tx1;
+                var id_div=this.id;
+
+                //$("#" + id_div +", #" + id_div + id_acordeon).append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; "><img src="' + $("#uri").val() + 'css/img/spinner_mini.gif"> </div>');
+
+
+
+                if($(el).val() != '' && $(el).attr('type') != 'file'){
+                        $(el).attr('disabled', 'disabled');
+                }
+
+                if(id_acordeon===''){
+                        $("#" + id_div).append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; "><img src="' + $("#uri").val() + 'css/img/spinner_mini.gif"> </div>');
+                        if(!checkRequired(id_div)){
+                                $("#" + id_div).find('#spinnercirclegif').remove();
+                                $("#" + id_div).find('input[type="file"]').val(''); // HBR 20180605 - para limpiar el input
+                                $(el).removeAttr('disabled');
+                                return;
+                        }
+
+
+                        //revisando tipo de archivo
+                        var tipo_archivo_ok = true;
+                        var peso_archivo = '';
+                        var array_extensiones = [];
+                        $("#" + id_div).find('input[type="file"]').each(function() {
+                                var $this = $(this);
+
+                                var fileName = $this.val().match(/[^\/\\]+$/);
+
+                                $("#" + id_div).find('select[name="categoria"]').val();
+                                // Para validación de archivo de diccionario de locales
+                                if ($("#" + id_div).find('select[name="categoria"]').val() == 'DICCIONARIO_LOCALES') {
+                                    let fileExtension2 = fileName[0].slice((fileName[0].lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+                                    //console.log('EOP extension: ' + fileExtension2);
+                                    if (fileExtension2 != 'csv') {
+                                        alert('Error, debe seleccionar un archivo con extension csv.');
+                                        $("#" + id_div).find('#spinnercirclegif').remove();
+                                        $("#" + id_div).find('input[type="file"]').val('');
+                                        $(el).removeAttr('disabled');
+                                        return false;
+                                    }
+                                }
+
+                                if(fileName != '' && fileName != undefined && fileName[0] != undefined && fileName != null && fileName != 'null'){
+                                        var fileExtension = fileName[0].slice((fileName[0].lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
+                                        if($this.attr('data-extensions') != ''){
+                                                array_ext = $this.attr('data-extensions').replace(' ','').split(',');
+                                                array_extensiones = $.map(array_ext, function(value){
+                                                    return value.replace(/ /g, '');
+                                                });
+                                                //if($.inArray(fileExtension, array_ext) == -1){
+                                                if($.inArray(fileExtension, array_extensiones) == -1){
+                                                        tipo_archivo_ok = false;
+                                                }
+                                        }
+                                        if($this.attr('data-peso') != ''){
+                                                peso_archivo = $this.attr('data-peso');
+                                        }
+                                }
+                        });
+
+                        /* hack fix - espera 300ms para que muestre el loader en IE */
+                setTimeout(function(){
+                        if(tipo_archivo_ok){
+                                var data1 = new FormData($("#"+id_div).find('form')[0]);
+                                $.ajax({
+                                        url: $("#uri").val()+"subir_files.php?app_dinamica=" + $("#app_dinamica").val() + "&session_id=" + $("#session_id").val() + "&rutCliente=" + $("#rutCliente").val() + '&peso=' + peso_archivo,
+                                        context: document.body,
+                                        type:"POST",
+                                        async: false,
+                                        cache: false,
+                                        contentType: false,
+                                        processData: false,
+                                        data:data1,
+                                        success: function(responseText)
+                                        {
+                                                console.log('En success');
+                                                console.log('Peso archivo: '+peso_archivo);
+                                                console.log('Response Text: '+responseText);
+                                                if(responseText == 'OK'){
+                                                        var i=0;
+                                                        var procesar_file = 1;
+                                                        var timeout = 1;
+                                                        $("#" + id_div).find('input[type="file"]').each(function() {
+                                                                i=i+1;
+                                                                var $this = $(this);
+                                                                var nombre= 'filename_' + i;
+
+                                                                if($('input[name="subir_hex"]').length > 0 && $('input[name="subir_hex"]').val() == 1){
+                                                                        procesar_file = 0;
+                                                                        var selectedFile = $this[0].files[0];
+                                                                        selectedFile.convertToBase64(function(base64){
+
+                                                                                $('#'+id_div+' form').find('input[name="'+nombre+'_b64'+'"]').remove();
+                                                                                $('<input>').attr({ type: 'hidden', name: nombre+'_b64', value:base64 }).appendTo('#'+id_div+' form');
+                                                                                procesar_file = 1;
+                                                                        });
+                                                                }
+                                                                if ($this.val() == '') {
+                                                                        if($this.closest('div').hasClass('required')){
+                                                                                alert("Debe seleccionar el(los) archivos");
+                                                                                $("#" + id_div).find('#spinnercirclegif').remove();
+                                                                                $(el).removeAttr('disabled');
+                                                                                return false;
+                                                                        }
+                                                                } else {
+
+                                                                        var fileName = $this.val().match(/[^\/\\]+$/);
+
+                                                                //if($.inArray(fileExtension, array_ext) != -1){
+                                                                        //$('#'+id_div+' form').find('input[name="'+nombre+'"]').remove();
+                                                                        $('#'+id_div+' form').find('input[name="'+nombre+'"][type="hidden"]').remove();
+                                                                        $('<input>').attr({ type: 'hidden', name: nombre, value:fileName }).appendTo('#'+id_div+' form');
+                                                                        //$this.remove();
+                                                                        $this.val('');
+                                                                }
+                                                        });
+                                                var procesa_interval = setInterval(function(){
+                                                        if(procesar_file || timeout == 20){
+                                                                clearInterval(procesa_interval);
+                                                                $.ajax({
+                                                                        url: $("#uri").val()+"procesa_file.php?app_dinamica=" + $("#app_dinamica").val() + "&session_id=" + $("#session_id").val() + "&rutCliente=" + $("#rutCliente").val() +"&tx="+tx1,
+                                                                        datatype: "json",
+                                                                        type:"POST",
+                                                                        data: serializeDivs(JSON.stringify(params['onchange']), id_div),
+                                                                        success: function(responseText)
+                                                                        {
+                                                                                //$("#" + id_div).find('#spinnercirclegif').remove();
+                                                                                $("#" + id_div+" #spinnercirclegif").remove();
+                                                                                $(el).removeAttr('disabled');
+                                                                                var respuesta=$.parseJSON(responseText);
+                                                                                var aux=analiza_respuesta(respuesta,'NO');
+                                                                                if (aux=='' || aux=='OK') {
+                                                                                        if(respuesta.URL_RESPUESTA!==undefined && respuesta.URL_RESPUESTA!==""){
+                                                                                                window.location.href = respuesta.URL_RESPUESTA;
+                                                                                        }
+                                                                                        else if(respuesta.RESPUESTA.URL_RESPUESTA!==undefined && respuesta.RESPUESTA.URL_RESPUESTA!==""){
+                                                                                                window.location.href = respuesta.RESPUESTA.URL_RESPUESTA;
+                                                                                        }
+                                                                                        else{
+                                                                                                $("#div_body").html('');
+                                                                                                // if(respuesta.MENSAJE_RESPUESTA != '') alert(respuesta.MENSAJE_RESPUESTA);
+
+                                                                                                //reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                                                                                                if (respuesta.RESPUESTA.NO_REFRESH!="SI")
+                                                                                                {
+                                                                                                        //reload_div($("#" + id_div).attr("obj_related"), $("#" + id_div).attr("tipo_obj_related"));
+                                                                                                //var obj_related_reload = $.parseJSON($("#" + id_div).attr("obj_related"));
+                                                                                                var obj_related_reload = '';
+if($("#" + id_div).attr("obj_related") != ""){
+        obj_related_reload = $.parseJSON($("#" + id_div).attr("obj_related"));
+}
+                                                                                                if(respuesta.RESPUESTA.NO_RELOAD_DIVS!= undefined && respuesta.RESPUESTA.NO_RELOAD_DIVS.length > 0 ){
+                                                                                                        array_divs_no_reload = respuesta.RESPUESTA.NO_RELOAD_DIVS;
+                                                                                                        xx =  new Array();
+                                                                                                        obj_related_reload.forEach( function(valor, indice, array) {
+                                                                                                        if ($.inArray(valor.obj_related, array_divs_no_reload)== -1) {
+                                                                                                                xx[xx.length]=obj_related_reload[indice];
+                                                                                                        }
+                                                                                                        });
+                                                                                                        obj_related_reload = xx;
+                                                                                                }
+                                                                                                reload_div(JSON.stringify(obj_related_reload),$("#" + id_div).attr("tipo_obj_related"));
+                                                                                                }
+
+                                                                                        }
+                                                                                } else {
+                                                                                                //alert(respuesta.MENSAJE_RESPUESTA);
+                                                                                                if ('app_dinamica' in respuesta && (respuesta["app_dinamica"] == 'lce_dinamico_libros' || respuesta["app_dinamica"] == 'importer_dinamico' || respuesta["app_dinamica"] == 'lce_dinamico_diccionario')) {
+                                                                                                    return;
+                                                                                                }
+                                                                                                if(respuesta.MENSAJE_RESPUESTA != '') alert(respuesta.MENSAJE_RESPUESTA);
+                                                                                                if (respuesta.URL_RESPUESTA !== undefined && respuesta.URL_RESPUESTA !== "") {
+                                                                                                                window.location.href = respuesta.URL_RESPUESTA;
+                                                                                                }
+                                                                                }
+
+                                                                                //callback opcional para cada div - HBORQUEZ 20170207
+                                                                                if(typeof(eval(window['sendFileFormCallback_'+id_div])) == "function" && eval(window['sendFileFormCallback_'+id_div]) != undefined){
+                                                                                        console.log('Entra al callback especial');
+                                                                                        eval('sendFileFormCallback_'+id_div)($("#" + id_div), responseText);
+                                                                                }else if(typeof(sendFileFormCallback) == "function" && sendFileFormCallback != undefined){
+                                                                                        //callback opcional, por cada archivo subido
+                                                                                        sendFileFormCallback($("#" + id_div), responseText);
+                                                                                }
+                                                                                /*
+                                                                                //callback opcional, por cada archivo subido
+                                                                                if(typeof(sendFileFormCallback) == "function" && sendFileFormCallback != undefined){
+                                                                                        sendFileFormCallback($("#" + id_div), responseText);
+                                                                                }
+                                                                                //callback opcional para cada div - HBORQUEZ 20170207
+                                                                                if(typeof(eval('sendFileFormCallback_'+id_div)) == "function" && eval('sendFileFormCallback_'+id_div) != undefined){
+                                                                                        eval('sendFileFormCallback_'+id_div)($("#" + id_div), responseText);
+                                                                                }
+                                                                                */
+                                                                        }
+                                                                });
+                                                        }
+                                                        timeout++;
+                                                }, 300);
+                                                                        /*}else{
+                                                                                $("#" + id_div).find('#spinnercirclegif').remove();
+                                                                                alert("Debe subir un archivo de formato v\u00e1lido ("+$this.attr('data-extensions')+")");
+                                                                                return false;
+                                                                        }*/
+
+                                                }else{
+                                                        $("#" + id_div).find('#spinnercirclegif').remove();
+                                                        $(el).removeAttr('disabled');
+                                                        alert(responseText);
+                                                        return false;
+                                                }
+                                        }
+                                });
+                        }else{
+                                $("#" + id_div).find('#spinnercirclegif').remove();
+                                $(el).removeAttr('disabled');
+                                alert("Debe seleccionar un archivo de formato v\u00e1lido.");
+                                return false;
+                        }
+                },300);
+                        /*alert("hola");
+                        $("form#form_params").submit(function(e) {
+
+                                var url = $("#uri").val()+"subir_files.php?app_dinamica=" + $("#app").val() + "&session_id=" + $("#session_id").val() + "&rutCliente=" + $("#rutCliente").val();
+                                alert(url);
+                                var data1 = new FormData($(this)[0]);
+                                alert(data1);
+                                $.ajax({
+                                        type: "POST",
+                                        url: url,
+                                        data: data1,
+                                        async: false,
+                                        cache: false,
+                                        contentType: false,
+                                        processData: false,
+                                        success: function(data)
+                                        {
+                                                alert("hola");
+                                                alert(data); // show response from the php script.
+                                        }
+                                });
+
+                                e.preventDefault(); // avoid to execute the actual submit of the form.
+                        });
+                        $("form#form_params").submit();*/
+                }
+                else{
+                        $("#" + id_div + id_acordeon).append('<div id="spinnercirclegif" style="text-align: center; left: auto; right: auto; "><img src="' + $("#uri").val() + 'css/img/spinner_mini.gif"> </div>');
+                        if(!checkRequired(id_div + id_acordeon)){
+                                $("#" + id_div + id_acordeon).find('#spinnercirclegif').remove();
+                                $(el).removeAttr('disabled');
+                                $("#" + id_div + id_acordeon).find('input[type="file"]').val(''); // HBR 20180605 - para limpiar el input
+                                return;
+                        }
+                        if (!$("#tabla_acordeon_"+id_acordeon).hasClass('no-mostrar-cargando')) {
+                                $("#tabla_acordeon_"+id_acordeon).html('<i class="fa fa-spin fa-spinner"></i>Cargando...');
+                        }
+                        //$("#tabla_acordeon_"+id_acordeon).html('<div id="spinnercirclegif2" style="text-align: center; left: auto; right: auto; margin-top: 0%; z-index: 2147483647;"><img src="' + $("#uri").val() + 'css/img/spinner.gif"> </div>');
+                        $.ajax({
+                                url: $("#uri").val()+"subir_files.php?app_dinamica=" + $("#app_dinamica").val() + "&session_id=" + $("#session_id").val() + "&rutCliente=" + $("#rutCliente").val() + "&id_acordeon=" + id_acordeon,
+                                context: document.body,
+                                type:"POST",
+                                data:$("#"+id_div+id_acordeon).find('form').serialize(),
+                                success: function(responseText)
+                                {
+                                        var i=0;
+                                        $('input[type="file"]').each(function() {
+                                                i=i+1;
+                                                var $this = $(this);
+                                                if ($this.val() == '') {
+                                                        alert("Debe seleccionar el(los) archivos");
+                                                        $("#" + id_div + id_acordeon).find('#spinnercirclegif').remove();
+                                                        $(el).removeAttr('disabled');
+                                                        return false;
+                                                } else {
+                                                        var nombre= 'filename_' + i;
+                                                        $('#'+id_div+id_acordeon+' form').find('input[name="'+nombre+'"][type="hidden"]').remove();
+                                                        $('<input>').attr({ type: 'hidden', name: nombre }).appendTo(id_div+id_acordeon);
+                                                        $this.remove();
+                                                        $.ajax({
+                                                                url: $("#uri").val()+"procesa_form.php?app_dinamica=" + $("#app_dinamica").val() + "&session_id=" + $("#session_id").val() + "&rutCliente=" + $("#rutCliente").val() ,
+                                                                datatype:               "json",
+                                                                type:"POST",
+                                                                data:$("#"+id_div+id_acordeon).serialize(),
+                                                                success: function(responseText)
+                                                                {
+                                                                        var respuesta=$.parseJSON(responseText);
+                                                                        $("#" + id_div + id_acordeon).find('#spinnercirclegif').remove();
+                                                                        $(el).removeAttr('disabled');
+                                                                        if(respuesta.CODIGO_RESPUESTA==="1"){
+                                                                                if(respuesta.URL_RESPUESTA!==undefined && respuesta.URL_RESPUESTA!==""){
+                                                                                        window.location.href = respuesta.URL_RESPUESTA;
+                                                                                }
+                                                                                else{
+                                                                                        if(respuesta.MENSAJE_RESPUESTA != '') alert(respuesta.MENSAJE_RESPUESTA);
+                                                                                }
+                                                                        }
+                                                                        else{
+                                                                                if(respuesta.MENSAJE_RESPUESTA != '') alert(respuesta.MENSAJE_RESPUESTA);
+                                                                                if(respuesta.URL_RESPUESTA!==undefined && respuesta.URL_RESPUESTA!==""){
+                                                                                        window.location.href = respuesta.URL_RESPUESTA;
+                                                                                }
+                                                                        }
+                                                                }
+                                                        });
+                                                }
+                                        });
+                                }
+                        });
+                }
+        }
+};
+Form.prototype.sendConfirmFileForm = function(el,params){
+        //HBR 20171019 - para confirm en el file change
+        var conf = true;
+        conf = confirm(params['desc_defecto']);
+        if(conf){
+                return this.sendFileForm(params['tx'], params['id_acordeon'], params, el);
+        }else{
+                return;
+        }
+}

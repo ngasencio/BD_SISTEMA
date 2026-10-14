@@ -6097,7 +6097,8 @@ def _calcular_compras_resumen(procesos_base, fsc_abiertos_qs, fsc_finalizados_qs
       - alertas: procesos con Licitación/Compra Ágil enlazada y fecha de
         cierre real (de Mercado Público), ordenadas por urgencia — para
         avisar antes de que cierren (o avisar que ya cerraron y falta
-        adjudicar/tramitar).
+        adjudicar/tramitar). Una Compra Ágil en "Proveedor seleccionado" ya
+        está resuelta y NO se lista.
       - gestion_interna: FSC en trámite (AC, no finalizados) que TODAVÍA no
         tienen un código real de Mercado Público enlazado — sin clasificar,
         o clasificados en un tipo manual (Convenio Marco/Trato Directo/OC
@@ -6144,15 +6145,16 @@ def _calcular_compras_resumen(procesos_base, fsc_abiertos_qs, fsc_finalizados_qs
         dias = (fecha_cierre_date - hoy).days
         urgencia = 'vencido' if dias < 0 else 'alta' if dias <= 3 else 'media' if dias <= 10 else 'baja'
         # Compra Ágil: el estado REAL en Mercado Público pesa más que la sola
-        # fecha — "Proveedor Seleccionado" (o algo posterior en el flujo) es
-        # una compra resuelta aunque su fecha de cierre quedó muy atrás, así
-        # que no debe alarmar; "Publicada" (todavía abierta a ofertas) sí es
-        # motivo de alerta en rojo, cierre próximo o no.
+        # fecha — "Proveedor Seleccionado" es una compra resuelta aunque su
+        # fecha de cierre quedó muy atrás: ya no hay plazo que vigilar, así que
+        # sale de las notificaciones (antes quedaba en verde "En plazo");
+        # "Publicada" (todavía abierta a ofertas) sí es motivo de alerta en
+        # rojo, cierre próximo o no.
         if p.tipo_proceso == 'COMPRA_AGIL' and estado_mp:
             estado_mp_norm = estado_mp.lower()
             if 'seleccionad' in estado_mp_norm:
-                urgencia = 'baja'
-            elif 'public' in estado_mp_norm:
+                continue
+            if 'public' in estado_mp_norm:
                 urgencia = 'vencido'
         alertas.append({
             'proceso_id': p.id, 'titulo': p.titulo, 'tipo_proceso': p.tipo_proceso,
@@ -6163,8 +6165,7 @@ def _calcular_compras_resumen(procesos_base, fsc_abiertos_qs, fsc_finalizados_qs
         })
     # Prioridad por urgencia real (vencido→alta→media→baja) y, dentro de cada
     # nivel, de menor a mayor días — así lo más atrasado/próximo a cerrar
-    # siempre encabeza la lista, sin que un "vencido" reclasificado a 'baja'
-    # (Compra Ágil con proveedor ya seleccionado) tape lo que sí urge.
+    # siempre encabeza la lista.
     _RANGO_URGENCIA = {'vencido': 0, 'alta': 1, 'media': 2, 'baja': 3}
     alertas.sort(key=lambda a: (_RANGO_URGENCIA[a['urgencia']], a['dias']))
 
@@ -6175,6 +6176,9 @@ def _calcular_compras_resumen(procesos_base, fsc_abiertos_qs, fsc_finalizados_qs
         procesos_f = list(f.procesos_compra.all())
         if any(p.licitacion_id or p.codigo_compra_agil for p in procesos_f):
             continue
+        # Días corridos desde la derivación a comprador hasta hoy. La UI lo muestra
+        # como "N días — sin tramitar" solo cuando n_procesos == 0 (sin gestión).
+        fecha_derivado = _parse_fecha_fsc(f.fecha_derivado)
         gestion_interna.append({
             'id': f.id,
             'id_formulario': generar_id_formulario(f.folio, f.anho, formulario_texto=f.formulario),
@@ -6183,6 +6187,7 @@ def _calcular_compras_resumen(procesos_base, fsc_abiertos_qs, fsc_finalizados_qs
             'requerimiento': f.requerimiento,
             'monto_estimado': f.monto_estimado,
             'fecha_derivado': f.fecha_derivado,
+            'dias_desde_derivacion': max((hoy - fecha_derivado).days, 0) if fecha_derivado else None,
             'n_procesos': len(procesos_f),
             'tipo_proceso': procesos_f[0].tipo_proceso if procesos_f else None,
         })
@@ -6504,6 +6509,56 @@ def quitar_oc_de_proceso(proceso_id, codigo_oc, usuario):
                 formulario_derivado_id__in=ids_fsc, orden_compra_id=codigo_oc,
                 creado_desde_proceso=True,
             ).delete()
+
+
+def quitar_formulario_de_proceso(proceso_id, formulario_id, usuario):
+    """Saca un FSC de un proceso; si era el ÚLTIMO, el proceso completo se
+    elimina (con su historial y sus enlaces a OC). Es la salida que faltaba para
+    un proceso "vacío": `desvincular_proceso_mp` deja el proceso vivo sin código
+    de Mercado Público, y antes de esto no había forma de quitarlo del formulario.
+
+    En una compra conjunta (el proceso agrupa más FSC) solo se suelta este
+    formulario y el proceso sigue para los demás. Igual que `quitar_oc_de_proceso`,
+    revierte los FscOcLink que ESTA vía creó (`creado_desde_proceso=True`) y nunca
+    uno confirmado de verdad en /fsc-oc-pac; además lo conserva si otro proceso del
+    mismo FSC sigue enlazando esa OC. La OC en sí no se toca.
+
+    Lanza ProcesoCompraFormulario.DoesNotExist si el FSC no está en el proceso.
+    Devuelve {'proceso_eliminado': bool}."""
+    with transaction.atomic():
+        proceso = ProcesoCompra.objects.get(pk=proceso_id)
+        vinculo = ProcesoCompraFormulario.objects.get(
+            proceso_id=proceso_id, formulario_derivado_id=formulario_id)
+
+        codigos_oc = list(proceso.vinculos_oc.values_list('orden_compra_id', flat=True))
+        if codigos_oc:
+            seguirian_enlazadas = set(
+                ProcesoCompraOrdenCompra.objects
+                .filter(
+                    orden_compra_id__in=codigos_oc,
+                    proceso__vinculos_formulario__formulario_derivado_id=formulario_id,
+                )
+                .exclude(proceso_id=proceso_id)
+                .values_list('orden_compra_id', flat=True)
+            )
+            a_revertir = [c for c in codigos_oc if c not in seguirian_enlazadas]
+            if a_revertir:
+                FscOcLink.objects.filter(
+                    formulario_derivado_id=formulario_id, orden_compra_id__in=a_revertir,
+                    creado_desde_proceso=True,
+                ).delete()
+
+        vinculo.delete()
+        eliminado = not proceso.vinculos_formulario.exists()
+        if eliminado:
+            proceso.delete()  # CASCADE: vínculos de OC, historial de estados y avisos del proceso
+
+    logger.info(
+        'Proceso de compra %s ("%s") %s: formulario %s quitado por %s.',
+        proceso_id, proceso.titulo, 'eliminado' if eliminado else 'conservado (compra conjunta)',
+        formulario_id, getattr(usuario, 'username', usuario),
+    )
+    return {'proceso_eliminado': eliminado}
 
 
 # =============================================================================

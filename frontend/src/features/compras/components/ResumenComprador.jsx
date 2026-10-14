@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { getResumenComprador } from '../api/comprasApi';
 import { KpiCard } from '../../abastecimiento/components/KpiCard';
-import { tipoLabel, colorPorTipo } from '../constants/estadosProceso';
+import { tipoLabel, colorPorTipo, coloresDias } from '../constants/estadosProceso';
 import VerProcesoModal from './VerProcesoModal';
 
 const fmtN = (n) => new Intl.NumberFormat('es-CL').format(n ?? 0);
@@ -57,7 +57,16 @@ function AlertaRow({ a, onVer, mostrarComprador }) {
     );
 }
 
+// "Sin tramitar" = FSC derivado al comprador que aún no tiene ninguna gestión
+// (n_procesos === 0): se cuenta desde su Fecha Derivado hasta hoy. Los que ya
+// tienen un proceso creado (aunque sin código de Mercado Público) no lo llevan.
+function textoSinTramitar(dias) {
+    if (dias === 0) return 'Derivado hoy — sin tramitar';
+    return `${dias} día${dias === 1 ? '' : 's'} — sin tramitar`;
+}
+
 function GestionRow({ f, onGestionar, mostrarComprador }) {
+    const sinTramitar = f.n_procesos === 0 && f.dias_desde_derivacion != null;
     return (
         <div
             onClick={() => onGestionar(f)} role="button"
@@ -76,7 +85,17 @@ function GestionRow({ f, onGestionar, mostrarComprador }) {
                     <div style={{ fontSize: 11, color: '#64748b' }}>Comprador: {f.comprador || 'sin asignar'}</div>
                 )}
             </div>
-            <span style={{ fontSize: 11.5, color: '#475569', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtCLP(f.monto_estimado)}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+                <span style={{ fontSize: 11.5, color: '#475569', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtCLP(f.monto_estimado)}</span>
+                {sinTramitar && (
+                    <span
+                        title={`Derivado el ${f.fecha_derivado}`}
+                        style={{ fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', color: coloresDias(f.dias_desde_derivacion).color }}
+                    >
+                        {textoSinTramitar(f.dias_desde_derivacion)}
+                    </span>
+                )}
+            </div>
         </div>
     );
 }
