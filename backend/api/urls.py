@@ -39,6 +39,11 @@ from .views import (
     cancelar_actualizacion_formularios, formularios_stats_view, formularios_flujo_view,
     formularios_alertas_view, formularios_unificacion_view, formularios_historial_view,
     formularios_organigrama_view, formularios_ficha_view, inicio_resumen_view,
+    FormularioPACViewSet, FormularioPACProductoViewSet,
+    formularios_pac_stats_view, formularios_pac_flujo_view, formularios_pac_alertas_view,
+    formularios_pac_organigrama_view, formularios_pac_carro_view, formularios_pac_ficha_view,
+    iniciar_actualizacion_formularios_pac, estado_actualizacion_formularios_pac,
+    cancelar_actualizacion_formularios_pac,
     UsuarioViewSet, user_me, DepartamentoViewSet, EstablecimientoViewSet,
     organizacion_arbol_view, organizacion_usuarios_panel_view,
     organizacion_departamento_view, organizacion_departamento_historial_view,
@@ -116,6 +121,10 @@ router.register(r'contratos', GestionContratoViewSet, basename='contrato')
 router.register(r'formularios-fsc', FormularioFSCViewSet, basename='formulariofsc')
 router.register(r'formularios-fsc-derivados', FormularioFSCDerivadoViewSet, basename='formulariofscderivado')
 router.register(r'formularios-fsc-productos', FormularioFSCProductoViewSet, basename='formulariofscproducto')
+
+# Módulo Formularios PAC (fichas de planificación del Plan Anual de Compras)
+router.register(r'formularios-pac-fichas', FormularioPACViewSet, basename='formulariopac')
+router.register(r'formularios-pac-productos', FormularioPACProductoViewSet, basename='formulariopacproducto')
 
 # Módulo Enlace FSC-OC-PAC
 router.register(r'fsc-oc-links', FscOcLinkViewSet, basename='fscoclink')
@@ -252,6 +261,17 @@ urlpatterns = [
     path('formularios/historial/', formularios_historial_view, name='formularios_historial'),
     path('formularios/organigrama/', formularios_organigrama_view, name='formularios_organigrama'),
     path('formularios/ficha/', formularios_ficha_view, name='formularios_ficha'),
+
+    # Formularios PAC (fichas del Plan Anual de Compras)
+    path('formularios-pac/stats/', formularios_pac_stats_view, name='formularios_pac_stats'),
+    path('formularios-pac/flujo/', formularios_pac_flujo_view, name='formularios_pac_flujo'),
+    path('formularios-pac/alertas/', formularios_pac_alertas_view, name='formularios_pac_alertas'),
+    path('formularios-pac/organigrama/', formularios_pac_organigrama_view, name='formularios_pac_organigrama'),
+    path('formularios-pac/carro/', formularios_pac_carro_view, name='formularios_pac_carro'),
+    path('formularios-pac/ficha/', formularios_pac_ficha_view, name='formularios_pac_ficha'),
+    path('formularios-pac/actualizar/', iniciar_actualizacion_formularios_pac, name='iniciar_actualizacion_formularios_pac'),
+    path('formularios-pac/actualizar-estado/<str:task_id>/', estado_actualizacion_formularios_pac, name='estado_actualizacion_formularios_pac'),
+    path('formularios-pac/actualizar-cancelar/<str:task_id>/', cancelar_actualizacion_formularios_pac, name='cancelar_actualizacion_formularios_pac'),
 
     # Inicio (Home): tablero ejecutivo del año
     path('inicio/resumen/', inicio_resumen_view, name='inicio_resumen'),

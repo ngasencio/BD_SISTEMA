@@ -46,10 +46,10 @@ def _credenciales_por_defecto():
     )
 
 
-def _crear_driver():
+def _crear_driver(directorio=None):
     chrome_options = Options()
     prefs = {
-        "download.default_directory": str(DOWNLOAD_DIR),
+        "download.default_directory": str(directorio or DOWNLOAD_DIR),
         "download.prompt_for_download": False,
         "safebrowsing.enabled": True,
     }
@@ -95,13 +95,19 @@ def _guardar_debug(driver, etiqueta, _avisar=lambda **kw: None):
         _avisar(log=f"⚠️ No se pudo guardar debug de '{etiqueta}': {exc}")
 
 
-def descargar_reportes_panel(rut, dv, clave, progress_callback=None):
+def descargar_reportes_panel(rut, dv, clave, progress_callback=None, botones=None, directorio=None):
     """
-    Inicia sesión en el Panel SS Osorno y descarga los 3 reportes FSC.
+    Inicia sesión en el Panel SS Osorno y descarga los reportes de `exportar.php`.
 
-    Retorna un dict {tipo: Path} con los archivos descargados, donde
-    tipo ∈ {"fsc", "derivados", "carro"}.
+    Por defecto baja los 3 reportes FSC (ver `_BOTONES_REPORTES`) a esta carpeta y retorna
+    un dict {tipo: Path} con tipo ∈ {"fsc", "derivados", "carro"}. El módulo de Formularios
+    PAC reutiliza este login/descarga pasando sus propios `botones` (lista de tuplas
+    `(id_boton, prefijo_archivo, tipo)`) y su propio `directorio`.
     """
+    botones = botones if botones is not None else _BOTONES_REPORTES
+    directorio = Path(directorio) if directorio is not None else DOWNLOAD_DIR
+    directorio.mkdir(parents=True, exist_ok=True)
+
     def _avisar(paso=None, paso_desc=None, progreso_pct=None, log=None):
         if progress_callback:
             progress_callback(paso=paso, paso_desc=paso_desc, progreso_pct=progreso_pct, log=log)
@@ -110,7 +116,7 @@ def descargar_reportes_panel(rut, dv, clave, progress_callback=None):
     archivos = {}
     try:
         _avisar(paso_desc="Iniciando navegador Chrome...", log="Abriendo navegador headless...")
-        driver = _crear_driver()
+        driver = _crear_driver(directorio)
         wait = WebDriverWait(driver, 30)
 
         # 1. LOGIN
@@ -144,10 +150,10 @@ def descargar_reportes_panel(rut, dv, clave, progress_callback=None):
             driver.get(URL_PANEL)
 
         # 3. DESCARGAR LOS REPORTES
-        total_botones = len(_BOTONES_REPORTES)
-        for idx, (boton_id, prefijo, tipo) in enumerate(_BOTONES_REPORTES):
+        total_botones = len(botones)
+        for idx, (boton_id, prefijo, tipo) in enumerate(botones):
             try:
-                antes = _archivos_xls(DOWNLOAD_DIR)
+                antes = _archivos_xls(directorio)
                 btn = wait.until(EC.element_to_be_clickable((By.ID, boton_id)))
                 btn.click()
                 _avisar(
@@ -155,9 +161,9 @@ def descargar_reportes_panel(rut, dv, clave, progress_callback=None):
                     progreso_pct=10 + int((idx + 1) * (35 / total_botones)),
                     log=f"Solicitando descarga de '{boton_id}'...",
                 )
-                archivo = _esperar_descarga(DOWNLOAD_DIR, antes, timeout=90)
+                archivo = _esperar_descarga(directorio, antes, timeout=90)
                 if archivo:
-                    destino = DOWNLOAD_DIR / f"{prefijo}{archivo.suffix.lower()}"
+                    destino = directorio / f"{prefijo}{archivo.suffix.lower()}"
                     if destino.exists():
                         destino.unlink()
                     archivo.rename(destino)

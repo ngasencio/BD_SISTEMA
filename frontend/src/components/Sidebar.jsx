@@ -139,6 +139,13 @@ export default function Sidebar() {
                                     <span>📝</span>
                                     <span className="nav-item-text">Formularios FSC</span>
                                 </div>
+                                <div
+                                    className={`nav-item ${isActive('/abastecimiento/formularios-pac') ? 'active' : ''}`}
+                                    onClick={() => goTo('/abastecimiento/formularios-pac', 'abast', 'formularios')}
+                                >
+                                    <span>🗓️</span>
+                                    <span className="nav-item-text">Formularios PAC</span>
+                                </div>
                             </div>
                         </div>
                         )}

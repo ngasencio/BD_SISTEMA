@@ -27,6 +27,7 @@ from django.core.mail import send_mail
 
 DIR_BACKEND = Path(__file__).resolve().parents[1]
 RUTA_DATA_PANEL = DIR_BACKEND.parent / 'api' / 'data' / 'data_panel'
+RUTA_DATA_FORMULARIOS_PAC = DIR_BACKEND.parent / 'api' / 'data' / 'data_formularios_pac'
 DIR_LOGS = DIR_BACKEND / 'logs'
 
 # Una sincronización normal toma minutos; pasado este tiempo el candado se considera
@@ -179,6 +180,26 @@ def _ejecutar_una_vez(rut, dv, clave, registro):
             registro.info(mensaje)
 
     return page_data_panel.ejecutar_proceso_completo(rut, dv, clave, progress_callback=_cb)
+
+
+def _ejecutar_pac_una_vez(rut, dv, clave, registro):
+    """Un intento de la sincronización de Formularios PAC (mismo Panel, otros 2 reportes)."""
+    from django.db import close_old_connections, connection
+
+    close_old_connections()
+    connection.ensure_connection()
+
+    ruta = str(RUTA_DATA_FORMULARIOS_PAC)
+    if ruta not in sys.path:
+        sys.path.insert(0, ruta)
+    import page_data_panel_pac
+
+    def _cb(paso=None, paso_desc=None, progreso_pct=None, log=None):
+        mensaje = log or paso_desc
+        if mensaje:
+            registro.info(mensaje)
+
+    return page_data_panel_pac.ejecutar_proceso_completo(rut, dv, clave, progress_callback=_cb)
 
 
 def _destinatarios_aviso():

@@ -52,10 +52,11 @@ RUTA_API = base.DIR_BACKEND.parent / 'api'
 
 # Las que corren varias veces al día. Compra Ágil NO va aquí: tarda más y su API es la más
 # frágil, así que tiene su propia tarea nocturna (`--solo compra_agil`).
-ETAPAS_DIARIAS = ('formularios', 'ordenes_compra', 'licitaciones')
+ETAPAS_DIARIAS = ('formularios', 'formularios_pac', 'ordenes_compra', 'licitaciones')
 ETAPAS = ETAPAS_DIARIAS + ('compra_agil',)
 ETIQUETAS = {
     'formularios': 'Formularios FSC (Panel SSO)',
+    'formularios_pac': 'Formularios PAC (Panel SSO)',
     'ordenes_compra': 'Órdenes de Compra (Mercado Público)',
     'licitaciones': 'Licitaciones (Mercado Público)',
     'compra_agil': 'Compras Ágiles (Mercado Público)',
@@ -207,6 +208,17 @@ def _etapa_formularios(registro):
     r = base._ejecutar_una_vez(rut, dv, clave, registro)
     return 'OK', (f"{r.get('nuevos', 0)} nuevos, {r.get('actualizados', 0)} actualizados, "
                   f"{r.get('eliminados', 0)} eliminados ({r.get('total', 0)} procesados)")
+
+
+def _etapa_formularios_pac(registro):
+    rut = str(getattr(settings, 'PANEL_SSO_RUT', '') or '').strip()
+    dv = str(getattr(settings, 'PANEL_SSO_DV', '') or '').strip()
+    clave = str(getattr(settings, 'PANEL_SSO_PASSWORD', '') or '').strip()
+    if not (rut and dv and clave):
+        raise ConfiguracionIncompleta('Faltan PANEL_SSO_RUT / PANEL_SSO_DV / PANEL_SSO_CLAVE en backend/.env.')
+    r = base._ejecutar_pac_una_vez(rut, dv, clave, registro)
+    return 'OK', (f"{r.get('nuevos', 0)} fichas nuevas, {r.get('actualizados', 0)} actualizadas, "
+                  f"{r.get('eliminados', 0)} eliminadas; {r.get('lineas_carro', 0)} líneas de carro")
 
 
 def _subir_maestros_atomico(modulo, cfg, registro):
@@ -649,6 +661,8 @@ def _correr_etapa(etapa, desde, hasta, reintentos, espera_min, registro, forzar_
     def _una_vez():
         if etapa == 'formularios':
             return _etapa_formularios(registro)
+        if etapa == 'formularios_pac':
+            return _etapa_formularios_pac(registro)
         if etapa == 'compra_agil':
             return _etapa_compra_agil(desde, hasta, registro, forzar_rango=forzar_ca,
                                       **(opciones_ca or {}))

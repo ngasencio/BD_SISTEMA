@@ -47,6 +47,7 @@ from .models import (
     PlanerPAC, CompraAgilResumen, CompraAgilProducto, CompraAgilProveedor,
     RevisionOCCorregible, GestionContrato,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
+    FormularioPAC, FormularioPACProducto,
     PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
     SigfeAnexo1,
     FscOcLink, CompradorInicial,
@@ -62,6 +63,7 @@ from .serializers import (
     CompraAgilProductoSerializer, CompraAgilProveedorSerializer,
     RevisionOCCorregibleSerializer, GestionContratoSerializer,
     FormularioFSCSerializer, FormularioFSCDerivadoSerializer, FormularioFSCProductoSerializer,
+    FormularioPACSerializer, FormularioPACProductoSerializer,
     UserAdminSerializer, UserMeSerializer,
     DepartamentoSerializer, EstablecimientoSerializer,
     FscOcLinkSerializer, CompradorInicialSerializer,
@@ -5259,6 +5261,367 @@ class FormularioFSCProductoViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["anho", "folio", "categoria", "tipo_formulario"]
     search_fields = ["producto", "descripcion"]
     ordering_fields = ["folio", "anho", "monto", "cantidad"]
+
+
+# =============================================================================
+# Módulo Formularios PAC (Panel SS Osorno) — fichas de planificación del PAC
+# =============================================================================
+#
+# Distinto de Formularios FSC: una ficha PAC es la solicitud con que un departamento pide
+# crear/modificar/eliminar un proyecto del Plan Anual de Compras (ver services_formularios_pac.py).
+# Mismo acceso que Formularios FSC (_IsAbastecimiento; el gestor de compras queda fuera).
+
+def _pac_anho(request):
+    anho = request.GET.get("anho", "").strip()
+    return int(anho) if anho.isdigit() else None
+
+
+def _pac_csv(valor):
+    return [v.strip() for v in str(valor or "").split(",") if v.strip()]
+
+
+def _mapa_pac_organigrama_cacheado():
+    """Matching departamento → organigrama de las fichas PAC (se recalcula sobre todas las
+    fichas en cada miss; se cachea para no repetirlo en cada request de la tabla)."""
+    from . import services_formularios_pac as pac
+    clave = pac.clave_cache("mapa_organigrama")
+    mapa = cache.get(clave)
+    if mapa is None:
+        mapa = pac.mapa_departamento_organigrama()
+        cache.set(clave, mapa, timeout=300)
+    return mapa
+
+
+def _pac_departamentos_filtrados(request):
+    """`?subdireccion=` / `?depto=` / `?sin_clasificar=1` → lista de `departamento` o None."""
+    from . import services_formularios_pac as pac
+    q = request.query_params if hasattr(request, "query_params") else request.GET
+    subdireccion = q.get("subdireccion", "").strip()
+    depto = q.get("depto", "").strip()
+    sin_clasificar = q.get("sin_clasificar", "").strip() in ("1", "true", "True")
+    if not (subdireccion or depto or sin_clasificar):
+        return None
+    return pac.departamentos_de_organigrama(_mapa_pac_organigrama_cacheado(), subdireccion, depto, sin_clasificar)
+
+
+def _pac_clave_filtros(request):
+    q = request.GET
+    return "|".join([q.get("anho", ""), q.get("subdireccion", ""), q.get("depto", ""),
+                     q.get("sin_clasificar", ""), q.get("estado", ""), q.get("accion", "")])
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def formularios_pac_stats_view(request):
+    """KPIs y distribuciones de las fichas PAC (cache 5 min por filtros)."""
+    from . import services_formularios_pac as pac
+    clave = pac.clave_cache("stats", _pac_clave_filtros(request))
+    data = cache.get(clave)
+    if data is None:
+        data = pac.calcular_formularios_pac_stats(_pac_anho(request), _pac_departamentos_filtrados(request))
+        cache.set(clave, data, timeout=300)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def formularios_pac_flujo_view(request):
+    """Línea de flujo de visación P → FR → FA → AA → DC + rechazadas (cache 5 min)."""
+    from . import services_formularios_pac as pac
+    clave = pac.clave_cache("flujo", _pac_clave_filtros(request))
+    data = cache.get(clave)
+    if data is None:
+        data = pac.calcular_formularios_pac_flujo(_pac_anho(request), _pac_departamentos_filtrados(request))
+        cache.set(clave, data, timeout=300)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def formularios_pac_alertas_view(request):
+    """Fichas en trámite con demora (sin cache: son pocas y cambian en cada sincronización)."""
+    from . import services_formularios_pac as pac
+    try:
+        dias_min = max(0, min(int(request.GET.get("dias_min", 10)), 365))
+    except (ValueError, TypeError):
+        dias_min = 10
+    return Response(pac.calcular_formularios_pac_alertas(
+        _pac_anho(request), dias_min, _pac_departamentos_filtrados(request)))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def formularios_pac_organigrama_view(request):
+    """Árbol Subdirección → Departamento para el filtro en cascada (cache 5 min)."""
+    from . import services_formularios_pac as pac
+    clave = pac.clave_cache("organigrama")
+    data = cache.get(clave)
+    if data is None:
+        data = pac.calcular_formularios_pac_organigrama(_mapa_pac_organigrama_cacheado())
+        cache.set(clave, data, timeout=300)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def formularios_pac_carro_view(request):
+    """Análisis del carro de productos PAC (cache 5 min). `?estado=` y `?accion=` son CSV."""
+    from . import services_formularios_pac as pac
+    clave = pac.clave_cache("carro", _pac_clave_filtros(request))
+    data = cache.get(clave)
+    if data is None:
+        data = pac.calcular_formularios_pac_carro(
+            _pac_anho(request), _pac_departamentos_filtrados(request),
+            estados=_pac_csv(request.GET.get("estado")) or None,
+            acciones=_pac_csv(request.GET.get("accion")) or None,
+        )
+        cache.set(clave, data, timeout=300)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def formularios_pac_ficha_view(request):
+    """Ficha completa de una ficha PAC para el botón «Ver». Sin cache (se pide de a una)."""
+    from . import services_formularios_pac as pac
+    pk = request.GET.get("id", "").strip()
+    if not pk.isdigit():
+        return Response({"error": "id es requerido y debe ser numérico"}, status=400)
+    try:
+        return Response(pac.calcular_formulario_pac_ficha(int(pk), _mapa_pac_organigrama_cacheado()))
+    except FormularioPAC.DoesNotExist:
+        return Response({"error": "Ficha PAC no encontrada"}, status=404)
+
+
+# ─── Actualización desde el Panel (botón «Actualizar desde el Panel») ─────────
+
+_tareas_actualizacion_formularios_pac: dict = {}
+
+_RUTA_DATA_FORMULARIOS_PAC = Path(__file__).parent.parent.parent / "api" / "data" / "data_formularios_pac"
+
+
+class _ActualizacionCancelada(Exception):
+    """El usuario canceló: corta la descarga/carga en el siguiente aviso de progreso."""
+
+
+def _ejecutar_actualizacion_formularios_pac(task_id: str, rut: str, dv: str, clave: str):
+    """Descarga (Selenium) y carga los 2 reportes PAC del Panel SS Osorno (`page_data_panel_pac`)."""
+    from . import services_formularios_pac as pac
+
+    ruta = str(_RUTA_DATA_FORMULARIOS_PAC)
+    if ruta not in sys.path:
+        sys.path.insert(0, ruta)
+    tarea = _tareas_actualizacion_formularios_pac[task_id]
+
+    try:
+        import page_data_panel_pac as panel_pac
+    except ImportError as exc:
+        tarea.update(status="error", error=f"No se pudo cargar page_data_panel_pac: {exc}")
+        return
+
+    logs = []
+
+    def _cb(paso=None, paso_desc=None, progreso_pct=None, log=None):
+        # El «cancelar» solo marca la tarea; el hilo se corta acá, en el siguiente aviso, y el
+        # `finally` de la descarga cierra Chrome. Nunca se corta en medio de una transacción.
+        if tarea.get("status") == "cancelado":
+            raise _ActualizacionCancelada()
+        upd = {}
+        if paso is not None:
+            upd["paso"] = paso
+        if paso_desc is not None:
+            upd["paso_desc"] = paso_desc
+        if progreso_pct is not None:
+            upd["progreso_pct"] = progreso_pct
+        if log:
+            logs.append(log)
+            upd["logs_recientes"] = logs[-30:]
+        if upd:
+            tarea.update(**upd)
+
+    try:
+        tarea.update(status="en_proceso")
+        _cb(paso=1, paso_desc="Iniciando navegador y autenticando...", progreso_pct=5,
+            log="Iniciando descarga de reportes PAC desde el Panel SS Osorno...")
+
+        antes = pac.snapshot_fichas_pac()
+        resumen = panel_pac.ejecutar_proceso_completo(rut, dv, clave, progress_callback=_cb)
+        diff = pac.diff_fichas_pac(antes, pac.snapshot_fichas_pac())
+        pac.invalidar_cache_formularios_pac()
+
+        if tarea.get("status") == "cancelado":
+            return
+        tarea.update(
+            status="completado", paso=4,
+            paso_desc=(
+                f"Completado: {resumen['nuevos']} fichas nuevas, {resumen['actualizados']} actualizadas, "
+                f"{resumen.get('eliminados', 0)} eliminadas; {resumen.get('lineas_carro', 0)} líneas de carro."
+            ),
+            total_cargados=resumen["total"], logs_recientes=logs[-30:], progreso_pct=100, diff=diff,
+        )
+    except _ActualizacionCancelada:
+        tarea.update(status="cancelado", paso_desc="Cancelado por el usuario.", logs_recientes=logs[-30:])
+    except Exception as exc:
+        if tarea.get("status") == "cancelado":
+            return
+        logger.exception("Error actualizando formularios PAC")
+        tarea.update(status="error", error=str(exc), logs_recientes=logs[-30:])
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def iniciar_actualizacion_formularios_pac(request):
+    """Inicia la descarga y carga de Formularios PAC desde el Panel SS Osorno."""
+    for tarea in _tareas_actualizacion_formularios_pac.values():
+        if tarea.get("status") in ("iniciado", "en_proceso"):
+            return Response({"error": "Ya hay una actualización en curso."}, status=409)
+
+    rut = str(request.data.get("rut", "")).strip()
+    dv = str(request.data.get("dv", "")).strip()
+    clave = str(request.data.get("clave", "")).strip()
+    if not rut or not dv or not clave:
+        return Response({"error": "Debe indicar RUT, DV y contraseña del Panel SS Osorno."}, status=400)
+
+    # La guarda de arriba solo ve este proceso; la actualización automática corre aparte.
+    bloqueado = _candado_sync_o_409()
+    if bloqueado is not None:
+        return bloqueado
+
+    task_id = str(uuid.uuid4())[:8]
+    _tareas_actualizacion_formularios_pac[task_id] = {
+        "status": "iniciado", "paso": 0, "paso_desc": "Iniciando...", "error": None,
+        "logs_recientes": [], "total_cargados": 0, "progreso_pct": 0,
+    }
+    _lanzar_hilo_sync(_ejecutar_actualizacion_formularios_pac, (task_id, rut, dv, clave))
+    return Response({"task_id": task_id, "status": "iniciado"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def estado_actualizacion_formularios_pac(request, task_id):
+    """Estado de una tarea de actualización de Formularios PAC."""
+    tarea = _tareas_actualizacion_formularios_pac.get(task_id)
+    if not tarea:
+        return Response({"error": "Tarea no encontrada."}, status=404)
+    return Response({
+        "task_id": task_id,
+        "status": tarea["status"],
+        "paso": tarea["paso"],
+        "paso_desc": tarea["paso_desc"],
+        "total_cargados": tarea.get("total_cargados", 0),
+        "progreso_pct": tarea.get("progreso_pct", 0),
+        "logs_recientes": tarea.get("logs_recientes", []),
+        "error": tarea.get("error"),
+        "diff": tarea.get("diff"),
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, _IsAbastecimiento])
+def cancelar_actualizacion_formularios_pac(request, task_id):
+    """Cancela una actualización de Formularios PAC en curso."""
+    return _cancelar_tarea(_tareas_actualizacion_formularios_pac, task_id)
+
+
+class FormularioPACFilter(django_filters.FilterSet):
+    estado = django_filters.BaseInFilter(field_name="estado", lookup_expr="in")
+    accion_proyecto = django_filters.BaseInFilter(field_name="accion_proyecto", lookup_expr="in")
+
+    class Meta:
+        model = FormularioPAC
+        fields = ["estado", "accion_proyecto", "anho", "departamento", "tipo_proyecto",
+                  "tipo_requerimiento", "identificador_proyecto"]
+
+
+class FormularioPACViewSet(viewsets.ReadOnlyModelViewSet):
+    """Tabla «Solicitudes PAC». Filtros: `?anho=&estado=P,FR&accion_proyecto=Nuevo&departamento=`
+    más `?subdireccion=&depto=&sin_clasificar=1` (organigrama, resuelto en caliente)."""
+    queryset = FormularioPAC.objects.all()
+    serializer_class = FormularioPACSerializer
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    filterset_class = FormularioPACFilter
+    search_fields = [
+        "folio", "departamento", "nombre_proyecto", "nombre_responsable", "solicitante", "nombre_jefatura",
+        "identificador_proyecto", "descripcion_adquisicion", "objetivo_adquisicion", "nombre_programa",
+        "correo", "accion_proyecto", "estado", "tipo_proyecto", "tipo_requerimiento",
+    ]
+    ordering_fields = ["folio", "anho", "fecha_ficha", "monto", "departamento", "estado", "accion_proyecto",
+                       "nombre_proyecto", "nombre_responsable", "tipo_proyecto", "n_lineas"]
+
+    def get_queryset(self):
+        from django.db.models import IntegerField, OuterRef, Subquery
+        from django.db.models.functions import Coalesce
+        lineas = (
+            FormularioPACProducto.objects.filter(folio=OuterRef("folio"), anho=OuterRef("anho"))
+            .order_by().values("folio").annotate(c=Count("id")).values("c")
+        )
+        qs = super().get_queryset().annotate(
+            n_lineas=Coalesce(Subquery(lineas, output_field=IntegerField()), 0))
+        departamentos = _pac_departamentos_filtrados(self.request)
+        if departamentos is not None:
+            qs = qs.filter(departamento__in=departamentos)
+        return qs
+
+
+class FormularioPACProductoViewSet(viewsets.ReadOnlyModelViewSet):
+    """Líneas del carro PAC. Además de los filtros propios, acepta los de su ficha
+    (`?estado=`, `?accion=`, organigrama) y `?con_ficha=1` para excluir líneas sin cabecera."""
+    queryset = FormularioPACProducto.objects.all()
+    serializer_class = FormularioPACProductoSerializer
+    permission_classes = [IsAuthenticated, _IsAbastecimiento]
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter, drf_filters.OrderingFilter]
+    filterset_fields = ["anho", "folio", "categoria", "unidad"]
+    search_fields = ["producto", "categoria", "item_presupuestario"]
+    ordering_fields = ["folio", "anho", "monto", "cantidad", "linea", "categoria", "mes_ejecucion_fecha"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        q = self.request.query_params
+        mes = q.get("mes", "").strip()
+        if re.fullmatch(r"\d{4}-\d{2}", mes):
+            from datetime import date
+            try:
+                qs = qs.filter(mes_ejecucion_fecha=date(int(mes[:4]), int(mes[5:7]), 1))
+            except ValueError:  # mes 00 o 13
+                return qs.none()
+
+        estados, acciones = _pac_csv(q.get("estado")), _pac_csv(q.get("accion"))
+        departamentos = _pac_departamentos_filtrados(self.request)
+        con_ficha = q.get("con_ficha", "").strip() in ("1", "true", "True")
+        if not (estados or acciones or departamentos is not None or con_ficha):
+            return qs
+
+        fichas = FormularioPAC.objects.all()
+        if estados:
+            fichas = fichas.filter(estado__in=estados)
+        if acciones:
+            fichas = fichas.filter(accion_proyecto__in=acciones)
+        if departamentos is not None:
+            fichas = fichas.filter(departamento__in=departamentos)
+        por_anho = {}
+        for folio, anho in fichas.values_list("folio", "anho"):
+            por_anho.setdefault(anho, []).append(folio)
+        condicion = Q()
+        for anho, folios in por_anho.items():
+            condicion |= Q(anho=anho, folio__in=folios)
+        return qs.filter(condicion) if por_anho else qs.none()
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        pagina = self.paginate_queryset(queryset)
+        filas = pagina if pagina is not None else list(queryset)
+        por_anho = {}
+        for l in filas:
+            por_anho.setdefault(l.anho, set()).add(l.folio)
+        fichas = {}
+        for anho, folios in por_anho.items():
+            for f in FormularioPAC.objects.filter(anho=anho, folio__in=folios):
+                fichas[(f.folio, f.anho)] = f
+        contexto = {**self.get_serializer_context(), "fichas": fichas}
+        datos = self.get_serializer(filas, many=True, context=contexto).data
+        return self.get_paginated_response(datos) if pagina is not None else Response(datos)
+
 
 
 # =============================================================================

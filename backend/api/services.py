@@ -4055,15 +4055,23 @@ def _mapa_unidad_requirente_organigrama():
     page_data_panel.py aplica sobre FormularioFSCDerivado.unidad_requirente, pero
     sin persistirlo. None = "Sin Clasificar" (unidad_requirente sin match en
     Departamento), nunca se descarta."""
+    unidades = (
+        FormularioFSC.objects.exclude(unidad_requirente__isnull=True).exclude(unidad_requirente='')
+        .values_list('unidad_requirente', flat=True).distinct()
+    )
+    return _mapa_organigrama_de_nombres(unidades)
+
+
+def _mapa_organigrama_de_nombres(unidades):
+    """Núcleo de `_mapa_unidad_requirente_organigrama`, para cualquier lista de nombres de
+    unidad en texto libre (también lo usa Formularios PAC con `FormularioPAC.departamento`).
+    {nombre → {depto_id, nombre_depto, establecimiento_id, subdireccion_id,
+    nombre_subdireccion} | None}."""
     mapa_deptos = _mapa_departamentos()
     mapa_por_nombre = _mapa_departamentos_por_nombre()
     nombres_rama, _ = _mapa_nombres_subdireccion()
 
     resultado = {}
-    unidades = (
-        FormularioFSC.objects.exclude(unidad_requirente__isnull=True).exclude(unidad_requirente='')
-        .values_list('unidad_requirente', flat=True).distinct()
-    )
     for unidad in unidades:
         depto = mapa_por_nombre.get(_normalizar_texto_pac(unidad))
         if not depto:

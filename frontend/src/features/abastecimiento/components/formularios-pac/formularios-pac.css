@@ -1,0 +1,31 @@
+/* Abastecimiento › Formularios PAC — complementos sobre formularios.css (prefijo .pac-).
+   Todo con tokens DV-UI; sin colores literales. */
+
+/* Barras horizontales ordenadas (carro por categoría / ítem / mes). */
+.pac-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: var(--dv-sp-5); margin-bottom: var(--dv-sp-5); }
+.pac-bars { display: flex; flex-direction: column; gap: var(--dv-sp-2); }
+.pac-bar {
+    display: grid; grid-template-columns: minmax(110px, 200px) minmax(60px, 1fr) minmax(80px, auto);
+    align-items: center; gap: var(--dv-sp-4); width: 100%; padding: var(--dv-sp-2) var(--dv-sp-3);
+    border: 1px solid transparent; border-radius: var(--dv-r-md); background: none;
+    font: inherit; font-size: var(--dv-fs-xs); text-align: left; color: var(--dv-ink-2);
+}
+button.pac-bar { cursor: pointer; }
+button.pac-bar:hover { background: var(--dv-surface-alt); border-color: var(--dv-line); }
+.pac-bar.is-active { background: var(--dv-surface-sel); border-color: var(--dv-primary); }
+.pac-bar__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pac-bar__track { height: 10px; border-radius: var(--dv-r-pill); background: var(--dv-line-2); overflow: hidden; }
+.pac-bar__fill { display: block; height: 100%; border-radius: var(--dv-r-pill); background: var(--bar-color, var(--dv-primary)); }
+.pac-bar__value { text-align: right; font-weight: var(--dv-fw-semi); color: var(--dv-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pac-bar__value small { display: block; font-weight: var(--dv-fw-regular); color: var(--dv-ink-4); font-size: var(--dv-fs-2xs); }
+
+/* Nota de leyenda bajo un panel. */
+.pac-legend { margin: var(--dv-sp-4) 0 0; font-size: var(--dv-fs-xs); color: var(--dv-ink-3); }
+.pac-legend b { color: var(--dv-ink-2); }
+
+/* Tarjetas de «proyecto del plan» dentro de la ficha. */
+.pac-plan { display: grid; gap: var(--dv-sp-3); padding: var(--dv-sp-4) var(--dv-sp-5); border: 1px solid var(--dv-line); border-radius: var(--dv-r-lg); background: var(--dv-surface-alt); }
+.pac-plan__head { display: flex; align-items: center; gap: var(--dv-sp-3); flex-wrap: wrap; }
+
+/* Chip de filtro activo (mes / categoría elegidos en el carro). */
+.pac-activefilters { display: flex; flex-wrap: wrap; gap: var(--dv-sp-3); margin-bottom: var(--dv-sp-4); }

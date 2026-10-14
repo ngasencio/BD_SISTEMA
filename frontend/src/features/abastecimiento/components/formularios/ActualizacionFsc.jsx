@@ -6,7 +6,7 @@ import { DiasChip, EstadoChip } from './ui';
 
 // ─── Credenciales del Panel SS Osorno ────────────────────────────────────────
 
-export function ModalCredenciales({ onConfirmar, onCerrar }) {
+export function ModalCredenciales({ onConfirmar, onCerrar, descripcion = 'Descarga de los reportes de Formularios de Solicitud de Compra' }) {
     const [rut, setRut] = useState('');
     const [dv, setDv] = useState('');
     const [clave, setClave] = useState('');
@@ -23,7 +23,7 @@ export function ModalCredenciales({ onConfirmar, onCerrar }) {
                 <header className="dv-modal__header">
                     <div>
                         <h2>Acceso al Panel SS Osorno</h2>
-                        <div className="dv-sub">Descarga de los reportes de Formularios de Solicitud de Compra</div>
+                        <div className="dv-sub">{descripcion}</div>
                     </div>
                 </header>
                 <div className="dv-modal__body">
@@ -55,13 +55,13 @@ export function ModalCredenciales({ onConfirmar, onCerrar }) {
 
 // ─── Progreso de la descarga ─────────────────────────────────────────────────
 
-export function BannerFormularios({ tarea, onCerrar, onCancelar }) {
+export function BannerFormularios({ tarea, onCerrar, onCancelar, tituloEnCurso = 'Actualizando formularios desde el Panel…' }) {
     if (!tarea) return null;
     const completado = tarea.status === 'completado';
     const error = tarea.status === 'error';
     const enProceso = tarea.status === 'en_proceso' || tarea.status === 'iniciado';
     const pct = tarea.progreso_pct || (completado ? 100 : enProceso ? 15 : 0);
-    const titulo = completado ? 'Actualización completada' : error ? 'La actualización falló' : 'Actualizando formularios desde el Panel…';
+    const titulo = completado ? 'Actualización completada' : error ? 'La actualización falló' : tituloEnCurso;
 
     return (
         <aside className="frm-banner" role="status" aria-live="polite">

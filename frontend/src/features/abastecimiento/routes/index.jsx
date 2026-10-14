@@ -21,6 +21,10 @@ const FormulariosPage = lazy(() =>
     import('../components/FormulariosPage').then(m => ({ default: m.FormulariosPage }))
 );
 
+const FormulariosPacPage = lazy(() =>
+    import('../components/FormulariosPacPage').then(m => ({ default: m.FormulariosPacPage }))
+);
+
 const Loading = () => <div className="loading-spinner">Cargando módulo...</div>;
 
 export const abastecimientoRoutes = (
@@ -44,6 +48,10 @@ export const abastecimientoRoutes = (
         <Route
             path="/abastecimiento/formularios"
             element={<Suspense fallback={<Loading />}><FormulariosPage /></Suspense>}
+        />
+        <Route
+            path="/abastecimiento/formularios-pac"
+            element={<Suspense fallback={<Loading />}><FormulariosPacPage /></Suspense>}
         />
     </>
 );

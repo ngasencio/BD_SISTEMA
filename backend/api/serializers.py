@@ -12,6 +12,7 @@ from .models import (
     CompraAgilProducto, CompraAgilProductoCotizado, CompraAgilProveedor,
     RevisionOCCorregible, GestionContrato,
     FormularioFSC, FormularioFSCDerivado, FormularioFSCProducto,
+    FormularioPAC, FormularioPACProducto,
     PerfilUsuario, Departamento, Establecimiento, DevengoSigfeAnual,
     SigfeAnexo1,
     FscOcLink, CompradorInicial,
@@ -19,6 +20,7 @@ from .models import (
     ProcesoCompraOrdenCompra, ProcesoCompraEstadoLog, ComprasNotificacion,
 )
 from .services import generar_id_formulario, _pac_match_estado, ESTADOS_POR_TIPO_PROCESO
+from .services_formularios_pac import ESTADOS_EN_TRAMITE, generar_id_ficha_pac
 
 ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
 
@@ -828,3 +830,54 @@ class EstablecimientoSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Establecimiento
         fields = '__all__'
+
+
+# ─── Formularios PAC ──────────────────────────────────────────────────────────
+
+class FormularioPACSerializer(serializers.ModelSerializer):
+    """Fila de la tabla «Solicitudes PAC». Sin los textos largos (descripción, objetivo,
+    programa): esos van solo en la ficha completa (`formularios-pac/ficha/`)."""
+    id_ficha = serializers.SerializerMethodField()
+    n_lineas = serializers.IntegerField(read_only=True, default=0)
+    dias_en_tramite = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FormularioPAC
+        fields = [
+            'id', 'id_ficha', 'folio', 'anho', 'fecha_ficha', 'accion_proyecto', 'identificador_proyecto',
+            'departamento', 'nombre_responsable', 'cargo_responsable', 'nombre_jefatura', 'correo',
+            'nombre_proyecto', 'tipo_requerimiento', 'tipo_proyecto', 'recursos_programaticos',
+            'monto', 'estado', 'obs_rechazo', 'fecha_rechazo', 'fecha_autorizacion_jefe', 'solicitante',
+            'n_lineas', 'dias_en_tramite',
+        ]
+
+    def get_id_ficha(self, obj):
+        return generar_id_ficha_pac(obj.folio, obj.anho)
+
+    def get_dias_en_tramite(self, obj):
+        # Solo tiene sentido mientras la ficha sigue en trámite (en DC/R ya terminó).
+        if obj.estado not in ESTADOS_EN_TRAMITE or not obj.fecha_ficha:
+            return None
+        return (datetime.date.today() - obj.fecha_ficha).days
+
+
+class FormularioPACProductoSerializer(serializers.ModelSerializer):
+    """Línea del carro. `ficha` (id_ficha, departamento, estado...) la completa la vista con la
+    cabecera que corresponde a (folio, anho), o None si la línea no tiene cabecera."""
+    ficha = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FormularioPACProducto
+        fields = [
+            'id', 'folio', 'anho', 'linea', 'categoria', 'producto', 'monto', 'cantidad', 'unidad',
+            'item_presupuestario', 'mes_ejecucion', 'mes_ejecucion_fecha', 'ficha',
+        ]
+
+    def get_ficha(self, obj):
+        f = (self.context.get('fichas') or {}).get((obj.folio, obj.anho))
+        if f is None:
+            return None
+        return {
+            'id': f.id, 'id_ficha': generar_id_ficha_pac(f.folio, f.anho), 'departamento': f.departamento,
+            'estado': f.estado, 'accion_proyecto': f.accion_proyecto, 'nombre_proyecto': f.nombre_proyecto,
+        }

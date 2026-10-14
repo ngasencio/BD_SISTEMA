@@ -1085,6 +1085,102 @@ class FormularioFSCProducto(models.Model):
         return f"Producto FSC {self.folio}/{self.anho} — {self.producto}"
 
 
+# ─── Formularios PAC (fichas de planificación del Plan Anual de Compras) ──────
+#
+# Distintos de PlanerPAC (el PLAN vigente, una fila por ítem) y de FormularioFSC
+# (una solicitud de compra concreta): una ficha PAC es la solicitud que un
+# departamento envía para crear (Nuevo), cambiar (Modificar) o quitar (Eliminar)
+# un proyecto del plan. Fuente: Panel SSO › Reportes › botones `totalpac` y
+# `totalcarropac` (ver api/data/data_formularios_pac/page_data_panel_pac.py).
+
+class FormularioPAC(models.Model):
+    """Cabecera de una ficha PAC — reporte «Total PAC año actual» (`totalpac`)."""
+    ESTADOS_PIPELINE = ('P', 'FR', 'FA', 'AA', 'DC')
+
+    folio                   = models.IntegerField(db_index=True, help_text='Columna `id` del reporte: identificador de la ficha en el Panel. Enlaza con FormularioPACProducto.folio.')
+    anho                    = models.IntegerField(db_index=True)
+    fecha_ficha             = models.DateField(null=True, blank=True, db_index=True)
+    accion_proyecto         = models.CharField(max_length=30, blank=True, null=True, db_index=True, help_text='Nuevo | Modificar | Eliminar')
+    identificador_proyecto  = models.CharField(max_length=100, blank=True, null=True, db_index=True, help_text='ID del proyecto del plan al que apunta (solo Modificar/Eliminar). Mismo formato que PlanerPAC.id_proyecto.')
+    departamento            = models.CharField(max_length=255, blank=True, null=True, db_index=True)
+    cargo_responsable       = models.CharField(max_length=200, blank=True, null=True)
+    nombre_responsable      = models.CharField(max_length=200, blank=True, null=True)
+    anexo                   = models.CharField(max_length=30, blank=True, null=True)
+    correo                  = models.CharField(max_length=200, blank=True, null=True)
+    fecha_autorizacion_jefe = models.DateField(null=True, blank=True)
+    nombre_jefatura         = models.CharField(max_length=200, blank=True, null=True)
+    nombre_proyecto         = models.TextField(blank=True, null=True)
+    tipo_requerimiento      = models.CharField(max_length=50, blank=True, null=True)
+    tipo_proyecto           = models.CharField(max_length=50, blank=True, null=True)
+    recursos_programaticos  = models.CharField(max_length=10, blank=True, null=True)
+    rec_prog_justificacion  = models.TextField(blank=True, null=True)
+    nombre_programa         = models.TextField(blank=True, null=True)
+    descripcion_adquisicion = models.TextField(blank=True, null=True)
+    objetivo_adquisicion    = models.TextField(blank=True, null=True)
+    monto                   = models.BigIntegerField(null=True, blank=True, help_text='Puede ser negativo (Modificar que rebaja) o nulo (Eliminar).')
+    estado                  = models.CharField(max_length=20, blank=True, null=True, db_index=True, help_text='Bandeja de visación: P → FR → FA → AA → DC; R = rechazada.')
+    obs_rechazo             = models.TextField(blank=True, null=True)
+    fecha_rechazo           = models.DateField(null=True, blank=True)
+    solicitante             = models.CharField(max_length=200, blank=True, null=True)
+
+    class Meta:
+        db_table = 'data_formularios_pac'
+        constraints = [models.UniqueConstraint(fields=['folio', 'anho'], name='uq_formulario_pac_folio_anho')]
+        indexes = [models.Index(fields=['anho', 'estado'])]
+        ordering = ['-anho', '-folio']
+
+    def __str__(self):
+        return f"Ficha PAC {self.folio}/{self.anho} — {self.departamento}"
+
+
+class FormularioPACEstadoLog(models.Model):
+    """Historial de bandejas de una ficha PAC. Mismo mecanismo que FormularioFSCEstadoLog:
+    el Panel solo expone el estado actual, así que se registra una fila cada vez que la
+    sincronización ve un estado distinto al último guardado (historial confiable solo
+    desde la primera carga)."""
+    formulario     = models.ForeignKey(FormularioPAC, related_name='historial_estados', on_delete=models.CASCADE)
+    estado         = models.CharField(max_length=20, db_index=True)
+    fecha_registro = models.DateField(db_index=True)
+
+    class Meta:
+        db_table = 'data_formularios_pac_estado_log'
+        ordering = ['formulario_id', 'fecha_registro']
+        indexes = [models.Index(fields=['formulario', 'fecha_registro'])]
+
+    def __str__(self):
+        return f"Ficha PAC {self.formulario_id} → {self.estado} ({self.fecha_registro})"
+
+
+class FormularioPACProducto(models.Model):
+    """Línea del carro de una ficha PAC — reporte «Total Carro PAC» (`totalcarropac`).
+
+    Se une a la cabecera por (folio, anho), sin FK: el reporte de carro trae años que la
+    cabecera no exporta (2024) y fichas sin cabecera, y esas líneas se conservan igual.
+    El carro no tiene clave natural (hay líneas idénticas legítimas), por eso se sincroniza
+    por REEMPLAZO de los años presentes en el archivo y no por upsert; `linea` conserva el
+    orden original dentro de la ficha."""
+    folio               = models.IntegerField(db_index=True)
+    anho                = models.IntegerField(db_index=True)
+    linea               = models.IntegerField(default=0, help_text='Posición de la línea dentro de su ficha en el reporte.')
+    establecimiento     = models.CharField(max_length=50, blank=True, null=True)
+    categoria           = models.CharField(max_length=200, blank=True, null=True)
+    producto            = models.TextField(blank=True, null=True)
+    monto               = models.BigIntegerField(null=True, blank=True, help_text='Total de la línea (no unitario).')
+    cantidad            = models.IntegerField(null=True, blank=True)
+    unidad              = models.CharField(max_length=100, blank=True, null=True)
+    item_presupuestario = models.CharField(max_length=300, blank=True, null=True)
+    mes_ejecucion       = models.CharField(max_length=30, blank=True, null=True, help_text='Texto original del Panel («enero-25»).')
+    mes_ejecucion_fecha = models.DateField(null=True, blank=True, db_index=True, help_text='Primer día del mes de mes_ejecucion; nulo si no trae mes válido.')
+
+    class Meta:
+        db_table = 'data_formularios_pac_productos'
+        indexes = [models.Index(fields=['anho', 'folio'])]
+        ordering = ['-anho', '-folio', 'linea']
+
+    def __str__(self):
+        return f"Producto PAC {self.folio}/{self.anho} — {self.producto}"
+
+
 # =============================================================================
 # Módulo Usuarios — Panel SSO (read-only proxies + perfil gestionado)
 # =============================================================================

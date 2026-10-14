@@ -1,4 +1,4 @@
-"""Actualización diaria completa (comando `actualizacion_completa`): FSC + OC + Licitaciones.
+"""Actualización diaria completa (comando `actualizacion_completa`): FSC + PAC + OC + Licitaciones.
 
 Nada toca el Panel ni Mercado Público reales: las etapas se reemplazan por dobles (o el
 módulo ETL por un módulo falso). Candado y logs van a un directorio temporal; el correo, a la
@@ -39,11 +39,12 @@ class OrquestacionTest(_EntornoAislado, SimpleTestCase):
         kw.setdefault('espera_min', 0)
         return act.ejecutar_actualizacion_completa(**kw)
 
-    def test_ventana_de_10_dias_incluye_hoy_y_orden_fsc_oc_licitaciones(self):
+    def test_ventana_de_10_dias_incluye_hoy_y_orden_fsc_pac_oc_licitaciones(self):
         with mock.patch.object(act, '_etapa_formularios', return_value=('OK', 'fsc')), \
                 mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok) as mp:
             resultados = self._correr()
-        self.assertEqual([r.etapa for r in resultados], ['formularios', 'ordenes_compra', 'licitaciones'])
+        self.assertEqual([r.etapa for r in resultados],
+                         ['formularios', 'formularios_pac', 'ordenes_compra', 'licitaciones'])
         etapa, desde, hasta = mp.call_args_list[0].args[:3]
         self.assertEqual((etapa, desde, hasta), ('ordenes_compra', date(2026, 10, 4), HOY))
         self.assertEqual((hasta - desde).days + 1, 10)
@@ -68,7 +69,8 @@ class OrquestacionTest(_EntornoAislado, SimpleTestCase):
                 self._correr(reintentos=2)
 
         estados = {r.etapa: r.estado for r in ctx.exception.resultados}
-        self.assertEqual(estados, {'formularios': 'OK', 'ordenes_compra': 'ERROR', 'licitaciones': 'OK'})
+        self.assertEqual(estados, {'formularios': 'OK', 'formularios_pac': 'OK', 'ordenes_compra': 'ERROR',
+                                   'licitaciones': 'OK'})
         # OC reintentó 2 veces; licitaciones corrió igual después del fallo de OC.
         self.assertEqual([c.args[0] for c in llamadas.call_args_list],
                          ['ordenes_compra', 'ordenes_compra', 'licitaciones'])

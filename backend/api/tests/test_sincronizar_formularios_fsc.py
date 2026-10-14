@@ -33,9 +33,13 @@ class _EntornoAislado:
         super().setUp()
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
+        from api import services_actualizacion_diaria as act
         parches = [
             mock.patch.object(svc, 'DIR_LOGS', Path(self._tmp.name)),
             mock.patch.object(svc, '_logger_archivo', return_value=logging.getLogger('test_sync_fsc')),
+            # Doble por defecto de la etapa «Formularios PAC»: las pruebas de la actualización diaria
+            # que no hablan de PAC no deben intentar abrir un Chrome real contra el Panel.
+            mock.patch.object(act, '_etapa_formularios_pac', return_value=('OK', 'pac (doble)')),
         ]
         for p in parches:
             p.start()

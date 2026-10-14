@@ -7,6 +7,7 @@ django-filter>=24.0
 python-dateutil>=2.9
 python-decouple>=3.8
 pandas>=2.0
+lxml>=4.9            # lectura de los reportes HTML del Panel SSO
 numpy>=1.26
 python-docx>=1.1
 python-pptx>=1.0
