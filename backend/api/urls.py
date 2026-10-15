@@ -1,9 +1,15 @@
+from contextlib import suppress
+
+from django.contrib.auth.models import User
 from django.urls import include, path
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .serializers import MyTokenObtainPairSerializer
+from .services_logs import registrar_login_exitoso, registrar_login_fallido
+from .views_logs import RegistroLogViewSet
 from .views import (
     BoletaGarantiaAuditViewSet, BoletaGarantiaViewSet,
     CompradorViewSet, DetalleLicitacionViewSet, DetalleOrdenCompraViewSet,
@@ -91,6 +97,21 @@ from .views import (
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        """Login de siempre; además deja constancia del intento (éxito o fallo) en Administración ›
+        Logs. La respuesta al cliente no cambia y registrar nunca puede romper el ingreso."""
+        datos = request.data if hasattr(request.data, 'get') else {}
+        username = str(datos.get('username') or '')
+        try:
+            respuesta = super().post(request, *args, **kwargs)
+        except AuthenticationFailed:
+            with suppress(Exception):
+                registrar_login_fallido(request, username)
+            raise
+        with suppress(Exception):
+            registrar_login_exitoso(request, User.objects.filter(username=username).first())
+        return respuesta
+
 router = DefaultRouter()
 router.register(r'licitaciones', LicitacionViewSet, basename='licitacion')
 router.register(r'detalles', DetalleLicitacionViewSet, basename='detallicitacion')
@@ -137,6 +158,9 @@ router.register(r'compras-notificaciones', ComprasNotificacionViewSet, basename=
 router.register(r'gestor-compras/solicitudes', GestorSolicitudesViewSet, basename='gestor-solicitudes')
 router.register(r'gestor-compras/derivaciones', GestorDerivacionesViewSet, basename='gestor-derivaciones')
 router.register(r'gestor-compras/procesos', GestorProcesosViewSet, basename='gestor-procesos')
+
+# Administración › Logs (solo admin; solo lectura)
+router.register(r'logs', RegistroLogViewSet, basename='registrolog')
 
 # Módulo Usuarios
 router.register(r'usuarios', UsuarioViewSet, basename='usuario')

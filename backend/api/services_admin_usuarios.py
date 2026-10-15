@@ -35,6 +35,7 @@ from .models import (
     FormularioFSC, PerfilUsuario, PertenenciaUsuario, UsuarioPanel,
 )
 from .serializers import UserAdminSerializer
+from .services_logs import espejar_auditoria_admin
 from .services import (
     _construir_alcance, _departamentos_asignados_gestor, _mapa_departamentos,
     _mapa_nombres_subdireccion, _normalizar_texto_pac, invalidar_cache_alcance_gestor,
@@ -155,11 +156,14 @@ def _registrar_auditoria(actor, entidad, objeto_id, etiqueta, cambios, usuario_a
     """Una fila por entidad modificada. Sin cambios reales no escribe nada."""
     if not cambios:
         return None
-    return AuditoriaAdmin.objects.create(
+    fila = AuditoriaAdmin.objects.create(
         actor=actor, actor_nombre=(actor.username if actor else '')[:150],
         usuario_afectado=usuario_afectado, entidad=entidad,
         objeto_id=str(objeto_id), objeto_etiqueta=(etiqueta or '')[:200], cambios=cambios,
     )
+    # Mismo hecho en Administración › Logs (con IP de origen); se escribe solo si la transacción confirma.
+    espejar_auditoria_admin(actor, entidad, objeto_id, etiqueta, cambios, usuario_afectado)
+    return fila
 
 
 def listar_historial(usuario_id=None, entidad=None, objeto_id=None, limite=50):

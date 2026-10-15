@@ -18,9 +18,13 @@ from .models import (
     FscOcLink, CompradorInicial,
     ComprasCompradorPerfil, ProcesoCompra, ProcesoCompraFormulario,
     ProcesoCompraOrdenCompra, ProcesoCompraEstadoLog, ComprasNotificacion,
+    RegistroLog,
 )
 from .services import generar_id_formulario, _pac_match_estado, ESTADOS_POR_TIPO_PROCESO
 from .services_formularios_pac import ESTADOS_EN_TRAMITE, generar_id_ficha_pac
+from .services_logs import (
+    CATEGORIAS_ETIQUETA, NIVELES_ETIQUETA, explicacion_accion, titulo_accion,
+)
 
 ALLOWED_ADJUNTO_EXTENSIONS = ['.xlsx', '.xls', '.doc', '.docx', '.rar', '.pdf']
 
@@ -881,3 +885,49 @@ class FormularioPACProductoSerializer(serializers.ModelSerializer):
             'id': f.id, 'id_ficha': generar_id_ficha_pac(f.folio, f.anho), 'departamento': f.departamento,
             'estado': f.estado, 'accion_proyecto': f.accion_proyecto, 'nombre_proyecto': f.nombre_proyecto,
         }
+
+
+# =============================================================================
+# Administración › Logs
+# =============================================================================
+
+class RegistroLogListaSerializer(serializers.ModelSerializer):
+    """Fila de la tabla de logs. Sin `metadata` ni `user_agent` (pueden pesar: stack traces):
+    el detalle se pide por id."""
+    timestamp = serializers.SerializerMethodField()
+    nivel_etiqueta = serializers.SerializerMethodField()
+    categoria_etiqueta = serializers.SerializerMethodField()
+    accion_titulo = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RegistroLog
+        fields = [
+            'id', 'timestamp', 'level', 'nivel_etiqueta', 'category', 'categoria_etiqueta',
+            'action', 'accion_titulo', 'message', 'actor_id', 'actor_username', 'actor_role',
+            'ip_address', 'http_method', 'path', 'status_code',
+        ]
+
+    def get_timestamp(self, obj):
+        """Siempre UTC con sufijo Z; la pantalla lo convierte a la hora de Chile."""
+        return obj.timestamp.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+
+    def get_nivel_etiqueta(self, obj):
+        return NIVELES_ETIQUETA.get(obj.level, obj.level)
+
+    def get_categoria_etiqueta(self, obj):
+        return CATEGORIAS_ETIQUETA.get(obj.category, obj.category)
+
+    def get_accion_titulo(self, obj):
+        return titulo_accion(obj.action)
+
+
+class RegistroLogDetalleSerializer(RegistroLogListaSerializer):
+    """Ficha completa de un evento: lo anterior + user-agent, metadata y la explicación de la acción."""
+    explicacion = serializers.SerializerMethodField()
+
+    class Meta(RegistroLogListaSerializer.Meta):
+        fields = RegistroLogListaSerializer.Meta.fields + ['user_agent', 'metadata', 'explicacion']
+
+    def get_explicacion(self, obj):
+        return explicacion_accion(obj.action)
+

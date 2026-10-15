@@ -306,6 +306,13 @@ export default function Sidebar() {
                                 <span>👥</span>
                                 <span className="nav-item-text">Gestión de Usuarios</span>
                             </div>
+                            <div
+                                className={`nav-item ${isActive('/admin/logs') ? 'active' : ''}`}
+                                onClick={() => goTo('/admin/logs', 'admin', null)}
+                            >
+                                <span>📜</span>
+                                <span className="nav-item-text">Logs</span>
+                            </div>
                         </div>
                     </div>
                 )}

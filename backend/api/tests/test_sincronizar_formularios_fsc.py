@@ -40,6 +40,8 @@ class _EntornoAislado:
             # Doble por defecto de la etapa «Formularios PAC»: las pruebas de la actualización diaria
             # que no hablan de PAC no deben intentar abrir un Chrome real contra el Panel.
             mock.patch.object(act, '_etapa_formularios_pac', return_value=('OK', 'pac (doble)')),
+            # Sin fotos antes/después de las tablas: estas pruebas no tienen base de datos.
+            mock.patch.dict(act.informe.INSTANTANEAS, {}, clear=True),
         ]
         for p in parches:
             p.start()

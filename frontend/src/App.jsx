@@ -18,6 +18,7 @@
  *  /anexo1/base-datos           → Protegida (rol: admin, finanzas, general)
  *  /anexo3/reporte-sigfe        → Protegida (rol: admin, finanzas, general) — único reporte Anexo N°3, el viejo AnexoDeudaPage se eliminó
  *  /admin/usuarios              → Protegida (rol: admin)
+ *  /admin/logs                  → Protegida (rol: admin) — bitácora de accesos, cambios y errores
  */
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
@@ -41,6 +42,7 @@ import { pacCumplimientoRoutes } from './features/pac-cumplimiento/routes';
 import { fscOcPacRoutes } from './features/fsc-oc-pac/routes';
 import { compraAgilRoutes } from './features/compra-agil/routes';
 import { perfilRoute, adminUsuariosRoute } from './features/usuarios/routes';
+import { adminLogsRoute } from './features/logs/routes';
 import { devengoSigfeRoutes } from './features/devengo-sigfe/routes';
 import { anexo1SigfeRoutes } from './features/anexo1-sigfe/routes';
 import { facturasRoutes } from './features/facturas/routes';
@@ -133,9 +135,10 @@ function AppRoutes() {
             {/* Perfil propio — todos los autenticados */}
             {perfilRoute}
 
-            {/* Gestión de usuarios — solo admin */}
+            {/* Administración (usuarios y logs) — solo admin */}
             <Route element={<RequireRole allowed={['admin']} />}>
               {adminUsuariosRoute}
+              {adminLogsRoute}
             </Route>
 
           </Route>

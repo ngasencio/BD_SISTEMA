@@ -247,18 +247,19 @@ class EtapaDiariaTest(_Aislado, SimpleTestCase):
         kw.setdefault('espera_min', 0)
         return act.ejecutar_actualizacion_completa(**kw)
 
-    def test_la_etapa_esta_en_la_tanda_diaria_despues_de_fsc(self):
-        self.assertEqual(act.ETAPAS_DIARIAS[:2], ('formularios', 'formularios_pac'))
-        self.assertIn('formularios_pac', act.ETAPAS)
+    def test_la_etapa_esta_en_la_tanda_diaria_justo_despues_de_fsc(self):
+        self.assertEqual(act.ETAPAS.index('formularios_pac'), act.ETAPAS.index('formularios') + 1)
+        self.assertIn('formularios_pac', act.ETAPAS_BASE)
         self.assertIn('formularios_pac', act.ETIQUETAS)
 
     def test_etapa_usa_las_credenciales_y_resume(self):
         with mock.patch.object(base, '_ejecutar_pac_una_vez', return_value=RESUMEN) as una:
-            estado, detalle = act._etapa_formularios_pac(mock.Mock())
+            estado, detalle, extra = act._etapa_formularios_pac(mock.Mock())
         self.assertEqual(una.call_args.args[:3], ('11111111', '1', 'clave-secreta'))
         self.assertEqual(estado, 'OK')
         self.assertIn('3 fichas nuevas', detalle)
         self.assertIn('40 líneas de carro', detalle)
+        self.assertIn(('Líneas de carro cargadas', 40), extra['resumen'])
 
     def test_sin_credenciales_no_reintenta(self):
         with override_settings(PANEL_SSO_PASSWORD=''), \
@@ -284,7 +285,7 @@ class EtapaDiariaTest(_Aislado, SimpleTestCase):
                                    'ordenes_compra': 'OK', 'licitaciones': 'OK'})
         self.assertEqual([c.args[0] for c in llamadas.call_args_list], ['ordenes_compra', 'licitaciones'])
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('Formularios PAC', mail.outbox[0].subject)
+        self.assertIn('PAC ERROR', mail.outbox[0].subject)
         self.assertFalse(self.candado.exists())
 
     def test_solo_pac_por_comando(self):

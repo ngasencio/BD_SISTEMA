@@ -48,6 +48,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Administración › Logs: contexto de la petición, errores no controlados, 403 y auditoría de
+    # rutas críticas. Va al final (innermost) para ver el usuario ya autenticado por DRF.
+    'api.middleware_logs.RegistroLogsMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
@@ -199,15 +202,54 @@ PANEL_SSO_PASSWORD = config('PANEL_SSO_CLAVE', default='')
 # Compra Ágil se actualiza de noche desde esta fecha FIJA hasta hoy (YYYY-MM-DD). El rango crece
 # cada día: moverla hacia adelante acorta la corrida cuando se vuelva demasiado larga.
 SYNC_COMPRA_AGIL_DESDE = config('SYNC_COMPRA_AGIL_DESDE', default='2026-09-01')
-# Cada noche solo se repasan los últimos N días (incluido hoy); lo que falte del rango desde el
-# piso (histórico, o días que una caída dejó sin leer) se completa solo, lo más reciente primero.
-SYNC_COMPRA_AGIL_DIAS_REPASO = config('SYNC_COMPRA_AGIL_DIAS_REPASO', default=3, cast=int)
+# «Ayer y hoy»: la API registra cada cambio de estado en el día en que ocurre (mínimo 1).
+SYNC_COMPRA_AGIL_DIAS_ATRAS = config('SYNC_COMPRA_AGIL_DIAS_ATRAS', default=1, cast=int)
 # Días que se bajan a la vez (la API tolera 4-6 sin degradarse en listados; medido 2026-10-14).
 SYNC_COMPRA_AGIL_HILOS = config('SYNC_COMPRA_AGIL_HILOS', default=6, cast=int)
-# Tope de una corrida: pasado esto no se empiezan bloques nuevos y sigue la noche siguiente.
-SYNC_COMPRA_AGIL_PRESUPUESTO_MIN = config('SYNC_COMPRA_AGIL_PRESUPUESTO_MIN', default=360, cast=int)
-# A quién avisar si la sincronización falla tras los reintentos (vacío → NOTIF_PLAN_USUARIOS).
+# Tope de la parte «completar días sin leer» de una corrida (la ventana de últimos días va siempre).
+SYNC_COMPRA_AGIL_PRESUPUESTO_MIN = config('SYNC_COMPRA_AGIL_PRESUPUESTO_MIN', default=90, cast=int)
+# Quién recibe el INFORME de cada actualización automática (resumen por bloque, nuevos y cambios).
+SYNC_INFORME_A = [e.lower() for e in config(
+    'SYNC_INFORME_A', default='nicolas.asencio@redsalud.gob.cl', cast=Csv())]
+# A quién avisar si el informe no se pudo enviar y hubo fallas (vacío → NOTIF_PLAN_USUARIOS).
 SYNC_FSC_AVISO_A = [e.lower() for e in config('SYNC_FSC_AVISO_A', default='', cast=Csv())]
+
+# ─── Logs del sistema (Administración › Logs) ─────────────────────────────────
+# Escritura asíncrona: un hilo guarda en lotes; con LOGS_ASYNC=False se guarda en el acto (pruebas).
+LOGS_ASYNC = config('LOGS_ASYNC', default=True, cast=bool)
+LOGS_COLA_MAX = config('LOGS_COLA_MAX', default=5000, cast=int)   # llena = se descarta, no se frena la app
+# Aviso (no bloqueo) de posible fuerza bruta: N fallos desde una misma IP / sobre un mismo usuario.
+LOGS_FUERZA_BRUTA_UMBRAL = config('LOGS_FUERZA_BRUTA_UMBRAL', default=5, cast=int)
+LOGS_FUERZA_BRUTA_VENTANA_MIN = config('LOGS_FUERZA_BRUTA_VENTANA_MIN', default=15, cast=int)
+LOGS_RETENCION_DIAS = config('LOGS_RETENCION_DIAS', default=180, cast=int)   # `manage.py limpiar_logs`
+LOGS_DISCO_ALERTA_PCT = config('LOGS_DISCO_ALERTA_PCT', default=10, cast=int)
+LOGS_DISCO_CRITICO_PCT = config('LOGS_DISCO_CRITICO_PCT', default=5, cast=int)
+# `X-Forwarded-For` solo se respeta si la conexión directa viene de uno de estos (proxy propio).
+LOGS_PROXIES_CONFIABLES = config('LOGS_PROXIES_CONFIABLES', default='127.0.0.1,::1', cast=Csv())
+
+# `bd_sistema.logs` es el respaldo de lo que no se pudo guardar en la BD; `api` reenvía a la BD
+# todo `logger.error/exception` del backend (ver api/logging_handlers.py).
+(BASE_DIR / 'logs').mkdir(exist_ok=True)
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,   # no silenciar los loggers que ya existen
+    'formatters': {
+        'simple': {'format': '%(asctime)s %(levelname)s %(name)s: %(message)s'},
+    },
+    'handlers': {
+        'consola': {'class': 'logging.StreamHandler', 'level': 'WARNING', 'formatter': 'simple'},
+        'registro_bd': {'class': 'api.logging_handlers.RegistroLogsHandler', 'level': 'ERROR'},
+        'respaldo_archivo': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(BASE_DIR / 'logs' / 'registro_respaldo.log'),
+            'maxBytes': 5 * 1024 * 1024, 'backupCount': 5, 'encoding': 'utf-8', 'formatter': 'simple',
+        },
+    },
+    'loggers': {
+        'api': {'handlers': ['consola', 'registro_bd'], 'level': 'INFO', 'propagate': False},
+        'bd_sistema.logs': {'handlers': ['respaldo_archivo', 'consola'], 'level': 'INFO', 'propagate': False},
+    },
+}
 
 # ─── Cache ────────────────────────────────────────────────────────────────────
 # LocMemCache: volátil (se pierde al reiniciar). No compartido entre workers.

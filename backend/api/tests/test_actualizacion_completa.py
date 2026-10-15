@@ -32,32 +32,54 @@ def _etapa_mp_ok(etapa, desde, hasta, registro):
     return 'OK', f'{etapa} listo'
 
 
-@override_settings(**CREDENCIALES)
+@override_settings(**CREDENCIALES, SYNC_INFORME_A=['informe@test.local'])
 class OrquestacionTest(_EntornoAislado, SimpleTestCase):
     def _correr(self, **kw):
         kw.setdefault('hoy', HOY)
         kw.setdefault('espera_min', 0)
         return act.ejecutar_actualizacion_completa(**kw)
 
-    def test_ventana_de_10_dias_incluye_hoy_y_orden_fsc_pac_oc_licitaciones(self):
+    def test_orden_oc_licitaciones_fsc_pac_y_ventana_5_dias_mas_hoy(self):
         with mock.patch.object(act, '_etapa_formularios', return_value=('OK', 'fsc')), \
                 mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok) as mp:
             resultados = self._correr()
         self.assertEqual([r.etapa for r in resultados],
-                         ['formularios', 'formularios_pac', 'ordenes_compra', 'licitaciones'])
+                         ['ordenes_compra', 'licitaciones', 'formularios', 'formularios_pac'])
         etapa, desde, hasta = mp.call_args_list[0].args[:3]
-        self.assertEqual((etapa, desde, hasta), ('ordenes_compra', date(2026, 10, 4), HOY))
-        self.assertEqual((hasta - desde).days + 1, 10)
-        self.assertEqual(mail.outbox, [])
+        self.assertEqual((etapa, desde, hasta), ('ordenes_compra', date(2026, 10, 8), HOY))
+        self.assertEqual((hasta - desde).days + 1, 6)  # 5 días atrás + hoy
         self.assertFalse(self.candado.exists())
 
-    def test_dias_configurable(self):
+    def test_dias_atras_configurable(self):
         with mock.patch.object(act, '_etapa_formularios', return_value=('OK', '')), \
                 mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok) as mp:
-            self._correr(dias=3)
+            self._correr(dias_atras=2)
         self.assertEqual(mp.call_args_list[0].args[1], date(2026, 10, 11))
 
-    def test_una_etapa_falla_las_demas_corren_y_sale_un_solo_correo(self):
+    def test_las_etapas_siempre_corren_en_el_orden_canonico(self):
+        with mock.patch.object(act, '_etapa_formularios', return_value=('OK', '')), \
+                mock.patch.object(act, '_etapa_compra_agil', return_value=('OK', '')), \
+                mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok):
+            resultados = self._correr(etapas=('compra_agil', 'formularios', 'licitaciones', 'ordenes_compra'))
+        self.assertEqual([r.etapa for r in resultados],
+                         ['ordenes_compra', 'licitaciones', 'formularios', 'compra_agil'])
+
+    def test_una_corrida_exitosa_envia_un_informe_con_excel_adjunto(self):
+        with mock.patch.object(act, '_etapa_formularios', return_value=('OK', 'fsc')), \
+                mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok):
+            self._correr()
+        self.assertEqual(len(mail.outbox), 1)
+        correo = mail.outbox[0]
+        self.assertEqual(correo.to, ['informe@test.local'])
+        self.assertIn('Actualización', correo.subject)
+        self.assertIn('OK', correo.subject)
+        self.assertEqual(len(correo.attachments), 1)
+        self.assertTrue(correo.attachments[0][0].endswith('.xlsx'))
+        html = correo.alternatives[0][0]
+        for titulo in ('Órdenes de Compra', 'Panel FSC', 'Panel PAC', 'Licitaciones'):
+            self.assertIn(titulo, html)
+
+    def test_una_etapa_falla_las_demas_corren_y_el_informe_lo_dice(self):
         def mp(etapa, desde, hasta, registro):
             if etapa == 'ordenes_compra':
                 raise act.MercadoPublicoSinRespuesta('API caída (clave-secreta)')
@@ -69,24 +91,26 @@ class OrquestacionTest(_EntornoAislado, SimpleTestCase):
                 self._correr(reintentos=2)
 
         estados = {r.etapa: r.estado for r in ctx.exception.resultados}
-        self.assertEqual(estados, {'formularios': 'OK', 'formularios_pac': 'OK', 'ordenes_compra': 'ERROR',
-                                   'licitaciones': 'OK'})
+        self.assertEqual(estados, {'ordenes_compra': 'ERROR', 'licitaciones': 'OK', 'formularios': 'OK',
+                                   'formularios_pac': 'OK'})
         # OC reintentó 2 veces; licitaciones corrió igual después del fallo de OC.
         self.assertEqual([c.args[0] for c in llamadas.call_args_list],
                          ['ordenes_compra', 'ordenes_compra', 'licitaciones'])
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('Órdenes de Compra', mail.outbox[0].subject)
+        self.assertIn('CON ERRORES', mail.outbox[0].subject)
+        self.assertIn('OC ERROR', mail.outbox[0].subject)
         self.assertNotIn('clave-secreta', mail.outbox[0].body)
+        self.assertNotIn('clave-secreta', mail.outbox[0].alternatives[0][0])
         self.assertFalse(self.candado.exists())
 
-    def test_reintento_exitoso_no_manda_correo(self):
+    def test_reintento_exitoso_queda_ok(self):
         efectos = [RuntimeError('sin red'), ('OK', 'listo')]
         with mock.patch.object(act, '_etapa_formularios', side_effect=efectos) as fsc, \
                 mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok):
             resultados = self._correr(reintentos=3)
         self.assertEqual(fsc.call_count, 2)
         self.assertTrue(all(r.estado == 'OK' for r in resultados))
-        self.assertEqual(mail.outbox, [])
+        self.assertIn('OK', mail.outbox[0].subject)
 
     def test_sin_credenciales_no_reintenta(self):
         with override_settings(PANEL_SSO_PASSWORD=''), \
@@ -96,7 +120,7 @@ class OrquestacionTest(_EntornoAislado, SimpleTestCase):
                 self._correr(reintentos=3)
         fsc.assert_not_called()
 
-    def test_con_candado_ajeno_omite_sin_ejecutar(self):
+    def test_con_candado_ajeno_omite_avisa_y_no_ejecuta(self):
         self.assertTrue(base.adquirir_candado('boton'))
         with mock.patch.object(act, '_etapa_formularios') as fsc, \
                 mock.patch.object(act, '_etapa_mercado_publico') as mp:
@@ -104,22 +128,56 @@ class OrquestacionTest(_EntornoAislado, SimpleTestCase):
         fsc.assert_not_called()
         mp.assert_not_called()
         self.assertTrue(self.candado.exists())  # el candado ajeno no se toca
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('OMITIDA', mail.outbox[0].subject)
 
-    def test_sin_correo(self):
+    def test_sin_correo_no_envia_nada(self):
         with mock.patch.object(act, '_etapa_formularios', side_effect=RuntimeError('x')), \
                 mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok):
             with self.assertRaises(act.ActualizacionFallida):
                 self._correr(reintentos=1, avisar_por_correo=False)
         self.assertEqual(mail.outbox, [])
 
+    def test_si_el_informe_no_se_puede_enviar_no_tumba_la_actualizacion(self):
+        with mock.patch.object(act, '_etapa_formularios', return_value=('OK', '')), \
+                mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok), \
+                mock.patch.object(act.informe, 'enviar_informe', side_effect=OSError('SMTP caído')):
+            resultados = self._correr()
+        self.assertTrue(all(r.estado == 'OK' for r in resultados))
+
+    def test_si_falla_el_informe_y_hubo_errores_cae_al_aviso_corto(self):
+        with mock.patch.object(act, '_etapa_formularios', side_effect=RuntimeError('x')), \
+                mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok), \
+                mock.patch.object(act.informe, 'enviar_informe', side_effect=OSError('SMTP caído')), \
+                mock.patch.object(act, '_avisar_fallos') as aviso:
+            with self.assertRaises(act.ActualizacionFallida):
+                self._correr(reintentos=1)
+        aviso.assert_called_once()
+
     def test_comando_solo_filtra_etapas_y_falla_con_codigo_de_error(self):
         with mock.patch.object(act, '_etapa_formularios') as fsc, \
                 mock.patch.object(act, '_etapa_mercado_publico', side_effect=MercadoError()) as mp:
             with self.assertRaises(CommandError):
                 call_command('actualizacion_completa', '--solo', 'licitaciones',
-                             '--reintentos', '1', '--espera-min', '0')
+                             '--reintentos', '1', '--espera-min', '0', '--sin-correo')
         fsc.assert_not_called()
         self.assertEqual([c.args[0] for c in mp.call_args_list], ['licitaciones'])
+
+    def test_comando_con_compra_agil_la_agrega_al_final(self):
+        with mock.patch.object(act, '_etapa_formularios', return_value=('OK', '')), \
+                mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok), \
+                mock.patch.object(act, '_etapa_compra_agil', return_value=('OK', '')) as ca:
+            call_command('actualizacion_completa', '--con-compra-agil', '--espera-min', '0')
+        ca.assert_called_once()
+        asunto = mail.outbox[0].subject
+        self.assertIn('CA +', asunto)
+
+    def test_comando_dias_atras(self):
+        with mock.patch.object(act, '_etapa_formularios', return_value=('OK', '')), \
+                mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok) as mp:
+            call_command('actualizacion_completa', '--dias-atras', '1', '--espera-min', '0', '--sin-correo')
+        _, desde, hasta = mp.call_args_list[0].args[:3]
+        self.assertEqual((hasta - desde).days, 1)
 
 
 def MercadoError():
@@ -158,9 +216,11 @@ class EtapaMercadoPublicoTest(_EntornoAislado, TestCase):
     def _correr(self, modulo):
         registro = act.base._Registro(None, 'x')
         with mock.patch.object(act, '_importar_etl', return_value=modulo), \
-                mock.patch.object(act, '_enlazar_fsc_oc', return_value='') as enlace:
+                mock.patch.object(act, '_enlazar_fsc_oc', return_value=('', 'Enlace FSC-OC: ok')) as enlace:
             self.enlace = enlace
-            return act._etapa_mercado_publico('ordenes_compra', date(2026, 10, 4), HOY, registro)
+            crudo = act._etapa_mercado_publico('ordenes_compra', date(2026, 10, 4), HOY, registro)
+            estado, detalle, self.extra = act._normalizar(crudo)
+            return estado, detalle
 
     def test_integra_y_carga_los_maestros(self):
         estado, detalle = self._correr(self._modulo('✨ PROCESO DE REFRESH COMPLETADO EXITOSAMENTE.'))
@@ -396,9 +456,11 @@ class EtapaCompraAgilTest(_EntornoAislado, SimpleTestCase):
                                   return_value={'api_compraagil_resumen': 120,
                                                 'api_compraagil_productos': 300}) as subir:
             self.subir = subir
-            return act._etapa_compra_agil(piso, hasta, registro, forzar_rango=forzar,
-                                          presupuesto_min=presupuesto_min, hilos=hilos, repaso=3,
-                                          hoy=hoy or hasta)
+            crudo = act._etapa_compra_agil(piso, hasta, registro, forzar_rango=forzar,
+                                           presupuesto_min=presupuesto_min, hilos=hilos, repaso=3,
+                                           hoy=hoy or hasta)
+            estado, detalle, self.extra = act._normalizar(crudo)
+            return estado, detalle
 
     def _estado_guardado(self):
         ruta = Path(self._tmp.name) / 'estado_actualizacion.json'
@@ -529,6 +591,54 @@ class OrquestacionCompraAgilTest(_EntornoAislado, SimpleTestCase):
             act.ejecutar_actualizacion_completa(etapas=('compra_agil',), hoy=HOY, espera_min=0,
                                                 ca_desde=date(2026, 10, 1))
             self.assertTrue(ca.call_args.kwargs['forzar_rango'])
+
+    def test_compra_agil_baja_solo_ayer_y_hoy_mientras_oc_baja_5_dias(self):
+        with mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok) as mp, \
+                mock.patch.object(act, '_etapa_compra_agil', return_value=('OK', '')) as ca:
+            act.ejecutar_actualizacion_completa(
+                etapas=('ordenes_compra', 'compra_agil'), hoy=HOY, espera_min=0, avisar_por_correo=False)
+        _, desde, hasta = mp.call_args_list[0].args[:3]
+        self.assertEqual((desde, hasta), (date(2026, 10, 8), HOY))      # OC: 5 días + hoy
+        self.assertEqual(ca.call_args.kwargs['repaso'], 2)              # CA: ayer y hoy
+        self.assertEqual(ca.call_args.kwargs['hoy'], HOY)
+
+    @override_settings(SYNC_INFORME_A=['informe@test.local'])
+    def test_la_ventana_del_informe_distingue_oc_y_compras_agiles(self):
+        with mock.patch.object(act, '_etapa_mercado_publico', side_effect=_etapa_mp_ok), \
+                mock.patch.object(act, '_etapa_compra_agil', return_value=('OK', '')):
+            act.ejecutar_actualizacion_completa(
+                etapas=('ordenes_compra', 'licitaciones', 'compra_agil'), hoy=HOY, espera_min=0)
+        html = mail.outbox[0].alternatives[0][0]
+        self.assertIn('OC y Licitaciones: últimos 5 días + hoy (08-10-2026 al 13-10-2026)', html)
+        self.assertIn('Compras Ágiles: ayer y hoy (12-10-2026 al 13-10-2026)', html)
+
+    def test_dias_atras_de_compra_agil_configurable_por_parametro_y_por_settings(self):
+        with mock.patch.object(act, '_etapa_compra_agil', return_value=('OK', '')) as ca:
+            act.ejecutar_actualizacion_completa(etapas=('compra_agil',), hoy=HOY, espera_min=0,
+                                                ca_dias_atras=3, avisar_por_correo=False)
+            self.assertEqual(ca.call_args.kwargs['repaso'], 4)
+            with override_settings(SYNC_COMPRA_AGIL_DIAS_ATRAS=2):
+                act.ejecutar_actualizacion_completa(etapas=('compra_agil',), hoy=HOY, espera_min=0,
+                                                    avisar_por_correo=False)
+            self.assertEqual(ca.call_args.kwargs['repaso'], 3)
+
+    def test_comando_ca_dias_atras(self):
+        with mock.patch.object(act, '_etapa_compra_agil', return_value=('OK', '')) as ca:
+            call_command('actualizacion_completa', '--solo', 'compra_agil', '--ca-dias-atras', '2',
+                         '--sin-correo', '--espera-min', '0')
+        self.assertEqual(ca.call_args.kwargs['repaso'], 3)
+
+    def test_rango_texto_de_compra_agil(self):
+        txt = act._rango_texto('compra_agil', date(2026, 1, 1), HOY, {'repaso': 2, 'hoy': HOY}, False)
+        self.assertIn('Ayer y hoy (12-10-2026 al 13-10-2026)', txt)
+        self.assertIn('desde 01-01-2026', txt)
+        txt = act._rango_texto('compra_agil', date(2026, 1, 1), HOY, {'repaso': 4, 'hoy': HOY}, False)
+        self.assertIn('Últimos 3 días + hoy (10-10-2026 al 13-10-2026)', txt)
+
+    def test_con_todo_leido_la_noche_son_solo_dos_fechas(self):
+        cubiertos = {date(2026, 1, 1) + timedelta(days=i) for i in range(285)}  # hasta el 12-oct
+        bloques = act._planificar_bloques_ca(date(2026, 1, 1), HOY, cubiertos, 2, 12)
+        self.assertEqual(bloques, [[HOY, date(2026, 10, 12)]])
 
     def test_fecha_invalida_en_settings_cae_al_valor_por_defecto(self):
         with override_settings(SYNC_COMPRA_AGIL_DESDE='no-es-fecha'):

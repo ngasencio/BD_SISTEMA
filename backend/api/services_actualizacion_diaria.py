@@ -1,17 +1,19 @@
-"""Actualización COMPLETA, sin botones: Formularios FSC + Órdenes de Compra + Licitaciones
-(+ Compra Ágil, que corre aparte por la noche).
+"""Actualización COMPLETA, sin botones, de todas las fuentes de datos.
 
-Es lo que hacen, uno tras otro, «Actualizar desde el Panel» (Formularios), «Actualizar API»
-(Órdenes de Compra), «Actualizar API» (Licitaciones) y «Actualizar API» (Compra Ágil), pensado
-para correr desatendido desde tareas programadas de Windows
-(`python manage.py actualizacion_completa [--solo compra_agil]`).
+Orden de ejecución: Órdenes de Compra → Licitaciones → Panel FSC → Panel PAC → Compras Ágiles
+(esta última solo en las corridas que la piden, `--con-compra-agil`). OC, Licitaciones y Compras
+Ágiles toman «los últimos 5 días + hoy»; los dos paneles bajan su archivo total.
+
+Es lo que hacen, uno tras otro, los botones «Actualizar» de cada módulo, pensado para correr
+desatendido desde tareas programadas de Windows (`python manage.py actualizacion_completa`).
+Al terminar envía UN correo con el informe por bloque (ver `services_informe_actualizacion`).
 
 Decisiones (ver también `services_sync_formularios`, de donde sale el candado, el log y el
 paso de Formularios):
 
-- **Ventana de N días** (10 por defecto, `hoy-(N-1)` … `hoy`) para OC y Licitaciones. Los ETL
-  solo descargan ese rango y lo integran a sus CSV maestros; la BD se carga desde el maestro
-  completo. Re-descargar la ventana cada día deja pasar cambios de estado y recupera días que
+- **Ventana «últimos N días + hoy»** (N = 5: `hoy-5` … `hoy`) para OC, Licitaciones y Compras
+  Ágiles. Los ETL solo descargan ese rango y lo integran a sus CSV maestros; la BD se carga desde
+  el maestro completo. Re-descargar la ventana cada día deja pasar cambios de estado y recupera días que
   hayan fallado el día anterior. Lo que quede fuera de la ventana NO se recupera solo.
 - **Etapas independientes**: si una falla no se detiene el resto; se reintenta por etapa y, al
   final, UN correo con el resumen si algo quedó mal.
@@ -37,7 +39,7 @@ import threading
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -45,15 +47,22 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
 
+from . import services_informe_actualizacion as informe
 from . import services_sync_formularios as base
 
 NOMBRE_LOG = 'actualizacion_diaria'
 RUTA_API = base.DIR_BACKEND.parent / 'api'
 
-# Las que corren varias veces al día. Compra Ágil NO va aquí: tarda más y su API es la más
-# frágil, así que tiene su propia tarea nocturna (`--solo compra_agil`).
-ETAPAS_DIARIAS = ('formularios', 'formularios_pac', 'ordenes_compra', 'licitaciones')
-ETAPAS = ETAPAS_DIARIAS + ('compra_agil',)
+# Orden de ejecución (el pedido por el usuario, 2026-10-15). Compra Ágil solo corre cuando se
+# pide (`--con-compra-agil`): tarda más y su API es la más frágil.
+ETAPAS = ('ordenes_compra', 'licitaciones', 'formularios', 'formularios_pac', 'compra_agil')
+ETAPAS_BASE = ETAPAS[:4]
+DIAS_ATRAS_DEFECTO = 5  # OC y Licitaciones: «últimos 5 días + hoy» = 6 fechas
+# Compras Ágiles: solo «ayer y hoy» (2 fechas). La API registra cada cambio de estado en el día en
+# que ocurre, así que repasar más días atrás solo suma minutos (un día hábil lista 350-1.000
+# compras y cuesta ~15-20 min de descarga). Los días que una caída deje sin leer se completan
+# aparte con el registro de días leídos.
+DIAS_ATRAS_COMPRA_AGIL_DEFECTO = 1
 ETIQUETAS = {
     'formularios': 'Formularios FSC (Panel SSO)',
     'formularios_pac': 'Formularios PAC (Panel SSO)',
@@ -108,6 +117,13 @@ class ResultadoEtapa:
     estado: str  # OK | SIN_NOVEDADES | ERROR
     detalle: str = ''
     segundos: float = 0.0
+    rango: str = ''        # qué se actualizó («5 días + hoy», «archivo total»...)
+    nuevos: int = None     # registros nuevos (None = no se pudo calcular)
+    cambios: int = None    # registros que cambiaron de estado
+    total: int = None      # registros del bloque en la BD al terminar
+    resumen: list = field(default_factory=list)  # [(rótulo, valor)] para el informe
+    listas: list = field(default_factory=list)   # listas de nuevos / cambiados (ver informe.lista)
+    notas: list = field(default_factory=list)    # avisos para quien lee el informe
 
 
 # ─── Captura de la salida de los ETL ──────────────────────────────────────────
@@ -144,6 +160,7 @@ class _CapturaStdout:
         self.consultas_sin_respuesta = 0  # listado + detalle
         self.fallos_listado = 0           # el listado del día no se pudo leer completo
         self.detalles_fallidos = 0        # un detalle individual no se pudo bajar
+        self.codigos_fallidos = []        # códigos de esos detalles (para el informe)
         self.dias_ok = 0
 
     def write(self, texto):
@@ -172,6 +189,9 @@ class _CapturaStdout:
             # Un fallo de detalle llega pegado a su línea "[i/N] código..."; los de listado, no.
             if linea.startswith('['):
                 self.detalles_fallidos += 1
+                m = re.match(r'^\[\d+/\d+\]\s+(\S+?)\.\.\.', linea)
+                if m and m.group(1) not in self.codigos_fallidos:
+                    self.codigos_fallidos.append(m.group(1))
             else:
                 self.fallos_listado += 1
         elif 'Guardado en DIARIO' in linea or ('COMPLETADO EXITOSAMENTE' in linea and 'DÍA' in linea):
@@ -206,8 +226,15 @@ def _etapa_formularios(registro):
     if not (rut and dv and clave):
         raise ConfiguracionIncompleta('Faltan PANEL_SSO_RUT / PANEL_SSO_DV / PANEL_SSO_CLAVE en backend/.env.')
     r = base._ejecutar_una_vez(rut, dv, clave, registro)
+    resumen = [('Filas procesadas del archivo', r.get('total', 0)), ('Filas nuevas', r.get('nuevos', 0)),
+               ('Filas actualizadas', r.get('actualizados', 0)), ('Filas eliminadas', r.get('eliminados', 0))]
+    for clave_, rotulo in (('fsc', 'Solicitudes (FSC)'), ('derivados', 'Derivados a comprador'),
+                           ('carro', 'Carro de productos')):
+        s = r.get(clave_) or {}
+        resumen.append((f'{rotulo}: nuevas / actualizadas / eliminadas',
+                        f"{s.get('nuevos', 0)} / {s.get('actualizados', 0)} / {s.get('eliminados', 0)}"))
     return 'OK', (f"{r.get('nuevos', 0)} nuevos, {r.get('actualizados', 0)} actualizados, "
-                  f"{r.get('eliminados', 0)} eliminados ({r.get('total', 0)} procesados)")
+                  f"{r.get('eliminados', 0)} eliminados ({r.get('total', 0)} procesados)"), {'resumen': resumen}
 
 
 def _etapa_formularios_pac(registro):
@@ -217,8 +244,14 @@ def _etapa_formularios_pac(registro):
     if not (rut and dv and clave):
         raise ConfiguracionIncompleta('Faltan PANEL_SSO_RUT / PANEL_SSO_DV / PANEL_SSO_CLAVE en backend/.env.')
     r = base._ejecutar_pac_una_vez(rut, dv, clave, registro)
+    cab, car = r.get('cabeceras') or {}, r.get('carro') or {}
+    resumen = [('Fichas nuevas', r.get('nuevos', 0)), ('Fichas actualizadas', r.get('actualizados', 0)),
+               ('Fichas sin cambios', cab.get('sin_cambios', 0)), ('Fichas eliminadas', r.get('eliminados', 0)),
+               ('Líneas de carro cargadas', r.get('lineas_carro', 0))]
+    notas = [str(a) for a in (cab.get('advertencias') or []) + (car.get('advertencias') or [])][:5]
     return 'OK', (f"{r.get('nuevos', 0)} fichas nuevas, {r.get('actualizados', 0)} actualizadas, "
-                  f"{r.get('eliminados', 0)} eliminadas; {r.get('lineas_carro', 0)} líneas de carro")
+                  f"{r.get('eliminados', 0)} eliminadas; {r.get('lineas_carro', 0)} líneas de carro"), \
+        {'resumen': resumen, 'notas': notas}
 
 
 def _subir_maestros_atomico(modulo, cfg, registro):
@@ -246,18 +279,24 @@ def _subir_maestros_atomico(modulo, cfg, registro):
 
 
 def _enlazar_fsc_oc(registro):
-    """Igual que el botón de OC: reengancha FSC↔OC con la nueva foto. Nunca tumba la etapa."""
+    """Igual que el botón de OC: reengancha FSC↔OC con la nueva foto. Nunca tumba la etapa.
+    Devuelve (sufijo para el detalle, nota para el informe)."""
+    ultimo = []
     try:
         from django.db import close_old_connections
         from .services import recalcular_fsc_oc_matching
 
+        def _avisar(**kw):
+            if kw.get('log'):
+                ultimo.append(str(kw['log']))
+                registro.info(f"[enlace FSC-OC] {kw['log']}")
+
         close_old_connections()
-        recalcular_fsc_oc_matching(
-            _avisar=lambda **kw: kw.get('log') and registro.info(f"[enlace FSC-OC] {kw['log']}"))
-        return ''
+        recalcular_fsc_oc_matching(_avisar=_avisar)
+        return '', (ultimo[-1] if ultimo else '')
     except Exception as exc:
         registro.error(f'Enlace FSC-OC falló (la carga de OC sí quedó): {base._sin_secreto(exc)}')
-        return ' — OJO: el enlace FSC-OC falló (ver log)'
+        return ' — OJO: el enlace FSC-OC falló (ver log)', 'El enlace FSC↔OC falló (la carga de OC sí quedó).'
 
 
 def _crear_engine_bd():
@@ -373,9 +412,11 @@ def _decidir_tras_refresh(captura, desde, hasta):
 # Ojo: unas pocas compras ágiles dan 504 SIEMPRE al pedir su detalle (el backend de la API no lo
 # arma en <29 s, pasa también pedido solo): cada una cuesta ~3 min de reintentos y no se puede
 # corregir desde acá; se informan como "sueltas sin bajar".
-DIAS_REPASO_COMPRA_AGIL = 3        # incluye hoy: se repasan siempre (cambian de estado)
+DIAS_REPASO_COMPRA_AGIL = DIAS_ATRAS_COMPRA_AGIL_DEFECTO + 1  # «ayer y hoy»: se repasan siempre
 HILOS_COMPRA_AGIL = 6
-PRESUPUESTO_COMPRA_AGIL_MIN = 360  # pasado esto no se empiezan bloques nuevos (01:00 → ~07:00)
+# Tope de la parte "completar días sin leer" (la ventana va siempre); los 4 horarios del día
+# están separados por ≥4 h, así que una corrida con Compra Ágil cabe holgada.
+PRESUPUESTO_COMPRA_AGIL_MIN = 90
 DIAS_RECIENTES_COMPRA_AGIL = 30    # lo pendiente de este tramo va primero (más relevante)
 SUBIR_CADA_MIN = 60                # una corrida larga publica su avance a la BD cada tanto
 
@@ -518,6 +559,7 @@ def _bajar_bloque_ca(modulo, dias, hilos, registro):
         'integrado': integrado,
         'fallos_listado': sum(r['captura'].fallos_listado for r in listos) + sum(1 for r in listos if r['error']),
         'detalles_fallidos': sum(r['captura'].detalles_fallidos for r in listos),
+        'codigos_fallidos': [c for r in listos for c in r['captura'].codigos_fallidos],
         'omitidos': [d for d, r in resultados.items() if r is None],
     }
 
@@ -531,7 +573,7 @@ def _etapa_compra_agil(piso, hasta, registro, forzar_rango=False, presupuesto_mi
     los días del rango aunque figuren leídos; igual registra los que salgan completos."""
     presupuesto_min = presupuesto_min or _ca_numero('SYNC_COMPRA_AGIL_PRESUPUESTO_MIN', PRESUPUESTO_COMPRA_AGIL_MIN)
     hilos = hilos or _ca_numero('SYNC_COMPRA_AGIL_HILOS', HILOS_COMPRA_AGIL)
-    repaso = repaso or _ca_numero('SYNC_COMPRA_AGIL_DIAS_REPASO', DIAS_REPASO_COMPRA_AGIL)
+    repaso = repaso or DIAS_REPASO_COMPRA_AGIL
 
     hoy_local = hoy or timezone.localdate()
     modulo = _importar_etl('AG_SSO_SERVER')
@@ -549,6 +591,7 @@ def _etapa_compra_agil(piso, hasta, registro, forzar_rango=False, presupuesto_mi
     integrados = 0
     procesados = 0
     detalles_fallidos = 0
+    codigos_fallidos = []
     parcial = None
     error_api = None
     cargadas = None
@@ -564,6 +607,7 @@ def _etapa_compra_agil(piso, hasta, registro, forzar_rango=False, presupuesto_mi
             break
         procesados += len(dias)
         detalles_fallidos += r['detalles_fallidos']
+        codigos_fallidos += [c for c in r['codigos_fallidos'] if c not in codigos_fallidos]
         if r['integrado']:
             integrados += 1
             sin_subir += 1
@@ -608,7 +652,17 @@ def _etapa_compra_agil(piso, hasta, registro, forzar_rango=False, presupuesto_mi
         detalle += f'; {detalles_fallidos} detalle(s) sueltos sin bajar'
     if parcial:
         detalle += f' — PARCIAL: {parcial}'
-    return 'OK', detalle
+    resumen = [('Días procesados', procesados),
+               ('Días del rango aún sin leer (desde el piso)', len(pendientes)),
+               ('Detalles que la API no entregó (504)', detalles_fallidos)]
+    notas = []
+    if codigos_fallidos:
+        notas.append('La API da timeout al pedir el detalle de: ' + ', '.join(codigos_fallidos[:30])
+                     + (f' y {len(codigos_fallidos) - 30} más' if len(codigos_fallidos) > 30 else '')
+                     + '. No se pueden bajar hasta que Mercado Público lo corrija; se reintentan en cada corrida.')
+    if parcial:
+        notas.append(f'Corrida parcial: {parcial}.')
+    return 'OK', detalle, {'resumen': resumen, 'notas': notas}
 
 
 def _etapa_mercado_publico(etapa, desde, hasta, registro):
@@ -628,9 +682,18 @@ def _etapa_mercado_publico(etapa, desde, hasta, registro):
     detalle = f'{n_principal} registros y {n_detalle} detalles en la BD'
     if captura.consultas_sin_respuesta:
         detalle += f' ({captura.consultas_sin_respuesta} consulta(s) sin respuesta; la ventana las reintenta mañana)'
+    resumen = [('Días del rango con datos descargados', captura.dias_ok),
+               ('Detalle de líneas en la base de datos', n_detalle)]
+    notas = []
+    if captura.consultas_sin_respuesta:
+        notas.append(f'{captura.consultas_sin_respuesta} consulta(s) a Mercado Público sin respuesta; '
+                     'se reintentan en la próxima corrida (la ventana se repite).')
     if etapa == 'ordenes_compra':
-        detalle += _enlazar_fsc_oc(registro)
-    return 'OK', detalle
+        sufijo, nota = _enlazar_fsc_oc(registro)
+        detalle += sufijo
+        if nota:
+            notas.append(nota)
+    return 'OK', detalle, {'resumen': resumen, 'notas': notas}
 
 
 # ─── Orquestación ─────────────────────────────────────────────────────────────
@@ -652,11 +715,61 @@ def _con_reintentos(etiqueta, fn, reintentos, espera_min, registro):
     raise ultimo
 
 
+def _normalizar(crudo):
+    """Las etapas devuelven (estado, detalle) o (estado, detalle, extra)."""
+    estado, detalle = crudo[0], crudo[1]
+    return estado, detalle, (crudo[2] if len(crudo) > 2 else {})
+
+
+def _foto(etapa, registro):
+    """Foto previa de la tabla de la etapa (para calcular nuevos/cambios). Nunca lanza."""
+    par = informe.INSTANTANEAS.get(etapa)
+    if not par:
+        return None
+    try:
+        return par[0]()
+    except Exception as exc:
+        registro.warning(f'[{etapa}] No se pudo tomar la foto previa (el informe saldrá sin listas): '
+                         f'{base._sin_secreto(exc)}')
+        return None
+
+
+def _agregar_cambios(resultado, etapa, antes, registro):
+    """Compara la foto previa con el estado final y vuelca contadores y listas al resultado."""
+    par = informe.INSTANTANEAS.get(etapa)
+    if not par or antes is None:
+        return
+    try:
+        cmp_ = par[1](antes, par[0]())
+    except Exception as exc:
+        registro.warning(f'[{etapa}] No se pudieron calcular los cambios: {base._sin_secreto(exc)}')
+        return
+    resultado.nuevos, resultado.cambios, resultado.total = cmp_['nuevos'], cmp_['cambios'], cmp_['total']
+    resultado.resumen = list(cmp_['resumen']) + list(resultado.resumen)
+    resultado.listas = list(cmp_['listas'])
+
+
+def _rango_texto(etapa, desde, hasta, opciones_ca, forzar_ca):
+    if etapa in ('formularios', 'formularios_pac'):
+        return 'Archivo total del Panel (historial completo)'
+    if etapa == 'compra_agil':
+        if forzar_ca:
+            return f'Rango pedido a mano: {desde:%d-%m-%Y} al {hasta:%d-%m-%Y}'
+        repaso = (opciones_ca or {}).get('repaso') or DIAS_REPASO_COMPRA_AGIL
+        hoy = (opciones_ca or {}).get('hoy') or hasta
+        ini = hoy - timedelta(days=repaso - 1)
+        ventana = 'Ayer y hoy' if repaso == 2 else f'Últimos {repaso - 1} días + hoy'
+        return (f'{ventana} ({ini:%d-%m-%Y} al {hoy:%d-%m-%Y}); además completa días sin leer '
+                f'desde {desde:%d-%m-%Y}')
+    return f'Últimos {(hasta - desde).days} días + hoy ({desde:%d-%m-%Y} al {hasta:%d-%m-%Y})'
+
+
 def _correr_etapa(etapa, desde, hasta, reintentos, espera_min, registro, forzar_ca=False,
                   opciones_ca=None):
     etiqueta = ETIQUETAS[etapa]
     registro.info(f'[ETAPA] {etiqueta}')
     inicio = time.monotonic()
+    antes = _foto(etapa, registro)
 
     def _una_vez():
         if etapa == 'formularios':
@@ -669,10 +782,16 @@ def _correr_etapa(etapa, desde, hasta, reintentos, espera_min, registro, forzar_
         return _etapa_mercado_publico(etapa, desde, hasta, registro)
 
     try:
-        estado, detalle = _con_reintentos(etiqueta, _una_vez, reintentos, espera_min, registro)
+        estado, detalle, extra = _normalizar(
+            _con_reintentos(etiqueta, _una_vez, reintentos, espera_min, registro))
     except Exception as exc:
-        estado, detalle = 'ERROR', base._sin_secreto(exc) or exc.__class__.__name__
-    resultado = ResultadoEtapa(etapa, estado, detalle, time.monotonic() - inicio)
+        estado, detalle, extra = 'ERROR', base._sin_secreto(exc) or exc.__class__.__name__, {}
+    resultado = ResultadoEtapa(etapa, estado, detalle, rango=_rango_texto(etapa, desde, hasta, opciones_ca, forzar_ca))
+    resultado.resumen = list(extra.get('resumen') or [])
+    resultado.notas = list(extra.get('notas') or [])
+    if estado != 'ERROR':
+        _agregar_cambios(resultado, etapa, antes, registro)
+    resultado.segundos = time.monotonic() - inicio
     registro_nivel = registro.error if estado == 'ERROR' else registro.info
     registro_nivel(f'[{estado}] {etiqueta}: {detalle} ({resultado.segundos:.0f} s)')
     return resultado
@@ -729,52 +848,89 @@ def compra_agil_desde_configurado():
         return COMPRA_AGIL_DESDE_DEFECTO
 
 
-def ejecutar_actualizacion_completa(dias=10, reintentos=3, espera_min=5, etapas=ETAPAS_DIARIAS,
-                                    avisar_por_correo=True, salida=None, esperar_candado_min=20,
-                                    hoy=None, ca_desde=None, ca_hasta=None, ca_hilos=None,
-                                    ca_presupuesto_min=None):
-    """Corre las etapas en orden. Devuelve la lista de `ResultadoEtapa`, o `None` si se omitió
-    porque otra actualización siguió en curso tras la espera. Lanza `ActualizacionFallida`
-    (con los resultados) si alguna etapa quedó con error — después de correr TODAS.
+def _enviar_informe(resultados, inicio, segundos, ventana, registro):
+    """Envía el informe de la corrida. Nunca lanza: si el correo falla, se deja en el log."""
+    try:
+        inf = informe.construir_informe(
+            resultados, {'inicio': inicio, 'segundos': segundos, 'ventana': ventana})
+        destinos = informe.enviar_informe(inf)
+        registro.info(f"Informe enviado a: {', '.join(destinos)} ({len(inf.adjuntos)} adjunto(s)).")
+        return True
+    except Exception as exc:
+        registro.error(f'No se pudo enviar el informe por correo: {base._sin_secreto(exc)}')
+        return False
 
-    `dias`: ventana móvil de OC y Licitaciones. Compra Ágil: rango [piso fijo, hoy] y solo se
-    procesa lo que falte + el repaso. `ca_desde`/`ca_hasta` (rango puntual, a mano) fuerzan
-    procesar TODOS los días de ese rango (hasta = hoy si no se indica)."""
+
+def ejecutar_actualizacion_completa(dias_atras=DIAS_ATRAS_DEFECTO, reintentos=3, espera_min=5,
+                                    etapas=ETAPAS_BASE, avisar_por_correo=True, salida=None,
+                                    esperar_candado_min=20, hoy=None, ca_desde=None, ca_hasta=None,
+                                    ca_hilos=None, ca_presupuesto_min=None, ca_dias_atras=None):
+    """Corre las etapas en el orden de `ETAPAS`. Devuelve la lista de `ResultadoEtapa`, o `None`
+    si se omitió porque otra actualización siguió en curso tras la espera. Lanza
+    `ActualizacionFallida` (con los resultados) si alguna etapa quedó con error — después de
+    correr TODAS. Al terminar (con o sin errores) envía el informe por correo.
+
+    `dias_atras`: «últimos N días + hoy» de OC y Licitaciones. `ca_dias_atras`: lo mismo para
+    Compras Ágiles (por defecto 1 = «ayer y hoy»); además completa los días sin leer desde su piso
+    fijo. `ca_desde`/`ca_hasta` (rango a mano) fuerzan procesar TODOS los días de ese rango
+    (hasta = hoy si no se indica)."""
     registro = base._Registro(salida, NOMBRE_LOG)
+    inicio_corrida = timezone.localtime()
+    t0 = time.monotonic()
+    etapas = tuple(e for e in ETAPAS if e in etapas)  # siempre en el orden canónico
     hasta = hoy or timezone.localdate()
-    desde = hasta - timedelta(days=max(dias, 1) - 1)
+    desde = hasta - timedelta(days=max(dias_atras, 0))
     ca_forzado = ca_desde is not None or ca_hasta is not None  # rango pedido a mano
-    ca_desde = ca_desde or compra_agil_desde_configurado()
-    ca_hasta = ca_hasta or hasta
+    ca_piso = ca_desde or compra_agil_desde_configurado()
+    ca_fin = ca_hasta or hasta
+
+    ca_atras = max(ca_dias_atras if ca_dias_atras is not None
+                   else _ca_numero('SYNC_COMPRA_AGIL_DIAS_ATRAS', DIAS_ATRAS_COMPRA_AGIL_DEFECTO), 1)
+    rangos = []
+    mp = [n for e, n in (('ordenes_compra', 'OC'), ('licitaciones', 'Licitaciones')) if e in etapas]
+    if mp:
+        rangos.append(f"{' y '.join(mp)}: últimos {dias_atras} días + hoy ({desde:%d-%m-%Y} al {hasta:%d-%m-%Y})")
+    if 'compra_agil' in etapas:
+        if ca_forzado:
+            rangos.append(f'Compras Ágiles (rango a mano): {ca_piso:%d-%m-%Y} al {ca_fin:%d-%m-%Y}')
+        else:
+            ini_ca = hasta - timedelta(days=ca_atras)
+            cuando = 'ayer y hoy' if ca_atras == 1 else f'últimos {ca_atras} días + hoy'
+            rangos.append(f'Compras Ágiles: {cuando} ({ini_ca:%d-%m-%Y} al {hasta:%d-%m-%Y})')
+    ventana = '; '.join(rangos) or '-'
+    contexto_omitida = {'inicio': inicio_corrida, 'segundos': 0, 'ventana': ventana}
 
     if not _tomar_candado(registro, esperar_candado_min):
-        registro.warning(f'Omitida: sigue habiendo una actualización en curso ({base.describir_candado()}).')
+        motivo = f'Sigue habiendo una actualización en curso ({base.describir_candado()}).'
+        registro.warning(f'Omitida: {motivo}')
+        if avisar_por_correo:
+            try:
+                informe.enviar_informe(informe.informe_omitido(contexto_omitida, motivo))
+            except Exception as exc:
+                registro.error(f'No se pudo avisar la omisión por correo: {base._sin_secreto(exc)}')
         return None
 
     try:
-        rangos = []
-        if any(e in etapas for e in ('ordenes_compra', 'licitaciones')):
-            rangos.append(f'OC/Licitaciones {desde:%d-%m-%Y} al {hasta:%d-%m-%Y} ({dias} días)')
-        if 'compra_agil' in etapas:
-            rangos.append(f'Compra Ágil {ca_desde:%d-%m-%Y} al {ca_hasta:%d-%m-%Y}')
-        registro.info(
-            f"[INICIO] Actualización ({', '.join(etapas)}). Rango: {'; '.join(rangos) or '-'}. "
-            f'Hasta {reintentos} intento(s) por etapa.')
+        registro.info(f"[INICIO] Actualización ({', '.join(etapas)}). {ventana}. "
+                      f'Hasta {reintentos} intento(s) por etapa.')
         resultados = []
         for etapa in etapas:
             es_ca = etapa == 'compra_agil'
-            resultados.append(_correr_etapa(etapa, ca_desde if es_ca else desde, ca_hasta if es_ca else hasta,
-                                            reintentos, espera_min, registro, forzar_ca=ca_forzado,
-                                            opciones_ca={'hilos': ca_hilos, 'hoy': hasta,
-                                                         'presupuesto_min': ca_presupuesto_min}))
+            resultados.append(_correr_etapa(
+                etapa, ca_piso if es_ca else desde, ca_fin if es_ca else hasta, reintentos, espera_min,
+                registro, forzar_ca=ca_forzado,
+                opciones_ca={'hilos': ca_hilos, 'hoy': hasta, 'repaso': ca_atras + 1,
+                             'presupuesto_min': ca_presupuesto_min}))
             base.renovar_candado()
 
         fallidas = [r for r in resultados if r.estado == 'ERROR']
-        total_s = sum(r.segundos for r in resultados)
+        total_s = time.monotonic() - t0
         registro.info(f"[FIN] {len(resultados) - len(fallidas)}/{len(resultados)} etapas sin error en {total_s:.0f} s.")
+        if avisar_por_correo:
+            enviado = _enviar_informe(resultados, inicio_corrida, total_s, ventana, registro)
+            if fallidas and not enviado:  # sin informe, al menos el aviso corto de siempre
+                _avisar_fallos(resultados, ventana, registro)
         if fallidas:
-            if avisar_por_correo:
-                _avisar_fallos(resultados, '; '.join(rangos) or '-', registro)
             raise ActualizacionFallida(
                 'Etapas con error: ' + '; '.join(f'{ETIQUETAS[r.etapa]} ({r.detalle})' for r in fallidas),
                 resultados)

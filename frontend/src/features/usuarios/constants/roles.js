@@ -63,8 +63,8 @@ export const ROLES = [
         value: 'admin',
         label: 'Administrador',
         color: '#7c3aed',
-        descripcion: 'Todo el sistema, incluyendo Gestión de Usuarios (roles, altas, bajas).',
-        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS, ...MODULOS_COMPRAS, ...MODULOS_GESTOR_SUPERVISION, 'Gestión de Usuarios'],
+        descripcion: 'Todo el sistema, incluyendo Gestión de Usuarios (roles, altas, bajas) y los Logs del sistema (accesos, cambios y errores).',
+        modulos: [...MODULOS_GENERALES, ...MODULOS_ABASTECIMIENTO, ...MODULOS_FINANZAS, ...MODULOS_COMPRAS, ...MODULOS_GESTOR_SUPERVISION, 'Gestión de Usuarios', 'Logs del sistema'],
     },
 ];
 

@@ -22,7 +22,7 @@ from datetime import date
 from django.core.management.base import BaseCommand, CommandError
 
 from api.services_actualizacion_diaria import (
-    ETAPAS, ETAPAS_DIARIAS, ActualizacionFallida, ejecutar_actualizacion_completa,
+    DIAS_ATRAS_DEFECTO, ETAPAS, ETAPAS_BASE, ActualizacionFallida, ejecutar_actualizacion_completa,
 )
 from api.services_sync_formularios import apto_consola
 
@@ -31,15 +31,20 @@ class Command(BaseCommand):
     help = "Actualiza Formularios FSC, OC, Licitaciones y Compra Ágil (sin botones, para tareas programadas)"
 
     def add_arguments(self, parser):
-        parser.add_argument('--dias', type=int, default=10,
-                            help='Ventana de días hacia atrás (incluye hoy) para OC y Licitaciones (default 10).')
+        parser.add_argument('--dias-atras', type=int, default=DIAS_ATRAS_DEFECTO,
+                            help='«Últimos N días + hoy» de OC y Licitaciones (default 5).')
+        parser.add_argument('--ca-dias-atras', type=int, default=None,
+                            help='«Últimos N días + hoy» de Compras Ágiles (default 1 = ayer y hoy; '
+                                 'SYNC_COMPRA_AGIL_DIAS_ATRAS).')
+        parser.add_argument('--con-compra-agil', action='store_true',
+                            help='Incluye Compras Ágiles al final (por defecto solo OC, Licitaciones, FSC y PAC).')
         parser.add_argument('--reintentos', type=int, default=3,
                             help='Intentos por etapa antes de rendirse (default 3).')
         parser.add_argument('--espera-min', type=int, default=5,
                             help='Minutos entre intentos de una misma etapa (default 5).')
         parser.add_argument('--solo', nargs='+', choices=ETAPAS, metavar='ETAPA',
                             help=f"Correr solo estas etapas ({', '.join(ETAPAS)}). Sin esto: "
-                                 f"{', '.join(ETAPAS_DIARIAS)} (Compra Ágil tiene su propia tarea).")
+                                 f"{', '.join(ETAPAS_BASE)} (+ compra_agil con --con-compra-agil).")
         parser.add_argument('--ca-desde', type=str, default=None, metavar='YYYY-MM-DD',
                             help='Inicio del rango de Compra Ágil (default: SYNC_COMPRA_AGIL_DESDE, 2026-09-01).')
         parser.add_argument('--ca-hasta', type=str, default=None, metavar='YYYY-MM-DD',
@@ -55,8 +60,8 @@ class Command(BaseCommand):
                             help='No enviar correo de aviso si algo falla.')
 
     def handle(self, *args, **options):
-        if options['dias'] < 1:
-            raise CommandError('--dias debe ser >= 1')
+        if options['dias_atras'] < 0:
+            raise CommandError('--dias-atras debe ser >= 0')
         if options['reintentos'] < 1:
             raise CommandError('--reintentos debe ser >= 1')
         ca_desde = ca_hasta = None
@@ -72,10 +77,10 @@ class Command(BaseCommand):
                     ca_hasta = valor
         if ca_desde and ca_hasta and ca_hasta < ca_desde:
             raise CommandError('--ca-hasta no puede ser anterior a --ca-desde')
-        solo = set(options['solo'] or ETAPAS_DIARIAS)
+        solo = set(options['solo'] or (ETAPAS_BASE + (('compra_agil',) if options['con_compra_agil'] else ())))
         try:
             ejecutar_actualizacion_completa(
-                dias=options['dias'],
+                dias_atras=options['dias_atras'],
                 reintentos=options['reintentos'],
                 espera_min=max(options['espera_min'], 0),
                 etapas=tuple(e for e in ETAPAS if e in solo),
@@ -83,6 +88,7 @@ class Command(BaseCommand):
                 esperar_candado_min=max(options['esperar_candado_min'], 0),
                 ca_desde=ca_desde,
                 ca_hasta=ca_hasta,
+                ca_dias_atras=options['ca_dias_atras'],
                 ca_hilos=options['ca_hilos'],
                 ca_presupuesto_min=options['ca_presupuesto_min'],
                 salida=lambda m: self.stdout.write(apto_consola(m)),

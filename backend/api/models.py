@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 class Licitacion(models.Model):
     # Códigos
@@ -1365,6 +1366,70 @@ class AuditoriaAdmin(models.Model):
 
     def __str__(self):
         return f"{self.entidad}:{self.objeto_id} por {self.actor_nombre or self.actor_id}"
+
+
+class RegistroLog(models.Model):
+    """Bitácora centralizada del sistema (módulo Administración › Logs). Append-only: nunca se
+    edita ni se borra desde la aplicación (solo la retención, `manage.py limpiar_logs`).
+
+    Tres categorías, un mismo formato:
+      · AUTH         accesos y seguridad (login éxito/fallo, fuerza bruta, 403, cambio de clave).
+      · AUDIT        qué cambió y quién lo hizo (usuarios, roles, organización, envíos, ETL).
+      · SYSTEM_ERROR errores y diagnóstico (excepciones, BD, APIs externas, recursos).
+
+    `message` es SIEMPRE una frase en español comprensible por cualquier persona; el detalle
+    técnico (payload, antes→después, stack trace) vive en `metadata`. El actor no es FK a
+    propósito: el registro debe sobrevivir al borrado de la cuenta. Se escribe solo desde
+    `services_logs` (cola asíncrona), que enmascara contraseñas/tokens antes de guardar."""
+    NIVEL_INFO     = 'INFO'
+    NIVEL_WARN     = 'WARN'
+    NIVEL_ERROR    = 'ERROR'
+    NIVEL_CRITICAL = 'CRITICAL'
+    NIVELES = [
+        (NIVEL_INFO,     'Informativo'),
+        (NIVEL_WARN,     'Advertencia'),
+        (NIVEL_ERROR,    'Error'),
+        (NIVEL_CRITICAL, 'Crítico'),
+    ]
+
+    CAT_AUTH   = 'AUTH'
+    CAT_AUDIT  = 'AUDIT'
+    CAT_ERROR  = 'SYSTEM_ERROR'
+    CATEGORIAS = [
+        (CAT_AUTH,  'Accesos y seguridad'),
+        (CAT_AUDIT, 'Actividad del sistema'),
+        (CAT_ERROR, 'Errores y diagnóstico'),
+    ]
+
+    # Hora exacta del evento en UTC (no la de inserción: la cola puede demorar unos ms).
+    timestamp      = models.DateTimeField(default=timezone.now, db_index=True)
+    level          = models.CharField(max_length=10, choices=NIVELES, default=NIVEL_INFO)
+    category       = models.CharField(max_length=15, choices=CATEGORIAS)
+    action         = models.CharField(max_length=60)
+    message        = models.CharField(max_length=500, blank=True, default='')
+    actor_id       = models.IntegerField(null=True, blank=True)
+    actor_username = models.CharField(max_length=150, default='ANONYMOUS')
+    actor_role     = models.CharField(max_length=50, blank=True, default='')
+    ip_address     = models.GenericIPAddressField(null=True, blank=True)
+    user_agent     = models.CharField(max_length=400, blank=True, default='')
+    http_method    = models.CharField(max_length=10, blank=True, default='')
+    path           = models.CharField(max_length=300, blank=True, default='')
+    status_code    = models.PositiveSmallIntegerField(null=True, blank=True)
+    metadata       = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = 'api_registro_log'
+        ordering = ['-timestamp', '-id']
+        indexes = [
+            models.Index(fields=['category', 'timestamp']),
+            models.Index(fields=['level', 'timestamp']),
+            models.Index(fields=['action', 'timestamp']),
+            models.Index(fields=['actor_username', 'timestamp']),
+            models.Index(fields=['ip_address', 'timestamp']),
+        ]
+
+    def __str__(self):
+        return f"[{self.level}] {self.category}/{self.action} {self.actor_username}"
 
 
 class DevengoSigfeAnual(models.Model):

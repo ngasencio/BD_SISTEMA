@@ -3026,6 +3026,7 @@ def _ejecutar_actualizacion_compraagil(task_id: str, fecha_desde_str: str, fecha
         )
 
     except Exception as exc:
+        logger.exception("Error actualizando Compra Ágil")
         _tareas_actualizacion_ca[task_id].update(status="error", error=str(exc))
 
 
@@ -3394,6 +3395,7 @@ def _ejecutar_actualizacion_oc(task_id: str, fecha_desde_str: str, fecha_hasta_s
         )
 
     except Exception as exc:
+        logger.exception("Error actualizando órdenes de compra")
         _tareas_actualizacion_oc[task_id].update(status="error", error=str(exc))
 
 
@@ -3725,6 +3727,7 @@ def _ejecutar_actualizacion_li(task_id: str, fecha_desde_str: str, fecha_hasta_s
         )
 
     except Exception as exc:
+        logger.exception("Error actualizando licitaciones")
         _tareas_actualizacion_li[task_id].update(status="error", error=str(exc))
 
 
@@ -4029,6 +4032,7 @@ def _ejecutar_actualizacion_contratos(task_id: str):
         )
 
     except Exception as exc:
+        logger.exception("Error actualizando contratos")
         _tareas_actualizacion_contratos[task_id].update(
             status="error", error=str(exc), logs_recientes=logs[-30:],
         )
@@ -5754,6 +5758,10 @@ def user_me(request):
     serializer = UserMeSerializer(user, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     serializer.save()
+    if request.data.get('password_new'):   # llegó aquí: pasó la validación (min_length=8)
+        from .services_logs import logs
+        logs.auth('PASSWORD_CHANGED', f'{user.username} cambió su propia contraseña.',
+                  request=request, actor=user)
     return Response(UserMeSerializer(user).data)
 
 
