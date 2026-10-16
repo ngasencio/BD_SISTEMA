@@ -78,6 +78,17 @@ ACCIONES = {
                       'Una persona con sesión iniciada intentó abrir o hacer algo para lo que su rol no tiene permiso.'),
     'PASSWORD_CHANGED': (CAT_AUTH, 'Cambio de contraseña',
                          'Se cambió la contraseña de una cuenta. El valor de la contraseña nunca se guarda en el registro.'),
+    'PASSWORD_RESET_REQUESTED': (CAT_AUTH, 'Recuperación de contraseña solicitada',
+                                 'Alguien pidió recuperar una contraseña desde la pantalla de ingreso. Si el correo '
+                                 'tiene una cuenta activa se le envió un código (vale 5 minutos). Si no la tiene no se '
+                                 'envía nada, pero la pantalla responde igual para no revelar qué correos existen.'),
+    'PASSWORD_RESET_VERIFIED': (CAT_AUTH, 'Código de recuperación verificado',
+                                'La persona ingresó correctamente el código que le llegó por correo y puede definir '
+                                'una contraseña nueva. El código queda inutilizado.'),
+    'PASSWORD_RESET_FAILED': (CAT_AUTH, 'Recuperación de contraseña rechazada',
+                              'Un paso de la recuperación de contraseña no fue válido: código incorrecto, vencido, '
+                              'intentos agotados, o una verificación que ya venció o se usó. Varios seguidos pueden ser '
+                              'un intento de tomar una cuenta ajena.'),
     'ACCOUNT_DEACTIVATED': (CAT_AUTH, 'Cuenta desactivada',
                             'Un administrador desactivó una cuenta: esa persona ya no puede ingresar al sistema.'),
     'ACCOUNT_ACTIVATED': (CAT_AUTH, 'Cuenta reactivada',

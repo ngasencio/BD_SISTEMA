@@ -1,0 +1,11 @@
+Hola {{ nombre }}:
+
+Recibimos una solicitud para recuperar la contraseña de tu cuenta en el Sistema de Gestión SSO.
+
+Tu código de verificación es:  {{ codigo }}
+
+Vale por {{ vigencia_min }} minutos. Pasado ese tiempo deberás solicitar uno nuevo desde la pantalla de ingreso.
+
+Si tú no lo solicitaste, ignora este correo: tu contraseña actual no cambiará. No compartas este código con nadie; el personal del Servicio de Salud nunca te lo pedirá.
+
+Servicio de Salud Osorno - Departamento de Abastecimiento

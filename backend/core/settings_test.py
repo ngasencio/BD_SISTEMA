@@ -28,5 +28,7 @@ EMAIL_HOST_USER = 'remitente@test.local'
 DEFAULT_FROM_EMAIL = 'remitente@test.local'
 TEST_RUNNER = 'core.test_runner.RunnerTablasNoGestionadas'
 NOTIF_PLAN_PAUSA_SEG = 0
+# Recuperación de contraseña: el correo sale en el acto (sin hilo) para verlo en la bandeja locmem.
+RECUPERACION_ENVIO_EN_HILO = False
 # Logs: escritura inmediata (sin hilo) para poder verificar lo registrado dentro de la prueba.
 LOGS_ASYNC = False

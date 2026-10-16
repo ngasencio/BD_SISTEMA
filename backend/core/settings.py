@@ -171,6 +171,19 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_TIMEOUT = 30
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
 
+# ─── Recuperación de contraseña por correo (login › «¿Olvidaste tu contraseña?») ──
+# Usa el mismo SMTP de arriba. Se valida SIEMPRE en el servidor (la pantalla solo lo refleja).
+RECUPERACION_LARGO_CODIGO = 6                                              # dígitos del código
+RECUPERACION_VIGENCIA_MIN = config('RECUPERACION_VIGENCIA_MIN', default=5, cast=int)      # vida del código
+RECUPERACION_MAX_INTENTOS = config('RECUPERACION_MAX_INTENTOS', default=5, cast=int)      # comprobaciones por código
+RECUPERACION_TOKEN_VIGENCIA_MIN = config('RECUPERACION_TOKEN_VIGENCIA_MIN', default=10, cast=int)  # para escribir la nueva clave
+RECUPERACION_REENVIO_SEG = config('RECUPERACION_REENVIO_SEG', default=60, cast=int)       # espera entre dos códigos
+RECUPERACION_MAX_POR_HORA_USUARIO = config('RECUPERACION_MAX_POR_HORA_USUARIO', default=5, cast=int)
+RECUPERACION_MAX_POR_HORA_IP = config('RECUPERACION_MAX_POR_HORA_IP', default=30, cast=int)  # holgado: una red hospitalaria comparte IP
+# El correo se envía en un hilo para que la respuesta tarde igual exista o no la cuenta
+# (si no, la demora del SMTP delataría qué correos están registrados). Las pruebas lo apagan.
+RECUPERACION_ENVIO_EN_HILO = config('RECUPERACION_ENVIO_EN_HILO', default=True, cast=bool)
+
 # Quién puede abrir/usar la pestaña "Notificación" (correos masivos a funcionarios).
 # Se valida en el servidor por correo del usuario, no por rol: un admin cualquiera NO pasa.
 NOTIF_PLAN_USUARIOS = [e.lower() for e in config(

@@ -3694,6 +3694,83 @@ canvas {
     border: 1px solid #a9dfbf;
 }
 
+/* Recuperación de contraseña (RecuperarContrasena.jsx) — reutiliza .field/.input-wrap/.btn-login/.msg */
+.login-container .input-wrap input.rec-codigo {
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: .4em;
+    padding-left: 44px;
+}
+
+.login-container .rec-reloj {
+    margin-top: 7px;
+    font-size: 12px;
+    color: var(--gris4);
+}
+
+.login-container .rec-reloj strong {
+    color: var(--gob-azul);
+    font-variant-numeric: tabular-nums;
+}
+
+.login-container .rec-reloj.vencido {
+    color: #c0392b;
+    font-weight: 600;
+}
+
+.login-container .rec-reglas {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    font-size: 12px;
+    color: var(--gris4);
+    text-align: left;
+}
+
+.login-container .rec-reglas li {
+    padding: 2px 0;
+}
+
+.login-container .rec-reglas li.ok {
+    color: #1e8449;
+}
+
+.login-container .rec-acciones {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.login-container .rec-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--azul-lt);
+    cursor: pointer;
+}
+
+.login-container .rec-link:hover:not(:disabled) {
+    color: var(--azul);
+    text-decoration: underline;
+}
+
+.login-container .rec-link:disabled {
+    color: var(--gris3);
+    cursor: not-allowed;
+}
+
+.login-container .rec-wrap .btn-login:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+    transform: none;
+}
+
 /* Responsive */
 @media (max-width: 680px) {
     .login-container .card {

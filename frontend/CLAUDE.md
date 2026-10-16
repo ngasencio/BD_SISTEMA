@@ -72,6 +72,9 @@ src/
 5. Si respuesta es 401 → interceptor intenta refresh automático
 6. Si refresh falla → `clearSession()` + redirect a `/bd_sistema/login`
 
+### Recuperación de contraseña (2026-10-16)
+El enlace «¿Olvidaste tu contraseña?» de `LoginPage` cambia `vista` a `'recuperar'` y monta `features/auth/components/RecuperarContrasena.jsx` en el mismo panel (sin ruta nueva): correo → código de 6 dígitos (cuenta regresiva de 5 min, «Reenviar» tras 60 s) → contraseña nueva (+ reglas en vivo) → vuelta al login con aviso. HTTP en `features/auth/api/authApi.js` (`solicitarCodigoApi`/`verificarCodigoApi`/`restablecerClaveApi`, endpoints públicos `auth/recuperar/*`). Lógica pura probada en `features/auth/utils/recuperacion.test.js`. **El servidor valida todo** (vigencia, intentos, reglas): el reloj y las reglas de la pantalla son solo guía. El token que entrega la verificación vive solo en memoria del componente. Estilos `.rec-*` en `index.css` (sección LOGIN PAGE), con `.btn-login:disabled` acotado a `.rec-wrap` para no cambiar el botón de ingreso. Backend: ver `CLAUDE.md` raíz, «Módulo Recuperación de contraseña».
+
 ### Hooks de auth
 ```js
 // Siempre via hook — nunca acceder al context directamente

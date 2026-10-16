@@ -2056,3 +2056,37 @@ class NotificacionPlanCopia(models.Model):
 
     def __str__(self):
         return f"{self.accion} {self.correo} (depto {self.departamento_id})"
+
+
+class RecuperacionContrasena(models.Model):
+    """Solicitud de recuperación de contraseña por correo (login › «¿Olvidaste tu contraseña?»).
+
+    Ciclo de vida de una fila (ver `services_recuperacion_clave`):
+      1. SOLICITADA  → `codigo_hash` + `expira_en` (5 min). Un código nuevo invalida los anteriores.
+      2. VERIFICADA  → el código correcto se CONSUME (`codigo_hash` queda vacío) y se canjea por un
+                       token de un solo uso (`token_hash` + `token_expira_en`).
+      3. USADA       → el token se canjeó por la nueva contraseña (`usado_en`).
+    `invalidado_en` marca una solicitud descartada (reemplazada por otra o contraseña ya cambiada).
+
+    Nunca se guarda el código ni el token en claro: solo su HMAC (clave = SECRET_KEY). `intentos`
+    cuenta las comprobaciones del código (tope `RECUPERACION_MAX_INTENTOS`); se incrementa con un
+    UPDATE atómico para que peticiones paralelas no puedan superar el tope."""
+    usuario = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='recuperaciones_clave')
+    codigo_hash = models.CharField(max_length=64, blank=True, default='')
+    creado_en = models.DateTimeField(default=timezone.now, db_index=True)
+    expira_en = models.DateTimeField()
+    intentos = models.PositiveSmallIntegerField(default=0)
+    verificado_en = models.DateTimeField(null=True, blank=True)
+    token_hash = models.CharField(max_length=64, blank=True, default='', db_index=True)
+    token_expira_en = models.DateTimeField(null=True, blank=True)
+    usado_en = models.DateTimeField(null=True, blank=True)
+    invalidado_en = models.DateTimeField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'api_recuperacion_clave'
+        ordering = ['-creado_en', '-id']
+        indexes = [models.Index(fields=['usuario', 'creado_en'], name='idx_recup_clave_usr_fecha')]
+
+    def __str__(self):
+        return f'Recuperación de clave de {self.usuario_id} ({self.creado_en:%Y-%m-%d %H:%M})'

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ asunto }}</title>
+</head>
+<body style="margin:0;padding:0;background:#eef1f5;font-family:Segoe UI,Arial,Helvetica,sans-serif;color:#1f2937;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f5;">
+<tr><td align="center" style="padding:24px 12px;">
+
+<table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #dbe1ea;">
+
+<tr><td style="padding:22px 24px 14px 24px;border-bottom:4px solid #1b5fa6;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="100" valign="middle"><img src="cid:logo" alt="Servicio de Salud Osorno" width="92" height="83" style="display:block;border:0;outline:none;text-decoration:none;"></td>
+    <td valign="middle" style="padding-left:16px;">
+      <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6b7686;">Servicio de Salud Osorno &middot; Abastecimiento</div>
+      <div style="font-size:20px;font-weight:700;color:#1b5fa6;line-height:1.25;margin-top:3px;">Recuperación de contraseña</div>
+    </td>
+  </tr></table>
+</td></tr>
+
+<tr><td style="padding:22px 24px 6px 24px;font-size:15px;line-height:1.6;">
+  <p style="margin:0 0 12px 0;">Hola <strong>{{ nombre }}</strong>:</p>
+  <p style="margin:0 0 4px 0;">Recibimos una solicitud para recuperar la contraseña de tu cuenta en el Sistema de Gestión SSO. Ingresa este código en la pantalla de ingreso:</p>
+</td></tr>
+
+<tr><td align="center" style="padding:14px 24px 6px 24px;">
+  <div style="display:inline-block;background:#e7f0fb;border:1px solid #b9d3f0;border-radius:8px;padding:14px 28px;font-family:Consolas,'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:.35em;color:#1b5fa6;">{{ codigo }}</div>
+  <div style="font-size:13px;color:#6b7686;margin-top:10px;">Vale por <strong>{{ vigencia_min }} minutos</strong>. Pasado ese tiempo deberás solicitar uno nuevo.</div>
+</td></tr>
+
+<tr><td style="padding:14px 24px 20px 24px;font-size:13px;line-height:1.6;color:#374151;">
+  <p style="margin:0 0 8px 0;">Si tú no lo solicitaste, ignora este correo: tu contraseña actual no cambiará.</p>
+  <p style="margin:0;"><strong>No compartas este código con nadie.</strong> El personal del Servicio de Salud nunca te lo pedirá.</p>
+</td></tr>
+
+<tr><td style="background:#f1f5fa;padding:14px 24px;font-size:11px;line-height:1.5;color:#6b7686;border-top:1px solid #dbe1ea;">
+  Servicio de Salud Osorno &middot; Departamento de Abastecimiento &middot; Gobierno de Chile.<br>
+  Mensaje automático del sistema de gestión. Por favor no lo reenvíes.
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

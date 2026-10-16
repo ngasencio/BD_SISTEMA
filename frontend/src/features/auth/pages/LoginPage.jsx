@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../../lib/axios';
 import { useAuth } from '../../../store/authStore';
+import RecuperarContrasena from '../components/RecuperarContrasena';
 
 // Imágenes desde la carpeta assets
 import edificioImg from '../../../assets/edificio.jpg';
@@ -18,6 +19,8 @@ export const LoginPage = () => {
     const [showPass, setShowPass] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [vista, setVista] = useState('login');   // 'login' | 'recuperar' (¿Olvidaste tu contraseña?)
+    const [aviso, setAviso] = useState('');
 
     const navigate = useNavigate();
     const { login } = useAuth(); // Autenticación centralizada
@@ -26,6 +29,7 @@ export const LoginPage = () => {
         e.preventDefault();
         setLoading(true);
         setError('');
+        setAviso('');
         try {
             // Usamos apiClient que está configurado globalmente
             const res = await apiClient.post('auth/login/', { username, password });
@@ -75,71 +79,98 @@ export const LoginPage = () => {
 
                 {/* Right panel */}
                 <div className="panel-right">
-                    <div className="form-header">
-                        <div className="welcome">BIENVENIDO</div>
-                        <h2>Iniciar Sesión</h2>
-                        <p>Ingrese sus credenciales corporativas para continuar</p>
-                    </div>
+                    {vista === 'recuperar' ? (
+                        <RecuperarContrasena
+                            onVolver={() => setVista('login')}
+                            onTerminado={() => {
+                                setAviso('Contraseña actualizada. Ingresa con tu nueva contraseña.');
+                                setVista('login');
+                            }}
+                        />
+                    ) : (
+                        <>
+                            <div className="form-header">
+                                <div className="welcome">BIENVENIDO</div>
+                                <h2>Iniciar Sesión</h2>
+                                <p>Ingrese sus credenciales corporativas para continuar</p>
+                            </div>
 
-                    {error && (
-                        <div className="msg error">
-                            <span>⚠️</span> {error}
-                        </div>
+                            {aviso && (
+                                <div className="msg success">
+                                    <span>✅</span> {aviso}
+                                </div>
+                            )}
+
+                            {error && (
+                                <div className="msg error">
+                                    <span>⚠️</span> {error}
+                                </div>
+                            )}
+
+                            <form onSubmit={handleLogin}>
+                                <div className="field">
+                                    <label>Usuario</label>
+                                    <div className="input-wrap">
+                                        <span className="icon">👤</span>
+                                        <input
+                                            type="text"
+                                            placeholder="Ej: tu.nombre"
+                                            value={username}
+                                            onChange={e => setUsername(e.target.value)}
+                                            autoComplete="username"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="field">
+                                    <label>Contraseña</label>
+                                    <div className="input-wrap">
+                                        <span className="icon">🔒</span>
+                                        <input
+                                            type={showPass ? 'text' : 'password'}
+                                            placeholder="Tu contraseña"
+                                            value={password}
+                                            onChange={e => setPassword(e.target.value)}
+                                            autoComplete="current-password"
+                                            required
+                                        />
+                                        <button
+                                            type="button"
+                                            className="eye-btn"
+                                            onClick={() => setShowPass(s => !s)}
+                                            tabIndex={-1}
+                                        >
+                                            {showPass ? '🙈' : '👁️'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="options-row">
+                                    <label className="checkbox-wrap">
+                                        <input type="checkbox" /> Recordarme
+                                    </label>
+                                    <a
+                                        href="#"
+                                        className="forgot"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            setError('');
+                                            setAviso('');
+                                            setVista('recuperar');
+                                        }}
+                                    >¿Olvidaste tu contraseña?</a>
+                                </div>
+
+                                <button className="btn-login" type="submit" disabled={loading}>
+                                    {loading ? <div className="spinner"></div> : 'Ingresar'}
+                                </button>
+                            </form>
+                        </>
                     )}
 
-                    <form onSubmit={handleLogin}>
-                        <div className="field">
-                            <label>Usuario</label>
-                            <div className="input-wrap">
-                                <span className="icon">👤</span>
-                                <input
-                                    type="text"
-                                    placeholder="Ej: tu.nombre"
-                                    value={username}
-                                    onChange={e => setUsername(e.target.value)}
-                                    autoComplete="username"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div className="field">
-                            <label>Contraseña</label>
-                            <div className="input-wrap">
-                                <span className="icon">🔒</span>
-                                <input
-                                    type={showPass ? 'text' : 'password'}
-                                    placeholder="Tu contraseña"
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
-                                    autoComplete="current-password"
-                                    required
-                                />
-                                <button
-                                    type="button"
-                                    className="eye-btn"
-                                    onClick={() => setShowPass(s => !s)}
-                                    tabIndex={-1}
-                                >
-                                    {showPass ? '🙈' : '👁️'}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="options-row">
-                            <label className="checkbox-wrap">
-                                <input type="checkbox" /> Recordarme
-                            </label>
-                            <a href="#" className="forgot">¿Olvidaste tu contraseña?</a>
-                        </div>
-
-                        <button className="btn-login" type="submit" disabled={loading}>
-                            {loading ? <div className="spinner"></div> : 'Ingresar'}
-                        </button>
-                    </form>
-
                     <div className="form-footer">
-                        ¿Necesitas ayuda? <a href="#">Contacta a Soporte TI</a>
+                        ¿Necesitas ayuda? <a href="#">Contacta a Abastecimiento</a>
                     </div>
                 </div>
             </div>

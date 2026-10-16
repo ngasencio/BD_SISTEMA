@@ -10,6 +10,9 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .serializers import MyTokenObtainPairSerializer
 from .services_logs import registrar_login_exitoso, registrar_login_fallido
 from .views_logs import RegistroLogViewSet
+from .views_recuperacion import (
+    recuperar_restablecer_view, recuperar_solicitar_view, recuperar_verificar_view,
+)
 from .views import (
     BoletaGarantiaAuditViewSet, BoletaGarantiaViewSet,
     CompradorViewSet, DetalleLicitacionViewSet, DetalleOrdenCompraViewSet,
@@ -172,6 +175,11 @@ urlpatterns = [
     path('auth/login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', user_me, name='user_me'),
+
+    # Recuperación de contraseña por correo (públicos: quien la olvidó no tiene sesión)
+    path('auth/recuperar/solicitar/', recuperar_solicitar_view, name='recuperar_solicitar'),
+    path('auth/recuperar/verificar/', recuperar_verificar_view, name='recuperar_verificar'),
+    path('auth/recuperar/restablecer/', recuperar_restablecer_view, name='recuperar_restablecer'),
 
     # Administración de usuarios — jerarquía y vínculo con el Panel SSO (solo admin)
     path('organizacion/arbol/', organizacion_arbol_view, name='organizacion_arbol'),
